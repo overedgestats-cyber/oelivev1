@@ -1,4 +1,37 @@
-﻿<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Free Picks · OverEdge</title><link rel="stylesheet" href="/style.css"/></head><body>
-<header><nav>
-  <a href="/home.html">Home</a><a href="/free-picks.html">Free Picks</a><a href="/pro.html">Pro</a><a href="/pricing.html">Pricing</a><a href="/about.html">About</a><a href="/FAQ.html">FAQ</a>
-</nav></header><main><h1>Free Picks</h1><div class="card">Two daily O/U 2.5 picks will appear here.</div></main><footer>© OverEdge</footer><script src="/script.js" defer></script></body></html>
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Free Picks · OverEdge</title>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/home.html">Home</a>
+    <a href="/free-picks.html">Free Picks</a>
+    <a href="/pro.html">Pro</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/about.html">About</a>
+    <a href="/FAQ.html">FAQ</a>
+    <span style="float:right">
+      <button id="loginBtn" class="btn">Sign in</button>
+      <button id="logoutBtn" class="btn" hidden>Sign out</button>
+      <small id="userEmail"></small>
+    </span>
+  </nav>
+</header>
+<main>
+  <h1>Free Picks</h1>
+  <div id="freePicks" class="grid">
+    <!-- rendered by app.js -->
+  </div>
+</main>
+<footer>© OverEdge</footer>
+
+<!-- Firebase + app -->
+<script src="/firebase-config.js"></script>
+<script type="module" src="/firebase-init.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
