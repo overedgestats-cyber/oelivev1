@@ -1,9 +1,129 @@
-﻿<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Pricing · OverEdge</title><link rel="stylesheet" href="/style.css"/></head><body>
-<header><nav>
-  <a href="/home.html">Home</a><a href="/free-picks.html">Free Picks</a><a href="/pro.html">Pro</a><a href="/pricing.html">Pricing</a><a href="/about.html">About</a><a href="/FAQ.html">FAQ</a>
-</nav></header><main><h1>Pricing</h1><div class="grid">
-  <div class="card"><strong>Weekly</strong><br/>€6.99</div>
-  <div class="card"><strong>Monthly</strong><br/>€17.99</div>
-  <div class="card"><strong>Quaterly</strong><br/>€44.99</div>
-  <div class="card"><strong>Yearly</strong><br/>€146.99</div>
-</div></main><footer>© OverEdge</footer><script src="/script.js" defer></script></body></html>
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Pricing · OverEdge</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <style>
+    .pricing-grid{display:grid;gap:1rem;max-width:980px}
+    .plan{display:flex;flex-direction:column;gap:.5rem}
+    .muted{font-size:.85rem;opacity:.75}
+    .row{display:flex;gap:.75rem;align-items:center;justify-content:space-between}
+  </style>
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/home.html">Home</a>
+    <a href="/free-picks.html">Free Picks</a>
+    <a href="/pro.html">Pro</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/about.html">About</a>
+    <a href="/FAQ.html">FAQ</a>
+    <span style="float:right">
+      <button id="loginBtn" class="btn">Sign in</button>
+      <button id="logoutBtn" class="btn" hidden>Sign out</button>
+      <small id="userEmail"></small>
+    </span>
+  </nav>
+</header>
+
+<main>
+  <h1>Pricing</h1>
+
+  <div class="pricing-grid">
+    <div class="card plan">
+      <div class="row"><h3 style="margin:0">Pro – Weekly</h3><span class="muted">7-day access</span></div>
+      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
+      <button class="btn subscribe" data-plan="weekly">Subscribe Weekly</button>
+      <div class="muted" id="msg_weekly"></div>
+    </div>
+
+    <div class="card plan">
+      <div class="row"><h3 style="margin:0">Pro – Monthly</h3><span class="muted">Best starter</span></div>
+      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
+      <button class="btn subscribe" data-plan="monthly">Subscribe Monthly</button>
+      <div class="muted" id="msg_monthly"></div>
+    </div>
+
+    <div class="card plan">
+      <div class="row"><h3 style="margin:0">Pro – Quarterly</h3><span class="muted">Save more</span></div>
+      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
+      <button class="btn subscribe" data-plan="quarterly">Subscribe Quarterly</button>
+      <div class="muted" id="msg_quarterly"></div>
+    </div>
+
+    <div class="card plan">
+      <div class="row"><h3 style="margin:0">Pro – Yearly</h3><span class="muted">Best value</span></div>
+      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
+      <button class="btn subscribe" data-plan="yearly">Subscribe Yearly</button>
+      <div class="muted" id="msg_yearly"></div>
+    </div>
+
+    <div class="card">
+      <h3>Already subscribed?</h3>
+      <p class="muted">Sign in with the same email and open the Pro page.</p>
+      <a class="btn" href="/pro.html">Go to Pro Board</a>
+    </div>
+  </div>
+</main>
+
+<footer>© OverEdge</footer>
+
+<script src="/firebase-config.js"></script>
+<script type="module" src="/firebase-init.js"></script>
+<script type="module" src="/app.js"></script>
+
+<!-- Stripe Checkout wiring (4 plans) -->
+<script type="module">
+  import { getToken, signIn } from "/firebase-init.js";
+
+  // Your Stripe Price IDs (all subscription mode)
+  const PRICE_MAP = {
+    weekly:    "price_1Rx355II0lbloF9XjEp64Kz8",
+    monthly:   "price_1Rx371II0lbloF9XuZaJnKc9",
+    quarterly: "price_1Rx38JII0lbloF9XvdmjDuI8",
+    yearly:    "price_1Rx39JII0lbloF9XDYU6WEMh",
+  };
+
+  async function startCheckout(priceId, msgEl){
+    try {
+      msgEl.textContent = "Preparing Checkout…";
+      let token = await getToken();
+      if (!token) {
+        await signIn();
+        token = await getToken();
+        if (!token) { msgEl.textContent = "Sign-in required."; return; }
+      }
+
+      const res = await fetch("/api/stripe/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          priceId,
+          mode: "subscription",
+          successUrl: `${location.origin}/pro.html`,
+          cancelUrl: `${location.origin}/pricing.html`
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.url) throw new Error(data?.detail || data?.error || "checkout_error");
+      location.href = data.url;
+    } catch (e) {
+      msgEl.textContent = `Error: ${e.message}`;
+    }
+  }
+
+  document.querySelectorAll(".subscribe").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const plan = btn.dataset.plan;
+      const priceId = PRICE_MAP[plan];
+      const msgEl = document.getElementById(`msg_${plan}`);
+      if (!priceId) { msgEl.textContent = "Unknown plan."; return; }
+      startCheckout(priceId, msgEl);
+    });
+  });
+</script>
+</body>
+</html>
