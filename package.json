@@ -1,6 +1,25 @@
-﻿{
-  "name": "overedge-live",
-  "private": true,
+{
+  "name": "oelive",
   "version": "1.0.0",
-  "engines": { "node": ">=20" }
+  "description": "",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/overedgestats-cyber/oedgel.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/overedgestats-cyber/oedgel/issues"
+  },
+  "homepage": "https://github.com/overedgestats-cyber/oedgel#readme",
+  "private": "true",
+  "engines": {
+    "node": ">=20"
+  }
 }
