@@ -75,9 +75,8 @@
 <script src="/firebase-config.js"></script>
 <script type="module" src="/app.js"></script>
 
-<!-- Stripe Checkout wiring (lazy import of firebase-init) -->
+<!-- Stripe Checkout wiring (lazy import of firebase-init, with explicit ensureInit) -->
 <script type="module">
-  // Your Stripe Price IDs (subscription mode)
   const PRICE_MAP = {
     weekly:    "price_1Rx355II0lbloF9XjEp64Kz8",
     monthly:   "price_1Rx371II0lbloF9XuZaJnKc9",
@@ -86,17 +85,16 @@
   };
 
   async function ensureFirebaseReady() {
-    // Make sure config exists, then load the init module (which guards itself)
     if (!window.FIREBASE_CONFIG) await new Promise(r => setTimeout(r, 0));
     if (!window.FIREBASE_CONFIG) throw new Error("Firebase config not loaded");
-    // Cache-buster to avoid stale old file in the browser
-    return await import("/firebase-init.js?v=2");
+    const m = await import("/firebase-init.js?v=4"); // cache-bust
+    m.ensureInit();                                   // <- force init now
+    return m;
   }
 
   async function startCheckout(priceId, msgEl){
     try {
       msgEl.textContent = "Preparing Checkout…";
-
       const { getToken, signIn } = await ensureFirebaseReady();
 
       let token = await getToken();
@@ -116,6 +114,7 @@
           cancelUrl: `${location.origin}/pricing.html`
         })
       });
+
       const data = await res.json();
       if (!res.ok || !data?.url) throw new Error(data?.detail || data?.error || "checkout_error");
       location.href = data.url;
