@@ -7,11 +7,36 @@
   <link rel="stylesheet" href="/style.css"/>
   <style>
     .faq { display:grid; gap:.75rem; max-width:980px }
-    details { border:1px solid #0001; border-radius:10px; background:#fff; }
-    summary { cursor:pointer; padding:.75rem 1rem; font-weight:600; }
-    details > div { padding:.75rem 1rem 1rem }
+
+    /* Dark-theme friendly FAQ cards */
+    details {
+      background: rgba(255,255,255,.04);            /* subtle dark card */
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 10px;
+      color: inherit;                                /* inherit light text */
+    }
+    summary {
+      cursor:pointer;
+      padding:.75rem 1rem;
+      font-weight:600;
+      list-style: none;                              /* remove default marker */
+      color: inherit;                                /* make sure text is visible */
+    }
+    /* add a simple chevron */
+    summary::before {
+      content: "▸";
+      display:inline-block;
+      margin-right:.5rem;
+      opacity:.8;
+      transition: transform .15s ease;
+    }
+    details[open] summary::before { transform: rotate(90deg); }
+
+    details > div { padding:.75rem 1rem 1rem; color: inherit; }
     .muted{ opacity:.75 }
     .list { padding-left:1.25rem; margin:.25rem 0 0 }
+    summary:focus { outline: 2px solid rgba(125,199,255,.6); outline-offset: 2px; }
+    a { color: #7dc7ff; }                            /* readable link color on dark */
   </style>
 </head>
 <body>
