@@ -75,7 +75,7 @@
 <script src="/firebase-config.js"></script>
 <script type="module" src="/app.js"></script>
 
-<!-- Stripe Checkout wiring (lazy-import Firebase init to avoid races) -->
+<!-- Stripe Checkout wiring (lazy import of firebase-init) -->
 <script type="module">
   // Your Stripe Price IDs (subscription mode)
   const PRICE_MAP = {
@@ -86,9 +86,9 @@
   };
 
   async function ensureFirebaseReady() {
+    // Make sure config exists, then load the init module (which guards itself)
     if (!window.FIREBASE_CONFIG) await new Promise(r => setTimeout(r, 0));
     if (!window.FIREBASE_CONFIG) throw new Error("Firebase config not loaded");
-    // initializeApp runs inside this module; import is cached after first load
     return await import("/firebase-init.js");
   }
 
@@ -100,7 +100,7 @@
 
       let token = await getToken();
       if (!token) {
-        await signIn();                      // Google popup
+        await signIn();
         token = await getToken();
         if (!token) { msgEl.textContent = "Sign-in required."; return; }
       }
