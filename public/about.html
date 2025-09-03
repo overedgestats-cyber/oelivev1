@@ -6,10 +6,8 @@
   <title>About · OverEdge</title>
   <link rel="stylesheet" href="/style.css"/>
   <style>
-    .grid { display: grid; gap: 1rem; max-width: 980px }
     .kpi { display:flex; gap:1rem; flex-wrap:wrap }
     .kpi .card { flex: 1 1 220px }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
     .social-list { list-style: none; padding-left: 0; margin: .5rem 0 0; }
     .social-list li { margin: .25rem 0; }
   </style>
@@ -50,73 +48,14 @@
     </div>
   </div>
 
-  <div class="grid" style="margin-top:1rem">
-    <section class="card">
-      <h3>How it Works (under the hood)</h3>
-      <ul>
-        <li><b>Inputs:</b> Team statistics from API-Football (via <span class="mono">/teams/statistics</span>) blended across current &amp; prior seasons.</li>
-        <li><b>Model:</b> A Poisson goals framework estimates λ<sub>Home</sub>, λ<sub>Away</sub>, expected goals, P(Over 2.5), P(BTTS), and 1X2 probabilities.</li>
-        <li><b>Scoring:</b> Heuristics score Over/Under 2.5 and Under 2.5 using pace &amp; historical O2.5%; optional odds give small boosts.</li>
-        <li><b>Calibration:</b> Raw confidences are mapped through <span class="mono">calibration.json</span> so displayed % better reflect reality.</li>
-        <li><b>Cards/Corners:</b> Simple pace-based chips for totals—shown as guidance, not official picks.</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h3>What shows on each page</h3>
-      <ul>
-        <li><b>Free Picks:</b> 0–2 selections from European domestic leagues (youth/women/reserve excluded, and excluding Pro’s allow-list). If the primary pool is empty, we may include UEFA or domestic cups.</li>
-        <li><b>Pro Board:</b> All qualifying fixtures from our allow-list. Each row shows match, league, kickoff, and <i>Top Bets</i> (OU 2.5, BTTS, 1X2, Cards O/U, Corners O/U) with calibrated confidence.</li>
-        <li><b>Hero Bet:</b> Best single calibrated edge among tier-1 leagues, with a short reasoning (ExpG and λs).</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h3>Leagues & Scope</h3>
-      <p>We focus on Europe’s domestic leagues (youth/women/reserve filtered), plus UEFA competitions where relevant. Pro’s exact allow-list and Hero’s tier-1 set are configurable and may evolve across seasons.</p>
-    </section>
-
-    <section class="card">
-      <h3>Data, Limits & Timing</h3>
-      <ul>
-        <li><b>Timings:</b> Picks update by date (UTC). Odds are optional and may be missing for lower-tier fixtures.</li>
-        <li><b>Data limits:</b> Early-season fixtures blend prior-season stats until a minimum sample accrues.</li>
-        <li><b>Outages:</b> If API keys or providers rate-limit, you might briefly see fewer picks.</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h3>Responsible Betting</h3>
-      <p>OverEdge provides informational picks only—<b>not financial advice</b>. Always bet responsibly, never risk more than you can afford to lose, and follow your local laws (18+ or as required).</p>
-    </section>
-
-    <section class="card">
-      <h3>Privacy & Security</h3>
-      <ul>
-        <li><b>Auth:</b> We use Firebase Authentication (Google sign-in).</li>
-        <li><b>Payments:</b> Subscriptions run through Stripe Checkout; card data never touches our servers.</li>
-        <li><b>Storage:</b> Subscription status is stored under your UID in Firestore.</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h3>Contact</h3>
-      <ul class="social-list">
-        <li>📧 Email: <a href="mailto:support@overedge.info">support@overedge.info</a></li>
-        <li>📘 Facebook: <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">OverEdge on Facebook</a></li>
-        <li>📸 Instagram: <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">OverEdge on Instagram</a></li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h3>Status & Debug</h3>
-      <ul>
-        <li><a href="/api/health">API Health</a> — basic heartbeat and key presence</li>
-        <li><a href="/free-picks.html">Free Picks</a> — public page</li>
-        <li><a href="/pro.html">Pro Board</a> — requires sign-in & active subscription</li>
-      </ul>
-    </section>
-  </div>
+  <section class="card" style="margin-top:1rem">
+    <h3>Contact</h3>
+    <ul class="social-list">
+      <li>📧 Email: <a href="mailto:support@overedge.info">support@overedge.info</a></li>
+      <li>📘 Facebook: <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">OverEdge on Facebook</a></li>
+      <li>📸 Instagram: <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">OverEdge on Instagram</a></li>
+    </ul>
+  </section>
 </main>
 
 <footer>© OverEdge</footer>
