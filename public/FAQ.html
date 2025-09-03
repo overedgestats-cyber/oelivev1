@@ -1,4 +1,147 @@
-﻿<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>FAQ · OverEdge</title><link rel="stylesheet" href="/style.css"/></head><body>
-<header><nav>
-  <a href="/home.html">Home</a><a href="/free-picks.html">Free Picks</a><a href="/pro.html">Pro</a><a href="/pricing.html">Pricing</a><a href="/about.html">About</a><a href="/FAQ.html">FAQ</a>
-</nav></header><main><h1>FAQ</h1><div class="card">We are not a bookmaker. No guarantee of profit. Bet responsibly.</div></main><footer>© OverEdge</footer><script src="/script.js" defer></script></body></html>
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FAQ · OverEdge</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <style>
+    .faq { display:grid; gap:.75rem; max-width:980px }
+    details { border:1px solid #0001; border-radius:10px; background:#fff; }
+    summary { cursor:pointer; padding:.75rem 1rem; font-weight:600; }
+    details > div { padding:.75rem 1rem 1rem }
+    .muted{ opacity:.75 }
+    .list { padding-left:1.25rem; margin:.25rem 0 0 }
+  </style>
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/home.html">Home</a>
+    <a href="/free-picks.html">Free Picks</a>
+    <a href="/pro.html">Pro</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/about.html">About</a>
+    <a href="/FAQ.html">FAQ</a>
+    <span style="float:right">
+      <button id="loginBtn" class="btn">Sign in</button>
+      <button id="logoutBtn" class="btn" hidden>Sign out</button>
+      <small id="userEmail"></small>
+    </span>
+  </nav>
+</header>
+
+<main>
+  <h1>Frequently Asked Questions</h1>
+  <p class="muted">Quick answers about signing in, subscriptions, Free Picks, Pro Board, and Hero Bet.</p>
+
+  <section class="faq">
+    <details>
+      <summary>How do I sign in?</summary>
+      <div>
+        <ol class="list">
+          <li>Click <b>Sign in</b> (top-right).</li>
+          <li>Choose your Google account and complete the popup.</li>
+          <li>You’ll see your email appear in the header when signed in.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I get Pro access?</summary>
+      <div>
+        <ol class="list">
+          <li>Sign in (top-right).</li>
+          <li>Go to <a href="/pricing.html">Pricing</a> and pick Weekly / Monthly / Quarterly / Yearly.</li>
+          <li>Complete Stripe Checkout. You’ll return to <a href="/pro.html">Pro</a>.</li>
+        </ol>
+        <p class="muted">Use the <b>same email</b> you signed in with for the smoothest experience.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>I subscribed but Pro still says “No active subscription”. What should I do?</summary>
+      <div>
+        <ul class="list">
+          <li>Make sure you’re signed in with the <b>same email</b> you used at checkout.</li>
+          <li>Refresh the page (or sign out/in) and try again.</li>
+          <li>It can take a minute for the payment to reflect.</li>
+          <li>If it persists, email <a href="mailto:support@overedge.info">support@overedge.info</a> with your Stripe receipt email.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is the Pro Board?</summary>
+      <div>
+        <p>The Pro Board is a ranked slate of today’s fixtures from our allowed leagues. Each row shows the match, kickoff, and quick “Top Bets” (OU 2.5, BTTS, 1X2, Cards, Corners) with a confidence %.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is the Hero Bet?</summary>
+      <div>
+        <p>One featured pick from tier-1 leagues with our strongest calibrated edge, including market, prediction, confidence %, and a short reason (ExpG + goal rates).</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Why are there no Free Picks today?</summary>
+      <div>
+        <ul class="list">
+          <li>The day may have a light slate or fixtures that don’t meet our thresholds.</li>
+          <li>Odds can be missing for some lower-tier games; if strict filtering is on, picks may be withheld.</li>
+          <li>Try again later, or check another date on the Free Picks page.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Which leagues do you cover?</summary>
+      <div>
+        <p>We focus on European domestic leagues (youth/women/reserve are filtered). The Pro Board uses a curated allow-list; Free Picks avoid those to keep products distinct. Hero Bet looks at a smaller tier-1 set.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What timezone are kickoffs shown in?</summary>
+      <div>
+        <p>Kickoff times display in <b>your browser’s local time</b>. If you query dates on the API directly, those dates are in <b>UTC</b>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Do you guarantee profit or outcomes?</summary>
+      <div>
+        <p>No—OverEdge provides informational analysis only. Always bet responsibly and follow your local laws.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I cancel or manage billing?</summary>
+      <div>
+        <p>If you need help with changes, just email <a href="mailto:support@overedge.info">support@overedge.info</a> from your account email and we’ll assist promptly.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How can I contact you?</summary>
+      <div>
+        <ul class="list">
+          <li>📧 Email: <a href="mailto:support@overedge.info">support@overedge.info</a></li>
+          <li>📘 Facebook: <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">OverEdge on Facebook</a></li>
+          <li>📸 Instagram: <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">overedgefootball</a></li>
+        </ul>
+      </div>
+    </details>
+  </section>
+</main>
+
+<footer>© OverEdge</footer>
+
+<!-- Header sign-in logic -->
+<script src="/firebase-config.js"></script>
+<script type="module" src="/firebase-init.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
