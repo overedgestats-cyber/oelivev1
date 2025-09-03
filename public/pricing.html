@@ -71,15 +71,13 @@
 
 <footer>© OverEdge</footer>
 
+<!-- Firebase config + header wiring -->
 <script src="/firebase-config.js"></script>
-<script type="module" src="/firebase-init.js"></script>
 <script type="module" src="/app.js"></script>
 
-<!-- Stripe Checkout wiring (4 plans) -->
+<!-- Stripe Checkout wiring (lazy-import Firebase init to avoid races) -->
 <script type="module">
-  import { getToken, signIn } from "/firebase-init.js";
-
-  // Your Stripe Price IDs (all subscription mode)
+  // Your Stripe Price IDs (subscription mode)
   const PRICE_MAP = {
     weekly:    "price_1Rx355II0lbloF9XjEp64Kz8",
     monthly:   "price_1Rx371II0lbloF9XuZaJnKc9",
@@ -87,12 +85,22 @@
     yearly:    "price_1Rx39JII0lbloF9XDYU6WEMh",
   };
 
+  async function ensureFirebaseReady() {
+    if (!window.FIREBASE_CONFIG) await new Promise(r => setTimeout(r, 0));
+    if (!window.FIREBASE_CONFIG) throw new Error("Firebase config not loaded");
+    // initializeApp runs inside this module; import is cached after first load
+    return await import("/firebase-init.js");
+  }
+
   async function startCheckout(priceId, msgEl){
     try {
       msgEl.textContent = "Preparing Checkout…";
+
+      const { getToken, signIn } = await ensureFirebaseReady();
+
       let token = await getToken();
       if (!token) {
-        await signIn();
+        await signIn();                      // Google popup
         token = await getToken();
         if (!token) { msgEl.textContent = "Sign-in required."; return; }
       }
@@ -117,9 +125,9 @@
 
   document.querySelectorAll(".subscribe").forEach(btn => {
     btn.addEventListener("click", () => {
-      const plan = btn.dataset.plan;
-      const priceId = PRICE_MAP[plan];
+      const plan  = btn.dataset.plan;
       const msgEl = document.getElementById(`msg_${plan}`);
+      const priceId = PRICE_MAP[plan];
       if (!priceId) { msgEl.textContent = "Unknown plan."; return; }
       startCheckout(priceId, msgEl);
     });
