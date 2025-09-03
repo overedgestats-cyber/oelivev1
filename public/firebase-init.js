@@ -21,7 +21,7 @@ export function ensureInit() {
     if (!window.FIREBASE_CONFIG) {
       throw new Error("FIREBASE_CONFIG missing – did /firebase-config.js load?");
     }
-    // Reuse existing app if another module already created it
+    // Reuse an existing app if one already exists
     _app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONFIG);
     _auth = getAuth(_app);
     _provider = new GoogleAuthProvider();
@@ -50,5 +50,5 @@ export async function getToken() {
   return u ? await u.getIdToken() : null;
 }
 
-// Optional named export if other code wants it
+// Optional named export for convenience
 export const auth = (() => ensureInit().auth)();

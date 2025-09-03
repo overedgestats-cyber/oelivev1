@@ -89,7 +89,8 @@
     // Make sure config exists, then load the init module (which guards itself)
     if (!window.FIREBASE_CONFIG) await new Promise(r => setTimeout(r, 0));
     if (!window.FIREBASE_CONFIG) throw new Error("Firebase config not loaded");
-    return await import("/firebase-init.js");
+    // Cache-buster to avoid stale old file in the browser
+    return await import("/firebase-init.js?v=2");
   }
 
   async function startCheckout(priceId, msgEl){
