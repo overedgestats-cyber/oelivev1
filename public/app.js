@@ -1,4 +1,4 @@
-import { auth, signIn, signOutUser, watchAuth, getToken } from "./firebase-init.js";
+﻿import { auth, signIn, signOutUser, watchAuth, getToken } from "./firebase-init.js";
 
 const apiBase = location.origin;
 
@@ -10,33 +10,33 @@ document.addEventListener("DOMContentLoaded", () => {
   if (loginBtn)  loginBtn.addEventListener("click", signIn);
   if (logoutBtn) logoutBtn.addEventListener("click", signOutUser);
 
-  // 🔁 rerun UI + pro guard on every auth change
+  // рџ”Ѓ rerun UI + pro guard on every auth change
   watchAuth(async (user) => {
     if (userSpan)  userSpan.textContent = user ? (user.email || user.uid) : "";
     if (loginBtn)  loginBtn.hidden  = !!user;
     if (logoutBtn) logoutBtn.hidden = !user;
 
     const proGuard = document.getElementById("requirePro");
-    if (proGuard) await enforcePro(proGuard);   // <— rerun after login/logout
+    if (proGuard) await enforcePro(proGuard);   // <вЂ” rerun after login/logout
   });
 
   // Free Picks auto-load
   const freePicksEl = document.getElementById("freePicks");
   if (freePicksEl) loadFreePicks(freePicksEl);
 
-  // First run of Pro guard (will show “sign in” until auth callback fires)
+  // First run of Pro guard (will show вЂњsign inвЂќ until auth callback fires)
   const proGuard = document.getElementById("requirePro");
   if (proGuard) enforcePro(proGuard);
 });
 
 async function loadFreePicks(container){
-  container.innerHTML = "Loading…";
+  container.innerHTML = "LoadingвЂ¦";
   try {
     const res = await fetch(`${apiBase}/api/free-picks`);
     const ct = res.headers.get("content-type") || "";
     if (!res.ok || !ct.includes("application/json")) {
       const text = await res.text();
-      throw new Error(`${res.status} ${res.statusText} — ${text.slice(0,120)}`);
+      throw new Error(`${res.status} ${res.statusText} вЂ” ${text.slice(0,120)}`);
     }
     const data = await res.json();
     const picks = data.picks || [];
@@ -44,8 +44,8 @@ async function loadFreePicks(container){
       ? picks.map(p => `
           <div class="card">
             <strong>${p.match}</strong><br/>
-            <small>${p.league} · ${new Date(p.kickoff).toLocaleString()}</small><br/>
-            <div><b>${p.market}</b>: ${p.prediction} — <b>${p.confidence}%</b> (odds: ${p.odds})</div>
+            <small>${p.league} В· ${new Date(p.kickoff).toLocaleString()}</small><br/>
+            <div><b>${p.market}</b>: ${p.prediction} вЂ” <b>${p.confidence}%</b> (odds: ${p.odds})</div>
             <div>${p.reasoning}</div>
           </div>
         `).join("")
@@ -79,8 +79,8 @@ async function enforcePro(container){
       document.getElementById("proBoard").innerHTML = list.length
         ? list.slice(0,10).map(row => `
             <div class="card">
-              <strong>${row.home} vs ${row.away}</strong> — ${row.league.name}<br/>
-              Top: ${row.topBets.map(b=>`${b.market}:${b.pick} (${b.confidence}%)`).join(" · ")}
+              <strong>${row.home} vs ${row.away}</strong> вЂ” ${row.league.name}<br/>
+              Top: ${row.topBets.map(b=>`${b.market}:${b.pick} (${b.confidence}%)`).join(" В· ")}
             </div>
           `).join("")
         : "No Pro rows right now.";

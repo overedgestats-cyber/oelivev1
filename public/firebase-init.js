@@ -1,4 +1,4 @@
-/* public/firebase-init.js */
+﻿/* public/firebase-init.js */
 
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -13,7 +13,7 @@ let _provider = null;
 export function ensureInit() {
   if (!_app) {
     if (!window.FIREBASE_CONFIG) {
-      throw new Error("FIREBASE_CONFIG missing – did /firebase-config.js load?");
+      throw new Error("FIREBASE_CONFIG missing вЂ“ did /firebase-config.js load?");
     }
     _app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONFIG);
     _auth = getAuth(_app);

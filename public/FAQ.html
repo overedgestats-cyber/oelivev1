@@ -7,22 +7,19 @@
   <link rel="stylesheet" href="/style.css"/>
   <style>
     .faq { display:grid; gap:.75rem; max-width:980px }
-
-    /* Dark-theme friendly FAQ cards */
     details {
-      background: rgba(255,255,255,.04);            /* subtle dark card */
+      background: rgba(255,255,255,.04);
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 10px;
-      color: inherit;                                /* inherit light text */
+      color: inherit;
     }
     summary {
       cursor:pointer;
       padding:.75rem 1rem;
       font-weight:600;
-      list-style: none;                              /* remove default marker */
-      color: inherit;                                /* make sure text is visible */
+      list-style:none;
+      color: inherit;
     }
-    /* add a simple chevron */
     summary::before {
       content: "▸";
       display:inline-block;
@@ -31,12 +28,11 @@
       transition: transform .15s ease;
     }
     details[open] summary::before { transform: rotate(90deg); }
-
     details > div { padding:.75rem 1rem 1rem; color: inherit; }
     .muted{ opacity:.75 }
     .list { padding-left:1.25rem; margin:.25rem 0 0 }
     summary:focus { outline: 2px solid rgba(125,199,255,.6); outline-offset: 2px; }
-    a { color: #7dc7ff; }                            /* readable link color on dark */
+    a { color: #7dc7ff; }
   </style>
 </head>
 <body>
@@ -91,7 +87,7 @@
           <li>Make sure you’re signed in with the <b>same email</b> you used at checkout.</li>
           <li>Refresh the page (or sign out/in) and try again.</li>
           <li>It can take a minute for the payment to reflect.</li>
-          <li>If it persists, email <a href="mailto:support@overedge.info">support@overedge.info</a> with your Stripe receipt email.</li>
+          <li>If it persists, email <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> with your Stripe receipt email.</li>
         </ul>
       </div>
     </details>
@@ -145,7 +141,7 @@
     <details>
       <summary>How do I cancel or manage billing?</summary>
       <div>
-        <p>If you need help with changes, just email <a href="mailto:support@overedge.info">support@overedge.info</a> from your account email and we’ll assist promptly.</p>
+        <p>If you need help with changes, just email <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> from your account email and we’ll assist promptly.</p>
       </div>
     </details>
 
@@ -153,7 +149,7 @@
       <summary>How can I contact you?</summary>
       <div>
         <ul class="list">
-          <li>📧 Email: <a href="mailto:support@overedge.info">support@overedge.info</a></li>
+          <li>📧 Email: <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a></li>
           <li>📘 Facebook: <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">OverEdge on Facebook</a></li>
           <li>📸 Instagram: <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">overedgefootball</a></li>
         </ul>
@@ -164,7 +160,6 @@
 
 <footer>© OverEdge</footer>
 
-<!-- Header sign-in logic -->
 <script src="/firebase-config.js"></script>
 <script type="module" src="/firebase-init.js"></script>
 <script type="module" src="/app.js"></script>

@@ -1,4 +1,4 @@
-window.FIREBASE_CONFIG = {
+﻿window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyCnq-PYuZZGgwubwaek68bhWAf2QJIADKk",
   authDomain: "overedge-59b0e.firebaseapp.com",
   projectId: "overedge-59b0e",
