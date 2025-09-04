@@ -13,20 +13,26 @@ function setHidden(el, state) {
     el.style.display = "";
   }
 }
+function setHiddenAll(els, state) {
+  els.forEach((el) => setHidden(el, state));
+}
 
 document.addEventListener("DOMContentLoaded", () => {
-  const loginBtn  = document.getElementById("loginBtn");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const userSpan  = document.getElementById("userEmail");
+  // Support duplicates just in case (should be unique, but this is defensive)
+  const loginBtns  = Array.from(document.querySelectorAll("#loginBtn"));
+  const logoutBtns = Array.from(document.querySelectorAll("#logoutBtn"));
+  const userSpan   = document.getElementById("userEmail");
 
-  if (loginBtn)  loginBtn.addEventListener("click", (e) => { e.preventDefault(); signIn(); });
-  if (logoutBtn) logoutBtn.addEventListener("click", (e) => { e.preventDefault(); signOutUser(); });
+  loginBtns.forEach((btn)  => btn.addEventListener("click", (e) => { e.preventDefault(); signIn(); }));
+  logoutBtns.forEach((btn) => btn.addEventListener("click", (e) => { e.preventDefault(); signOutUser(); }));
 
   // Re-run UI + Pro gate on every auth change
   watchAuth(async (user) => {
-    if (userSpan)  userSpan.textContent = user ? (user.email || user.uid) : "";
-    setHidden(loginBtn,  !!user);   // hide login when signed in
-    setHidden(logoutBtn, !user);    // show logout when signed in
+    if (userSpan) userSpan.textContent = user ? (user.email || user.uid) : "";
+
+    // Hide "Sign in" when signed-in; show "Sign out"
+    setHiddenAll(loginBtns,  !!user);
+    setHiddenAll(logoutBtns, !user);
 
     const proGuard = document.getElementById("requirePro");
     if (proGuard) await enforcePro(proGuard);
@@ -72,14 +78,12 @@ async function enforcePro(container){
     const token = await getToken();
     if (!token){ container.textContent = "Please sign in to view Pro content."; return; }
 
-    // check subscription
     const r = await fetch(`${apiBase}/api/subscription/status`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const j = await r.json();
     if (!j.active){ container.textContent = "No active subscription."; return; }
 
-    // show loader + button and fetch the board
     container.innerHTML = '<a class="btn" href="#" id="loadPro">Load Pro Board</a><div id="proBoard"></div>';
     document.getElementById("loadPro").addEventListener("click", async (e)=>{
       e.preventDefault();
