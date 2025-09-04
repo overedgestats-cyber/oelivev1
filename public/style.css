@@ -1,38 +1,36 @@
-﻿/* === Nav centering + brand motto === */
+﻿/* Center nav links, keep existing design */
 header nav{
   position: relative;
-  text-align: center;           /* center all nav links */
+  display: flex;            /* don't change link styling, just center them */
+  align-items: center;
+  justify-content: center;  /* anchors are centered */
 }
 
-/* Override the earlier `nav a { margin-right: 14px }` */
-header nav a{
-  margin: 0 14px;               /* even spacing left/right */
-}
-
-/* Auth controls (Sign in / Sign out + email) docked right */
+/* Keep Sign in / Sign out + email on the right.
+   This overrides the inline float without changing styles elsewhere. */
 header nav > span{
   position: absolute;
   right: 24px;
   top: 8px;
+  float: none !important;
   display: inline-flex;
-  align-items: center;
   gap: 8px;
-  float: none !important;       /* beats the old inline float */
+  align-items: center;
 }
 
-/* Brand motto under the nav */
+/* Brand motto under the nav (small, subtle — won’t shift layout much) */
 header::after{
   content: "Data beats gut";
   display: block;
   text-align: center;
+  font-size: 12px;
+  line-height: 1.2;
+  margin-top: 4px;
+  color: #9fdcff;
   opacity: 0.75;
-  margin-top: 6px;
-  letter-spacing: 0.2px;
-  font-weight: 600;
-  color: #9fdcff;               /* matches link color */
 }
 
-/* Mobile: stack auth controls below centered links */
+/* Mobile: stack auth controls under the centered links (keeps layout tidy) */
 @media (max-width: 640px){
   header nav > span{
     position: static;
@@ -40,5 +38,4 @@ header::after{
     margin-top: 8px;
     text-align: center;
   }
-  header::after{ margin-top: 10px; }
 }
