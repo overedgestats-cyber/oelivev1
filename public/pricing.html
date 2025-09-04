@@ -26,6 +26,12 @@
     .save{font-size:.85rem;opacity:.85}
     .helper{margin-top:24px}
     @media (max-width:720px){ .compare{grid-template-columns:1fr} }
+
+    /* === Desktop: show the 4 plan cards on a single row === */
+    @media (min-width:1200px){
+      .pricing-wrap{max-width:1200px;}
+      .plans{grid-template-columns:repeat(4,1fr);}
+    }
   </style>
 </head>
 <body>
@@ -146,7 +152,12 @@
   </div>
 </main>
 
-<footer>© OverEdge</footer>
+<footer>
+  © OverEdge ·
+  <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
+  <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">Facebook</a> ·
+  <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
+</footer>
 
 <!-- Header wiring -->
 <script src="/firebase-config.js"></script>
@@ -162,15 +173,15 @@
     yearly:    "price_1Rx39JII0lbloF9XDYU6WEMh",
   };
 
-  // 2) Display amounts for each plan (major units, e.g. 19.99). Fill these in.
+  // 2) Display amounts for each plan (major units, e.g. 19.99).
   //    Savings are computed vs the monthly price.
-const DISPLAY_PRICES = {
-  currency: "EUR",
-  weekly:    6.99,
-  monthly:   17.99,
-  quarterly: 44.99,
-  yearly:    146.99,
-};
+  const DISPLAY_PRICES = {
+    currency: "EUR",
+    weekly:    6.99,
+    monthly:   17.99,
+    quarterly: 44.99,
+    yearly:    146.99,
+  };
 
   // --- helpers for currency + savings ---
   const SYMBOLS = { USD:"$", EUR:"€", GBP:"£" };
@@ -214,8 +225,7 @@ const DISPLAY_PRICES = {
     if (!window.FIREBASE_CONFIG) await new Promise(r => setTimeout(r, 0));
     if (!window.FIREBASE_CONFIG) throw new Error("Firebase config not loaded");
     const m = await import("/firebase-init.js?v=6");
-    // force init (avoids races)
-    if (m.ensureInit) m.ensureInit();
+    if (m.ensureInit) m.ensureInit(); // force init (avoids races)
     return m;
   }
 
@@ -261,4 +271,5 @@ const DISPLAY_PRICES = {
 </script>
 </body>
 </html>
+
 
