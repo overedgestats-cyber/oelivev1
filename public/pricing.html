@@ -5,11 +5,27 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Pricing · OverEdge</title>
   <link rel="stylesheet" href="/style.css"/>
+
   <style>
-    .pricing-grid{display:grid;gap:1rem;max-width:980px}
-    .plan{display:flex;flex-direction:column;gap:.5rem}
-    .muted{font-size:.85rem;opacity:.75}
-    .row{display:flex;gap:.75rem;align-items:center;justify-content:space-between}
+    /* Page tweaks */
+    .pricing-wrap{max-width:980px;margin:0 auto}
+    .compare{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+    .compare .col{padding:14px}
+    .compare h3{margin:.25rem 0}
+    .compare ul{margin:.25rem 0 0;padding-left:18px}
+    .plans{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+    .plan{position:relative;display:flex;flex-direction:column;gap:.6rem}
+    .plan h3{margin:0 0 .25rem 0}
+    .plan .badge{position:absolute;top:12px;right:12px;font-size:.75rem;padding:4px 8px;border:1px solid #2a3250;border-radius:999px;background:#141826}
+    .muted{opacity:.8}
+    .features{margin:.25rem 0 0;padding-left:18px}
+    .btn.block{display:block;width:100%;text-align:center}
+    .msg{min-height:1.25rem}
+    .price-line{display:flex;align-items:baseline;gap:.5rem}
+    .price{font-size:1.25rem;font-weight:700}
+    .save{font-size:.85rem;opacity:.85}
+    .helper{margin-top:24px}
+    @media (max-width:720px){ .compare{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
@@ -29,54 +45,116 @@
   </nav>
 </header>
 
-<main>
-  <h1>Pricing</h1>
+<main class="pricing-wrap">
+  <h1>Choose your edge</h1>
 
-  <div class="pricing-grid">
+  <!-- Free vs Pro comparison -->
+  <section class="compare">
+    <div class="card col">
+      <h3>Free</h3>
+      <ul>
+        <li>Up to two daily picks (European domestic)</li>
+        <li>Simple reasoning with expected goals</li>
+        <li>No sign-in required</li>
+      </ul>
+    </div>
+    <div class="card col">
+      <h3>Pro <span class="muted">— everything in Free, plus:</span></h3>
+      <ul>
+        <li><b>Full Pro Board</b> (ranked slate for allowed leagues)</li>
+        <li><b>Hero Bet</b> (single highest edge pick)</li>
+        <li><b>Calibrated confidence %</b> (not raw scores)</li>
+        <li>Cards & corners guidance</li>
+        <li>Members-only API endpoints</li>
+      </ul>
+    </div>
+  </section>
+
+  <h2 style="margin-top:1rem">Go Pro</h2>
+
+  <!-- Plans -->
+  <section class="plans">
+    <!-- Weekly -->
     <div class="card plan">
-      <div class="row"><h3 style="margin:0">Pro – Weekly</h3><span class="muted">7-day access</span></div>
-      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
-      <button class="btn subscribe" data-plan="weekly">Subscribe Weekly</button>
-      <div class="muted" id="msg_weekly"></div>
+      <span class="badge">Start here</span>
+      <h3>Pro — Weekly</h3>
+      <div class="price-line">
+        <span id="price_weekly" class="price">—</span>
+        <span id="save_weekly" class="save"></span>
+      </div>
+      <ul class="features">
+        <li>Full Pro Board access</li>
+        <li>Hero Bet</li>
+      </ul>
+      <button class="btn block subscribe" data-plan="weekly">Subscribe Weekly</button>
+      <div class="muted msg" id="msg_weekly"></div>
     </div>
 
+    <!-- Monthly -->
     <div class="card plan">
-      <div class="row"><h3 style="margin:0">Pro – Monthly</h3><span class="muted">Best starter</span></div>
-      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
-      <button class="btn subscribe" data-plan="monthly">Subscribe Monthly</button>
-      <div class="muted" id="msg_monthly"></div>
+      <span class="badge">Popular</span>
+      <h3>Pro — Monthly</h3>
+      <div class="price-line">
+        <span id="price_monthly" class="price">—</span>
+        <span id="save_monthly" class="save"></span>
+      </div>
+      <ul class="features">
+        <li>Full Pro Board access</li>
+        <li>Hero Bet</li>
+      </ul>
+      <button class="btn block subscribe" data-plan="monthly">Subscribe Monthly</button>
+      <div class="muted msg" id="msg_monthly"></div>
     </div>
 
+    <!-- Quarterly -->
     <div class="card plan">
-      <div class="row"><h3 style="margin:0">Pro – Quarterly</h3><span class="muted">Save more</span></div>
-      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
-      <button class="btn subscribe" data-plan="quarterly">Subscribe Quarterly</button>
-      <div class="muted" id="msg_quarterly"></div>
+      <span class="badge">Save more</span>
+      <h3>Pro — Quarterly</h3>
+      <div class="price-line">
+        <span id="price_quarterly" class="price">—</span>
+        <span id="save_quarterly" class="save"></span>
+      </div>
+      <ul class="features">
+        <li>Full Pro Board access</li>
+        <li>Hero Bet</li>
+      </ul>
+      <button class="btn block subscribe" data-plan="quarterly">Subscribe Quarterly</button>
+      <div class="muted msg" id="msg_quarterly"></div>
     </div>
 
+    <!-- Yearly -->
     <div class="card plan">
-      <div class="row"><h3 style="margin:0">Pro – Yearly</h3><span class="muted">Best value</span></div>
-      <ul><li>Full Pro Board</li><li>Hero Pick</li></ul>
-      <button class="btn subscribe" data-plan="yearly">Subscribe Yearly</button>
-      <div class="muted" id="msg_yearly"></div>
+      <span class="badge">Best value</span>
+      <h3>Pro — Yearly</h3>
+      <div class="price-line">
+        <span id="price_yearly" class="price">—</span>
+        <span id="save_yearly" class="save"></span>
+      </div>
+      <ul class="features">
+        <li>Full Pro Board access</li>
+        <li>Hero Bet</li>
+      </ul>
+      <button class="btn block subscribe" data-plan="yearly">Subscribe Yearly</button>
+      <div class="muted msg" id="msg_yearly"></div>
     </div>
+  </section>
 
-    <div class="card">
-      <h3>Already subscribed?</h3>
-      <p class="muted">Sign in with the same email and open the Pro page.</p>
-      <a class="btn" href="/pro.html">Go to Pro Board</a>
-    </div>
+  <div class="card helper">
+    <h3>Already subscribed?</h3>
+    <p class="muted">Sign in with the same email and open the Pro page.</p>
+    <a class="btn" href="/pro.html">Go to Pro Board</a>
   </div>
 </main>
 
 <footer>© OverEdge</footer>
 
-<!-- Firebase config + header wiring -->
+<!-- Header wiring -->
 <script src="/firebase-config.js"></script>
 <script type="module" src="/app.js"></script>
 
-<!-- Stripe Checkout wiring (lazy import of firebase-init, with explicit ensureInit) -->
+<!-- Pricing + Checkout (Stripe) -->
 <script type="module">
+  // 1) Stripe price IDs (subscription mode)
   const PRICE_MAP = {
     weekly:    "price_1Rx355II0lbloF9XjEp64Kz8",
     monthly:   "price_1Rx371II0lbloF9XuZaJnKc9",
@@ -84,11 +162,60 @@
     yearly:    "price_1Rx39JII0lbloF9XDYU6WEMh",
   };
 
+  // 2) Display amounts for each plan (major units, e.g. 19.99). Fill these in.
+  //    Savings are computed vs the monthly price.
+const DISPLAY_PRICES = {
+  currency: "EUR",
+  weekly:    9.99,
+  monthly:   24.99,
+  quarterly: 69.99,
+  yearly:    229.99,
+};
+
+  // --- helpers for currency + savings ---
+  const SYMBOLS = { USD:"$", EUR:"€", GBP:"£" };
+  function fmt(amount, currency){
+    if (amount == null) return "—";
+    const sym = SYMBOLS[currency] || "";
+    return sym ? `${sym}${amount.toFixed(2)}` : `${amount.toFixed(2)} ${currency||""}`.trim();
+  }
+  function monthlyEquivalent(plan, dp){
+    switch(plan){
+      case "weekly":    return (dp.weekly != null)    ? (dp.weekly * 52 / 12) : null;
+      case "monthly":   return (dp.monthly != null)   ? dp.monthly : null;
+      case "quarterly": return (dp.quarterly != null) ? (dp.quarterly / 3) : null;
+      case "yearly":    return (dp.yearly != null)    ? (dp.yearly / 12) : null;
+      default: return null;
+    }
+  }
+  function savingsPercent(plan, dp){
+    if (dp.monthly == null) return null;
+    const mon = dp.monthly;
+    const eq  = monthlyEquivalent(plan, dp);
+    if (eq == null || !isFinite(eq) || eq <= 0) return null;
+    const s = (1 - (eq / mon)) * 100;
+    return Math.round(s);
+  }
+  function setPriceUI(plan){
+    const pEl = document.getElementById(`price_${plan}`);
+    const sEl = document.getElementById(`save_${plan}`);
+    const amt = DISPLAY_PRICES[plan];
+    if (pEl) pEl.textContent = fmt(amt, DISPLAY_PRICES.currency);
+    const sp = savingsPercent(plan, DISPLAY_PRICES);
+    if (sEl) {
+      if (sp != null && sp > 0) sEl.textContent = `Save ${sp}% vs monthly`;
+      else sEl.textContent = "";
+    }
+  }
+  ["weekly","monthly","quarterly","yearly"].forEach(setPriceUI);
+
+  // 3) Checkout
   async function ensureFirebaseReady() {
     if (!window.FIREBASE_CONFIG) await new Promise(r => setTimeout(r, 0));
     if (!window.FIREBASE_CONFIG) throw new Error("Firebase config not loaded");
-    const m = await import("/firebase-init.js?v=4"); // cache-bust
-    m.ensureInit();                                   // <- force init now
+    const m = await import("/firebase-init.js?v=6");
+    // force init (avoids races)
+    if (m.ensureInit) m.ensureInit();
     return m;
   }
 
@@ -114,7 +241,6 @@
           cancelUrl: `${location.origin}/pricing.html`
         })
       });
-
       const data = await res.json();
       if (!res.ok || !data?.url) throw new Error(data?.detail || data?.error || "checkout_error");
       location.href = data.url;
@@ -125,9 +251,9 @@
 
   document.querySelectorAll(".subscribe").forEach(btn => {
     btn.addEventListener("click", () => {
-      const plan  = btn.dataset.plan;
-      const msgEl = document.getElementById(`msg_${plan}`);
+      const plan = btn.dataset.plan;
       const priceId = PRICE_MAP[plan];
+      const msgEl = document.getElementById(`msg_${plan}`);
       if (!priceId) { msgEl.textContent = "Unknown plan."; return; }
       startCheckout(priceId, msgEl);
     });
@@ -135,3 +261,4 @@
 </script>
 </body>
 </html>
+
