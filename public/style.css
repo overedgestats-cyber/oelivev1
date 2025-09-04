@@ -10,3 +10,5 @@ h1{margin:12px 0}
 .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .btn{display:inline-block;padding:10px 16px;border:1px solid #2a3250;border-radius:8px;text-decoration:none;color:#eaeaea}
 .btn:hover{background:#1a1f2e}
+/* ensure anything with [hidden] stays hidden even if other CSS sets display */
+[hidden] { display: none !important; }
