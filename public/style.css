@@ -53,3 +53,7 @@ header::after{
     text-align: center;
   }
 }
+/* Centered footer + link styling */
+footer { text-align: center; }
+footer a { color: #9fdcff; text-decoration: none; margin: 0 6px; }
+footer a:hover { text-decoration: underline; }
