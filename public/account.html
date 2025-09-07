@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Account · OverEdge</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <style>
+    .grid2 { display:grid; grid-template-columns: 160px 1fr; gap:10px 18px; align-items:center; }
+    .chip { display:inline-block; padding:2px 8px; border-radius:999px; background:#132815; border:1px solid #24522b; font-size:.85rem; }
+    .row label { opacity:.75; }
+  </style>
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/home.html">Home</a>
+    <a href="/free-picks.html">Free Picks</a>
+    <a href="/pro.html">Pro</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/about.html">About</a>
+    <a href="/FAQ.html">FAQ</a>
+    <span style="float:right">
+      <button id="loginBtn" class="btn">Sign in</button>
+      <button id="logoutBtn" class="btn" hidden>Sign out</button>
+      <small id="userEmail"></small>
+    </span>
+  </nav>
+</header>
+
+<main style="max-width:800px;margin:0 auto">
+  <h1>Account</h1>
+
+  <div class="card" id="acctCard">
+    Loading…
+  </div>
+
+  <p>
+    <a class="btn" id="manageBilling">Manage subscription</a>
+  </p>
+</main>
+
+<footer>
+  © OverEdge ·
+  <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
+  <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">Facebook</a> ·
+  <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
+</footer>
+
+<!-- Firebase header wiring -->
+<script src="/firebase-config.js"></script>
+<script type="module" src="/firebase-init.js"></script>
+<script type="module" src="/app.js"></script>
+
+<!-- Account page logic -->
+<script type="module">
+  import { getToken, auth, signIn } from "/firebase-init.js";
+
+  const apiBase = location.origin;
+  const card = document.getElementById("acctCard");
+  const manageBtn = document.getElementById("manageBilling");
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(+d)) return "—";
+    return d.toLocaleString();
+  }
+
+  async function loadAccount() {
+    try {
+      const user = auth.currentUser;
+      if (!user) { card.innerHTML = 'Please sign in to view your account. <a class="btn" id="goSignIn">Sign in</a>'; 
+        document.getElementById("goSignIn")?.addEventListener("click", (e)=>{ e.preventDefault(); signIn(); });
+        return;
+      }
+      const token = await getToken();
+      const r = await fetch(`${apiBase}/api/account/info`, { headers: { Authorization: "Bearer " + token }});
+      const raw = await r.text(); let data=null; try{ data=JSON.parse(raw) }catch{}
+      if (!r.ok) { card.innerHTML = `<div class="card">Server error: ${(data && (data.message||data.error)) || raw.slice(0,180)}</div>`; return; }
+
+      const plan = data.plan || {};
+      const activeChip = (plan.status === "active" || data.proActive) ? '<span class="chip">Pro active</span>' : '<span class="muted">Free</span>';
+      const next = plan.status === "active" ? fmtDate(data.nextRenewal) : "—";
+
+      card.innerHTML = `
+        <div class="grid2">
+          <div class="row"><label>Email</label></div>              <div>${data.email || "—"}</div>
+          <div class="row"><label>Last login</label></div>         <div>${fmtDate(data.lastLogin)}</div>
+          <div class="row"><label>Plan</label></div>               <div>${plan.tier || "Free"} ${activeChip}</div>
+          <div class="row"><label>Status</label></div>             <div>${plan.status || "—"}</div>
+          <div class="row"><label>Next renewal</label></div>       <div>${next}</div>
+        </div>
+      `;
+    } catch (e) {
+      card.innerHTML = `<div class="card">Error: ${e.message}</div>`;
+    }
+  }
+
+  // Manage subscription → Stripe Customer Portal
+  manageBtn?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try {
+      const token = await getToken();
+      if (!token) { await signIn(); return; }
+      const resp = await fetch(`${apiBase}/api/stripe/portal-link`, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token }
+      });
+      const text = await resp.text(); let json=null; try{ json=JSON.parse(text) }catch{}
+      if (!resp.ok || !json?.url) throw new Error((json && (json.message||json.error)) || text.slice(0,160));
+      location.href = json.url;
+    } catch (e2) {
+      alert("Could not open billing portal: " + e2.message);
+    }
+  });
+
+  // initial load & when auth changes (app.js also updates header buttons)
+  document.addEventListener("DOMContentLoaded", loadAccount);
+  auth.onAuthStateChanged(loadAccount);
+</script>
+</body>
+</html>
