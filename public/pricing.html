@@ -161,10 +161,7 @@
 <!-- Firebase config must set: window.FIREBASE_CONFIG = { ... } -->
 <script src="/firebase-config.js"></script>
 
-<!-- Stripe.js -->
-<script src="https://js.stripe.com/v3/"></script>
-
-<!-- Pricing + Checkout (login required, no keys hard-coded) -->
+<!-- Payment Links flow (no secrets in code) -->
 <script type="module">
   // ---------- Firebase via CDN ----------
   import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
@@ -176,86 +173,55 @@
   const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   const auth = getAuth(app);
 
-  // ---------- Public config (Stripe publishable key from env via API) ----------
-  let _stripe = null;
-  async function getStripe() {
-    if (_stripe) return _stripe;
-    const cfg = await fetch('/api/public-config').then(r => r.json());
-    if (!cfg?.stripePk) throw new Error('Stripe publishable key missing on server.');
-    _stripe = Stripe(cfg.stripePk);
-    return _stripe;
+  // ---------- Your Stripe Payment Links ----------
+  const LINKS = {
+    weekly:    "https://buy.stripe.com/bJe28s9DGabedyv5108k800",
+    monthly:   "https://buy.stripe.com/5kQ4gA6rudnqcur5108k801",
+    quarterly: "https://buy.stripe.com/8x24gAeY0erucurgJI8k802",
+    yearly:    "https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803"
+  };
+
+  // helper to add query params
+  function withParams(url, params) {
+    const u = new URL(url);
+    for (const [k, v] of Object.entries(params || {})) if (v) u.searchParams.set(k, v);
+    return u.toString();
   }
 
   // ---------- Static price display & savings ----------
   const DISPLAY_PRICES = { currency: "EUR", weekly: 6.99, monthly: 17.99, quarterly: 44.99, yearly: 146.99 };
   const SYMBOLS = { USD:"$", EUR:"€", GBP:"£" };
   function fmt(amount, currency){ if (amount==null) return "—"; const s = SYMBOLS[currency]||""; return s?`${s}${amount.toFixed(2)}`:`${amount.toFixed(2)} ${currency||""}`.trim(); }
-  function monthlyEquivalent(plan, dp){
-    switch(plan){
-      case "weekly":    return (dp.weekly ?? 0) * 52 / 12;
-      case "monthly":   return (dp.monthly ?? 0);
-      case "quarterly": return (dp.quarterly ?? 0) / 3;
-      case "yearly":    return (dp.yearly ?? 0) / 12;
-      default: return 0;
-    }
-  }
-  function savingsPercent(plan, dp){
-    const mon = dp.monthly, eq = monthlyEquivalent(plan, dp);
-    if (!mon || !eq) return null; return Math.round((1 - (eq / mon)) * 100);
-  }
-  function setPriceUI(plan){
-    const p = document.getElementById(`price_${plan}`);
-    const s = document.getElementById(`save_${plan}`);
-    if (p) p.textContent = fmt(DISPLAY_PRICES[plan], DISPLAY_PRICES.currency);
-    const sp = savingsPercent(plan, DISPLAY_PRICES);
-    if (s) s.textContent = sp ? `Save ${sp}% vs monthly` : "";
-  }
+  function monthlyEquivalent(plan, dp){ switch(plan){ case "weekly": return (dp.weekly??0)*52/12; case "monthly": return (dp.monthly??0); case "quarterly": return (dp.quarterly??0)/3; case "yearly": return (dp.yearly??0)/12; default: return 0; } }
+  function savingsPercent(plan, dp){ const mon=dp.monthly, eq=monthlyEquivalent(plan,dp); if(!mon||!eq) return null; return Math.round((1-(eq/mon))*100); }
+  function setPriceUI(plan){ const p=document.getElementById(`price_${plan}`); const s=document.getElementById(`save_${plan}`); if(p) p.textContent=fmt(DISPLAY_PRICES[plan], DISPLAY_PRICES.currency); const sp=savingsPercent(plan, DISPLAY_PRICES); if(s) s.textContent=sp?`Save ${sp}% vs monthly`:""; }
   ["weekly","monthly","quarterly","yearly"].forEach(setPriceUI);
 
   // ---------- Auth UI ----------
   const loginBtn  = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
   const userEmail = document.getElementById('userEmail');
-
-  function setAuthUI(user){
-    if (user) { loginBtn.hidden = true; logoutBtn.hidden = false; userEmail.textContent = user.email || ""; }
-    else { loginBtn.hidden = false; logoutBtn.hidden = true; userEmail.textContent = ""; }
-  }
+  function setAuthUI(user){ if(user){ loginBtn.hidden=true; logoutBtn.hidden=false; userEmail.textContent=user.email||""; } else { loginBtn.hidden=false; logoutBtn.hidden=true; userEmail.textContent=""; } }
   onAuthStateChanged(auth, setAuthUI);
+  loginBtn?.addEventListener('click', async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch(e){ alert('Sign-in failed: ' + (e?.message||e)); } });
+  logoutBtn?.addEventListener('click', async () => { try { await signOut(auth); } catch(e){ alert('Sign-out failed: ' + (e?.message||e)); } });
 
-  loginBtn?.addEventListener('click', async () => {
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-    catch (e) { alert('Sign-in failed: ' + (e?.message || e)); }
-  });
-  logoutBtn?.addEventListener('click', async () => {
-    try { await signOut(auth); }
-    catch (e) { alert('Sign-out failed: ' + (e?.message || e)); }
-  });
-
-  // ---------- Checkout (requires login) ----------
-  async function startCheckout(plan, msgEl){
+  // ---------- Open Stripe Payment Link (requires login) ----------
+  async function openPaymentLink(plan, msgEl){
     try {
       const user = auth.currentUser;
       if (!user) { msgEl.textContent = "Please sign in first."; loginBtn?.focus(); return; }
-      msgEl.textContent = "Preparing Checkout…";
-      const idToken = await user.getIdToken();
 
-      const resp = await fetch("/api/stripe/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + idToken },
-        body: JSON.stringify({ plan }) // 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+      const link = LINKS[plan];
+      if (!link) { msgEl.textContent = "Plan link not configured."; return; }
+
+      // prefill email + attach uid (Stripe may ignore client_reference_id for Payment Links; safe to include)
+      const url = withParams(link, {
+        prefilled_email: user.email || "",
+        client_reference_id: user.uid
       });
 
-      // Read as text first so we can display any HTML error from Vercel
-      const raw = await resp.text();
-      let data = null; try { data = JSON.parse(raw); } catch(_) {}
-
-      if (!resp.ok) throw new Error((data && (data.message || data.error)) || raw.slice(0,160));
-      if (!data?.id) throw new Error("No session id from server.");
-
-      const stripe = await getStripe();
-      const { error } = await stripe.redirectToCheckout({ sessionId: data.id });
-      if (error) throw error;
+      location.href = url;
     } catch (e) {
       msgEl.textContent = `Error: ${e.message || e}`;
       console.error(e);
@@ -266,11 +232,13 @@
     btn.addEventListener("click", () => {
       const plan = btn.dataset.plan;
       const msgEl = document.getElementById(`msg_${plan}`);
-      startCheckout(plan, msgEl);
+      openPaymentLink(plan, msgEl);
     });
   });
 
-  // ---------- Post-checkout: poll for activation & redirect ----------
+  // ---------- (Optional) Post-checkout polling ----------
+  // Payment Links usually don't return session_id in the URL, so this block
+  // will often be skipped. Keep it if you also use API-created Checkout.
   (function pollActivation(){
     const params = new URLSearchParams(location.search);
     if (!params.get('session_id')) return;

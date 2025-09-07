@@ -21,11 +21,13 @@
     </span>
   </nav>
 </header>
+
 <main>
   <h1>Pro Board</h1>
-  <div id="requirePro" class="card">Loading…</div>
-  <div id="proBoard" class="grid"></div>
+  <!-- app.js will control this container (show messages / add "Load Pro Board" button / inject #proBoard) -->
+  <div id="requirePro" class="card">Checking your subscription…</div>
 </main>
+
 <footer>
   © OverEdge ·
   <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
@@ -33,9 +35,12 @@
   <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
 </footer>
 
-
+<!-- Firebase config (sets window.FIREBASE_CONFIG) -->
 <script src="/firebase-config.js"></script>
+<!-- Your Firebase init helpers (exports auth, signIn, signOutUser, watchAuth, getToken) -->
 <script type="module" src="/firebase-init.js"></script>
+<!-- App logic (does Pro gate + renders board) -->
 <script type="module" src="/app.js"></script>
 </body>
 </html>
+
