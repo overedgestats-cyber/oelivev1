@@ -15,7 +15,6 @@ function initAdmin() {
   admin.initializeApp({ credential: admin.credential.cert(svc) });
   return admin;
 }
-
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
   res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type");
@@ -32,7 +31,6 @@ module.exports = async (req, res) => {
     const authz = req.headers.authorization || "";
     const idToken = authz.startsWith("Bearer ") ? authz.slice(7) : null;
     if (!idToken) return res.status(401).json({ error: "not_authenticated" });
-
     const decoded = await adminSDK.auth().verifyIdToken(idToken, true);
     const uid = decoded.uid;
     const email = decoded.email;
@@ -40,17 +38,12 @@ module.exports = async (req, res) => {
     const db = adminSDK.firestore();
     const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-    // try Firestore mapping first
     let customerId = (await db.collection("customers").doc(uid).get()).data()?.stripeCustomerId;
 
-    // else look up / create by email
     if (!customerId && email) {
       let customers = [];
-      try {
-        customers = (await stripe.customers.search({ query: `email:"${email}"`, limit: 1 })).data;
-      } catch {
-        customers = (await stripe.customers.list({ email, limit: 1 })).data;
-      }
+      try { customers = (await stripe.customers.search({ query: `email:"${email}"`, limit: 1 })).data; }
+      catch { customers = (await stripe.customers.list({ email, limit: 1 })).data; }
       customerId = customers[0]?.id || (await stripe.customers.create({ email })).id;
       await db.collection("customers").doc(uid).set({ stripeCustomerId: customerId }, { merge: true });
       await db.collection("stripe_customers").doc(customerId).set({ uid }, { merge: true });
