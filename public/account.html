@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Account · OverEdge</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/og.png" type="image/png">
+
   <link rel="stylesheet" href="/style.css"/>
   <style>
     .grid2 { display:grid; grid-template-columns: 160px 1fr; gap:10px 18px; align-items:center; }
@@ -30,9 +33,7 @@
 <main style="max-width:800px;margin:0 auto">
   <h1>Account</h1>
 
-  <div class="card" id="acctCard">
-    Loading…
-  </div>
+  <div class="card" id="acctCard">Loading…</div>
 
   <p>
     <a class="btn" id="manageBilling">Manage subscription</a>
@@ -69,32 +70,42 @@
   async function loadAccount() {
     try {
       const user = auth.currentUser;
-      if (!user) { card.innerHTML = 'Please sign in to view your account. <a class="btn" id="goSignIn">Sign in</a>'; 
-        document.getElementById("goSignIn")?.addEventListener("click", (e)=>{ e.preventDefault(); signIn(); });
+      if (!user) {
+        card.innerHTML = 'Please sign in to view your account. <a class="btn" id="goSignIn">Sign in</a>';
+        document.getElementById("goSignIn")?.addEventListener("click", (e) => {
+          e.preventDefault(); signIn();
+        });
         return;
       }
+
       const token = await getToken();
-      const r = await fetch(`${apiBase}/api/account/info`, { headers: { Authorization: "Bearer " + token }});
-      const raw = await r.text(); let data=null; try{ data=JSON.parse(raw) }catch{}
-      if (!r.ok) { card.innerHTML = `<div class="card">Server error: ${(data && (data.message||data.error)) || raw.slice(0,180)}</div>`; return; }
+      const r = await fetch(`${apiBase}/api/account/info`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const raw = await r.text(); let data = null; try { data = JSON.parse(raw); } catch {}
+      if (!r.ok) {
+        card.innerHTML = `<div class="card">Server error: ${(data && (data.message || data.error)) || raw.slice(0,180)}</div>`;
+        return;
+      }
 
       const plan = data.plan || {};
-      const activeChip = (plan.status === "active" || data.proActive) ? '<span class="chip">Pro active</span>' : '<span class="muted">Free</span>';
-      const next = plan.status === "active" ? fmtDate(data.nextRenewal) : "—";
+      const tierLabel  = (plan.tier && plan.tier !== "Free") ? plan.tier : "Free";
+      const statusChip = (plan.status === "active" || data.proActive) ? '<span class="chip">Pro active</span>' : '';
+      const next       = (plan.status === "active") ? fmtDate(data.nextRenewal) : "—";
 
       card.innerHTML = `
         <div class="grid2">
-          <div class="row"><label>Email</label></div>              <div>${data.email || "—"}</div>
-          <div class="row"><label>Last login</label></div>         <div>${fmtDate(data.lastLogin)}</div>
-          <div class="row"><label>Plan</label></div>               <div>${plan.tier || "Free"} ${activeChip}</div>
-          <div class="row"><label>Status</label></div>             <div>${plan.status || "—"}</div>
-          <div class="row"><label>Next renewal</label></div>       <div>${next}</div>
+          <div class="row"><label>Email</label></div>        <div>${data.email || "—"}</div>
+          <div class="row"><label>Last login</label></div>   <div>${fmtDate(data.lastLogin)}</div>
+          <div class="row"><label>Plan</label></div>         <div>${tierLabel} ${statusChip}</div>
+          <div class="row"><label>Status</label></div>       <div>${plan.status || "—"}</div>
+          <div class="row"><label>Next renewal</label></div> <div>${next}</div>
         </div>
       `;
     } catch (e) {
       card.innerHTML = `<div class="card">Error: ${e.message}</div>`;
     }
-  }
+  } // <-- closes loadAccount()
 
   // Manage subscription → Stripe Customer Portal
   manageBtn?.addEventListener("click", async (e) => {
@@ -106,8 +117,8 @@
         method: "POST",
         headers: { Authorization: "Bearer " + token }
       });
-      const text = await resp.text(); let json=null; try{ json=JSON.parse(text) }catch{}
-      if (!resp.ok || !json?.url) throw new Error((json && (json.message||json.error)) || text.slice(0,160));
+      const text = await resp.text(); let json = null; try { json = JSON.parse(text); } catch {}
+      if (!resp.ok || !json?.url) throw new Error((json && (json.message || json.error)) || text.slice(0,160));
       location.href = json.url;
     } catch (e2) {
       alert("Could not open billing portal: " + e2.message);
