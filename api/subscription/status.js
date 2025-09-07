@@ -3,17 +3,22 @@ module.exports.config = { runtime: "nodejs20.x" };
 
 const admin = require("firebase-admin");
 
-// --- Init Firebase Admin (handles \n in private_key) ---
-(function initAdmin() {
-  if (admin.apps.length) return;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON missing");
-  const svc = JSON.parse(raw);
-  if (svc.private_key && svc.private_key.includes("\\n")) {
-    svc.private_key = svc.private_key.replace(/\\n/g, "\n");
+function getAdmin() {
+  try {
+    if (admin.apps.length) return admin;
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    if (!raw) return null;
+    const svc = JSON.parse(raw);
+    if (svc.private_key && svc.private_key.includes("\\n")) {
+      svc.private_key = svc.private_key.replace(/\\n/g, "\n");
+    }
+    admin.initializeApp({ credential: admin.credential.cert(svc) });
+    return admin;
+  } catch (e) {
+    console.error("firebase admin init error:", e);
+    return null;
   }
-  admin.initializeApp({ credential: admin.credential.cert(svc) });
-})();
+}
 
 function setCORS(res) {
   res.setHeader("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
@@ -26,22 +31,26 @@ module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET") return res.status(405).end();
 
+  const adm = getAdmin();
+  if (!adm) {
+    return res.status(500).json({
+      error: "firebase_admin_unconfigured",
+      message: "Set FIREBASE_SERVICE_ACCOUNT_JSON in Vercel and redeploy."
+    });
+  }
+
   try {
-    // Require Firebase ID token (Bearer)
     const authz = req.headers.authorization || "";
     const idToken = authz.startsWith("Bearer ") ? authz.slice(7) : null;
     if (!idToken) return res.status(401).json({ error: "not_authenticated" });
 
-    // Verify token (force refresh so custom claims are fresh)
-    const decoded = await admin.auth().verifyIdToken(idToken, true);
+    const decoded = await adm.auth().verifyIdToken(idToken, true);
     const uid = decoded.uid;
     const email = decoded.email || null;
 
-    // Source of truth: Firestore doc written by your Stripe webhook
-    const doc = await admin.firestore().collection("customers").doc(uid).get();
-    const d = doc.exists ? doc.data() : {};
+    const snap = await adm.firestore().collection("customers").doc(uid).get();
+    const d = snap.exists ? snap.data() : {};
 
-    // Decide access: prefer Firestore; fallback to custom claims
     let active = !!d?.proActive;
     let proUntil = d?.proUntil || null;
     let source = "firestore";
@@ -51,21 +60,11 @@ module.exports = async (req, res) => {
       proUntil = decoded.proUntil || proUntil || null;
       source = "claims";
     }
-    // Normalize date to ISO string (if Firestore Timestamp or Date)
-    if (proUntil && typeof proUntil?.toDate === "function") {
-      proUntil = proUntil.toDate();
-    }
-    if (proUntil instanceof Date) {
-      proUntil = proUntil.toISOString();
-    }
 
-    return res.json({
-      active,
-      proUntil,         // ISO string or null
-      uid,
-      email,
-      source            // "firestore" | "claims"
-    });
+    if (proUntil && typeof proUntil?.toDate === "function") proUntil = proUntil.toDate();
+    if (proUntil instanceof Date) proUntil = proUntil.toISOString();
+
+    return res.json({ active, proUntil, uid, email, source });
   } catch (e) {
     console.error("status error:", e);
     return res.status(500).json({ error: "status_error", message: e.message });
