@@ -1,167 +1,141 @@
-// public/app.js
-import { auth, signIn, signOutUser, watchAuth, getToken } from "./firebase-init.js";
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Account · OverEdge</title>
 
-const apiBase = location.origin;
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/og.png" type="image/png">
+  <link rel="stylesheet" href="/style.css"/>
 
-function setHidden(el, state) {
-  if (!el) return;
-  if (state) {
-    el.setAttribute("hidden", "");
-    el.style.display = "none";
-  } else {
-    el.removeAttribute("hidden");
-    el.style.display = "";
+  <style>
+    .grid2 { display:grid; grid-template-columns: 160px 1fr; gap:10px 18px; align-items:center; }
+    .chip { display:inline-block; padding:2px 8px; border-radius:999px; background:#132815; border:1px solid #24522b; font-size:.85rem; }
+    .row label { opacity:.75; }
+  </style>
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/home.html">Home</a>
+    <a href="/free-picks.html">Free Picks</a>
+    <a href="/pro.html">Pro</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/about.html">About</a>
+    <a href="/FAQ.html">FAQ</a>
+
+    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
+    <span style="float:right; line-height:1.2; text-align:right">
+      <button id="loginBtn" class="btn">Sign in</button>
+
+      <span id="userBox" style="display:none">
+        <small id="userEmail"></small><br/>
+        <a id="accountLink" href="/account.html">Account</a>
+      </span>
+
+      <button id="logoutBtn" class="btn" hidden>Sign out</button>
+    </span>
+  </nav>
+</header>
+
+<main style="max-width:800px;margin:0 auto">
+  <h1>Account</h1>
+
+  <div class="card" id="acctCard">Loading…</div>
+
+  <p>
+    <a class="btn" id="manageBilling">Manage subscription</a>
+  </p>
+</main>
+
+<footer>
+  © OverEdge ·
+  <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
+  <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">Facebook</a> ·
+  <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
+</footer>
+
+<!-- Firebase + app wiring -->
+<script src="/firebase-config.js"></script>
+<script type="module" src="/firebase-init.js"></script>
+<script type="module" src="/app.js?v=9"></script>
+
+<!-- Account page logic -->
+<script type="module">
+  import { getToken, auth, signIn } from "/firebase-init.js";
+
+  const apiBase = location.origin;
+  const card = document.getElementById("acctCard");
+  const manageBtn = document.getElementById("manageBilling");
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(+d)) return "—";
+    return d.toLocaleString();
   }
-}
-function setHiddenAll(els, state) {
-  els.forEach((el) => setHidden(el, state));
-}
 
-// Create (once) an Account link directly under the userEmail element.
-// Returns the <a id="accountLink"> element.
-function ensureAccountLink(userSpan) {
-  if (!userSpan) return null;
-
-  // If it already exists, reuse it
-  let link = document.getElementById("accountLink");
-  if (link) return link;
-
-  // Create a line break + link right after the email
-  const br = document.createElement("br");
-  br.id = "accountLinkBreak";
-
-  link = document.createElement("a");
-  link.id = "accountLink";
-  link.href = "/account.html";
-  link.textContent = "Account";
-  link.style.fontSize = "0.9rem";
-  link.style.opacity = "0.9";
-
-  // Insert after the email
-  userSpan.insertAdjacentElement("afterend", br);
-  br.insertAdjacentElement("afterend", link);
-
-  return link;
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  // Support duplicates just in case (should be unique, but this is defensive)
-  const loginBtns  = Array.from(document.querySelectorAll("#loginBtn"));
-  const logoutBtns = Array.from(document.querySelectorAll("#logoutBtn"));
-  const userSpan   = document.getElementById("userEmail");
-
-  loginBtns.forEach((btn)  => btn.addEventListener("click", (e) => { e.preventDefault(); signIn(); }));
-  logoutBtns.forEach((btn) => btn.addEventListener("click", (e) => { e.preventDefault(); signOutUser(); }));
-
-  // Re-run UI + Pro gate on every auth change
-  watchAuth(async (user) => {
-    if (userSpan) userSpan.textContent = user ? (user.email || user.uid) : "";
-
-    // Hide "Sign in" when signed-in; show "Sign out"
-    setHiddenAll(loginBtns,  !!user);
-    setHiddenAll(logoutBtns, !user);
-
-    // Show/hide "Account" link under the email
-    const accountLinkEl = ensureAccountLink(userSpan); // creates it on first run if missing
-    if (accountLinkEl) {
-      accountLinkEl.style.display = user ? "" : "none";
-      const br = document.getElementById("accountLinkBreak");
-      if (br) br.style.display = user ? "" : "none";
-    }
-
-    const proGuard = document.getElementById("requirePro");
-    if (proGuard) await enforcePro(proGuard);
-  });
-
-  // Free Picks auto-load
-  const freePicksEl = document.getElementById("freePicks");
-  if (freePicksEl) loadFreePicks(freePicksEl);
-
-  // First run of Pro guard
-  const proGuard = document.getElementById("requirePro");
-  if (proGuard) enforcePro(proGuard);
-});
-
-async function loadFreePicks(container){
-  container.innerHTML = "Loading…";
-  try {
-    const res = await fetch(`${apiBase}/api/free-picks`);
-    const ct = res.headers.get("content-type") || "";
-    if (!res.ok || !ct.includes("application/json")) {
-      const text = await res.text();
-      throw new Error(`${res.status} ${res.statusText} — ${text.slice(0,120)}`);
-    }
-    const data = await res.json();
-    const picks = data.picks || [];
-    container.innerHTML = picks.length
-      ? picks.map(p => `
-          <div class="card">
-            <strong>${p.match}</strong><br/>
-            <small>${p.league} · ${new Date(p.kickoff).toLocaleString()}</small><br/>
-            <div><b>${p.market}</b>: ${p.prediction} — <b>${p.confidence}%</b> (odds: ${p.odds})</div>
-            <div>${p.reasoning}</div>
-          </div>
-        `).join("")
-      : "No picks yet. Try later.";
-  } catch (e){
-    container.innerHTML = `<div class="card">Couldn't load picks: ${e.message}</div>`;
-  }
-}
-
-async function enforcePro(container){
-  try {
-    const token = await getToken();
-    if (!token){ container.textContent = "Please sign in to view Pro content."; return; }
-
-    // ---- Robust fetch: read text first, then try JSON ----
-    const r = await fetch(`${apiBase}/api/subscription/status`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const raw = await r.text();
-    let j = null; try { j = JSON.parse(raw); } catch {}
-
-    if (!r.ok) {
-      const msg = (j && (j.message || j.error)) || raw.slice(0,160);
-      container.textContent = `Server error: ${msg}`;
-      console.error("status endpoint error:", { status: r.status, raw, json: j });
-      return;
-    }
-    if (!j?.active){
-      container.textContent = "No active subscription.";
-      return;
-    }
-
-    // ---- User is Pro -> show loader button and board container ----
-    container.innerHTML = '<a class="btn" href="#" id="loadPro">Load Pro Board</a><div id="proBoard"></div>';
-    document.getElementById("loadPro").addEventListener("click", async (e)=>{
-      e.preventDefault();
-      const boardEl = document.getElementById("proBoard");
-      boardEl.innerHTML = "Loading…";
-
-      const pr = await fetch(`${apiBase}/api/pro-board`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const prRaw = await pr.text();
-      let data = null; try { data = JSON.parse(prRaw); } catch {}
-
-      if (!pr.ok) {
-        const msg = (data && (data.message || data.error)) || prRaw.slice(0,160);
-        boardEl.innerHTML = `<div class="card">Server error: ${msg}</div>`;
-        console.error("pro-board endpoint error:", { status: pr.status, prRaw, data });
+  async function loadAccount() {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        card.innerHTML = 'Please sign in to view your account. <a class="btn" id="goSignIn">Sign in</a>';
+        document.getElementById("goSignIn")?.addEventListener("click", (e) => {
+          e.preventDefault(); signIn();
+        });
         return;
       }
 
-      const list = (data && data.items) || [];
-      boardEl.innerHTML = list.length
-        ? list.slice(0,10).map(row => `
-            <div class="card">
-              <strong>${row.home} vs ${row.away}</strong> — ${row.league.name}<br/>
-              Top: ${row.topBets.map(b=>`${b.market}:${b.pick} (${b.confidence}%)`).join(" · ")}
-            </div>
-          `).join("")
-        : "No Pro rows right now.";
-    });
-  } catch (e){
-    container.textContent = `Error: ${e.message}`;
+      const token = await getToken();
+      const r = await fetch(`${apiBase}/api/account/info`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const raw = await r.text(); let data = null; try { data = JSON.parse(raw); } catch {}
+      if (!r.ok) {
+        card.innerHTML = `<div class="card">Server error: ${(data && (data.message || data.error)) || raw.slice(0,180)}</div>`;
+        return;
+      }
+
+      const plan = data.plan || {};
+      const tierLabel  = (plan.tier && plan.tier !== "Free") ? plan.tier : "Free";
+      const statusChip = (plan.status === "active" || data.proActive) ? '<span class="chip">Pro active</span>' : '';
+      const next       = (plan.status === "active") ? fmtDate(data.nextRenewal) : "—";
+
+      card.innerHTML = `
+        <div class="grid2">
+          <div class="row"><label>Email</label></div>        <div>${data.email || "—"}</div>
+          <div class="row"><label>Last login</label></div>   <div>${fmtDate(data.lastLogin)}</div>
+          <div class="row"><label>Plan</label></div>         <div>${tierLabel} ${statusChip}</div>
+          <div class="row"><label>Status</label></div>       <div>${plan.status || "—"}</div>
+          <div class="row"><label>Next renewal</label></div> <div>${next}</div>
+        </div>
+      `;
+    } catch (e) {
+      card.innerHTML = `<div class="card">Error: ${e.message}</div>`;
+    }
   }
-}
+
+  // Manage subscription → Stripe Customer Portal
+  manageBtn?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try {
+      const token = await getToken();
+      if (!token) { await signIn(); return; }
+      const resp = await fetch(`${apiBase}/api/stripe/portal-link`, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token }
+      });
+      const text = await resp.text(); let json = null; try { json = JSON.parse(text); } catch {}
+      if (!resp.ok || !json?.url) throw new Error((json && (json.message || json.error)) || text.slice(0,160));
+      location.href = json.url;
+    } catch (e2) {
+      alert("Could not open billing portal: " + e2.message);
+    }
+  });
+
+  // initial load & when auth changes (app.js also updates header buttons)
+  document.addEventListener("DOMContentLoaded", loadAccount);
+  auth.onAuthStateChanged(loadAccount);
+</script>
+</body>
+</html>

@@ -4,6 +4,10 @@
   <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Pro · OverEdge</title>
   <link rel="stylesheet" href="/style.css"/>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/og.png" type="image/png">
 </head>
 <body>
 <header>
@@ -14,10 +18,17 @@
     <a href="/pricing.html">Pricing</a>
     <a href="/about.html">About</a>
     <a href="/FAQ.html">FAQ</a>
-    <span style="float:right">
+
+    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
+    <span style="float:right; line-height:1.2; text-align:right">
       <button id="loginBtn" class="btn">Sign in</button>
+
+      <span id="userBox" style="display:none">
+        <small id="userEmail"></small><br/>
+        <a id="accountLink" href="/account.html">Account</a>
+      </span>
+
       <button id="logoutBtn" class="btn" hidden>Sign out</button>
-      <small id="userEmail"></small>
     </span>
   </nav>
 </header>
@@ -39,8 +50,8 @@
 <script src="/firebase-config.js"></script>
 <!-- Your Firebase init helpers (exports auth, signIn, signOutUser, watchAuth, getToken) -->
 <script type="module" src="/firebase-init.js"></script>
-<!-- App logic (does Pro gate + renders board) -->
-<script type="module" src="/app.js"></script>
+<!-- App logic (does Pro gate + renders board); cache-busted -->
+<script type="module" src="/app.js?v=9"></script>
 </body>
 </html>
 

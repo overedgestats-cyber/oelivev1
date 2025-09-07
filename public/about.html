@@ -1,6 +1,9 @@
 ﻿<!doctype html>
 <html lang="en">
 <head>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/og.png" type="image/png">
+
   <meta property="og:title" content="OverEdge — Data beats gut" />
   <meta property="og:description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet." />
   <meta property="og:image" content="https://overedge.info/og.png?v=1" />
@@ -16,7 +19,7 @@
     .social-list { list-style: none; padding-left: 0; margin: .5rem 0 0; }
     .social-list li { margin: .25rem 0; }
 
-    /* NEW: small hero/banner using og.png */
+    /* small hero/banner using og.png */
     .hero-banner{
       background: url("/og.png") center/cover no-repeat;
       height: 220px;
@@ -35,10 +38,17 @@
     <a href="/pricing.html">Pricing</a>
     <a href="/about.html">About</a>
     <a href="/FAQ.html">FAQ</a>
-    <span style="float:right">
+
+    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
+    <span style="float:right; line-height:1.2; text-align:right">
       <button id="loginBtn" class="btn">Sign in</button>
+
+      <span id="userBox" style="display:none">
+        <small id="userEmail"></small><br/>
+        <a id="accountLink" href="/account.html">Account</a>
+      </span>
+
       <button id="logoutBtn" class="btn" hidden>Sign out</button>
-      <small id="userEmail"></small>
     </span>
   </nav>
 </header>
@@ -46,7 +56,6 @@
 <main>
   <h1>About OverEdge</h1>
 
-  <!-- NEW: visible banner -->
   <div class="hero-banner" role="img" aria-label="OverEdge"></div>
 
   <p>We use data and probabilistic modeling to surface football edges—simple to read, fast to act on.</p>
@@ -83,7 +92,9 @@
   <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
 </footer>
 
+<!-- Firebase + app wiring -->
 <script src="/firebase-config.js"></script>
 <script type="module" src="/firebase-init.js"></script>
+<script type="module" src="/app.js?v=9"></script>
 </body>
 </html>

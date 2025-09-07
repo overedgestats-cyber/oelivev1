@@ -6,6 +6,10 @@
   <title>Pricing · OverEdge</title>
   <link rel="stylesheet" href="/style.css"/>
 
+  <!-- Favicon (prevents /favicon.ico 404) -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/og.png" type="image/png">
+
   <style>
     .pricing-wrap{max-width:980px;margin:0 auto}
     .compare{display:grid;gap:12px;grid-template-columns:1fr 1fr}
@@ -37,10 +41,17 @@
     <a href="/pricing.html">Pricing</a>
     <a href="/about.html">About</a>
     <a href="/FAQ.html">FAQ</a>
-    <span style="float:right">
+
+    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
+    <span style="float:right; line-height:1.2; text-align:right">
       <button id="loginBtn" class="btn">Sign in</button>
+
+      <span id="userBox" style="display:none">
+        <small id="userEmail"></small><br/>
+        <a id="accountLink" href="/account.html">Account</a>
+      </span>
+
       <button id="logoutBtn" class="btn" hidden>Sign out</button>
-      <small id="userEmail" style="margin-left:.5rem"></small>
     </span>
   </nav>
 </header>
@@ -201,10 +212,37 @@
   const loginBtn  = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
   const userEmail = document.getElementById('userEmail');
-  function setAuthUI(user){ if(user){ loginBtn.hidden=true; logoutBtn.hidden=false; userEmail.textContent=user.email||""; } else { loginBtn.hidden=false; logoutBtn.hidden=true; userEmail.textContent=""; } }
+  const userBox   = document.getElementById('userBox');
+
+  function setAuthUI(user){
+    if(user){
+      if (loginBtn)  loginBtn.hidden = true;
+      if (logoutBtn) logoutBtn.hidden = false;
+      if (userEmail) userEmail.textContent = user.email || '';
+      if (userBox)   userBox.style.display = '';
+    } else {
+      if (loginBtn)  loginBtn.hidden = false;
+      if (logoutBtn) logoutBtn.hidden = true;
+      if (userEmail) userEmail.textContent = '';
+      if (userBox)   userBox.style.display = 'none';
+    }
+  }
   onAuthStateChanged(auth, setAuthUI);
-  loginBtn?.addEventListener('click', async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch(e){ alert('Sign-in failed: ' + (e?.message||e)); } });
-  logoutBtn?.addEventListener('click', async () => { try { await signOut(auth); } catch(e){ alert('Sign-out failed: ' + (e?.message||e)); } });
+
+  loginBtn?.addEventListener('click', async () => {
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch(e){
+      alert('Sign-in failed: ' + (e?.message||e));
+    }
+  });
+  logoutBtn?.addEventListener('click', async () => {
+    try {
+      await signOut(auth);
+    } catch(e){
+      alert('Sign-out failed: ' + (e?.message||e));
+    }
+  });
 
   // ---------- Open Stripe Payment Link (requires login) ----------
   async function openPaymentLink(plan, msgEl){
@@ -261,5 +299,6 @@
 </script>
 </body>
 </html>
+
 
 
