@@ -3,7 +3,7 @@ const app = require("../overedge-api/server");
 
 module.exports = async (req, res) => {
   try {
-    return app(req, res); // delegate to the internal router
+    return app(req, res);
   } catch (err) {
     console.error("free-picks handler error:", err);
     res.statusCode = 500;
@@ -11,7 +11,6 @@ module.exports = async (req, res) => {
     res.end(JSON.stringify({
       error: "free-picks failed",
       message: err?.message || String(err),
-      // only show stack in dev
       stack: process.env.NODE_ENV === "development" ? err?.stack : undefined,
     }));
   }

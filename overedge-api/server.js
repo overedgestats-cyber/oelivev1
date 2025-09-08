@@ -197,6 +197,23 @@ let ALLOWED_LEAGUES = (process.env.PRO_ALLOWED_LEAGUES || '')
 if (!ALLOWED_LEAGUES.length) ALLOWED_LEAGUES = DEFAULT_ALLOWED_LEAGUES;
 const ALLOWED_SET = new Set(ALLOWED_LEAGUES);
 
+// ---- Try to load whitelist of EU top-2 tier leagues for Free Picks ----
+let FREE_PICKS_COMP_IDS = new Set();
+try {
+  const cmp = require('./lib/competitions');
+  if (cmp && cmp.FREE_PICKS_COMP_IDS) {
+    // Accept numbers or strings; normalize to numbers if possible
+    FREE_PICKS_COMP_IDS = new Set(
+      Array.from(cmp.FREE_PICKS_COMP_IDS).map(x => {
+        const n = Number(x);
+        return Number.isFinite(n) ? n : x;
+      })
+    );
+  }
+} catch (_) {
+  // optional file; fallback handled below
+}
+
 const HERO_TIER1_SET = new Set(
   (process.env.HERO_FIRST_TIER_LEAGUES || '39,78,61,140,135,88,94,144,203,197,218,207,103,113')
     .split(',').map(n => Number(n.trim())).filter(Boolean)
@@ -319,7 +336,7 @@ function scoreOver25(h,a,odds){
     else if (odds>2.20 && odds<=2.60) boost=5;
     else if (odds<1.45 || odds>3.20) boost=-10;
   }
-  const score = (o25*0.6) + (pace*8) + boost;
+  const score = (o25*0.60) + (pace*8) + boost;
   return { score, confidence: asPct((score-100)/1.8) };
 }
 function scoreUnder25(h,a,odds){
@@ -331,7 +348,7 @@ function scoreUnder25(h,a,odds){
     else if (odds>2.00 && odds<=2.40) boost=3;
     else if (odds<1.40 || odds>3.00) boost=-8;
   }
-  const score = ((100-o25)*0.6) + ((3.8 - Math.min(pace,3.8))*20) + boost;
+  const score = ((100-o25)*0.60) + ((3.8 - Math.min(pace,3.8))*20) + boost;
   return { score, confidence: asPct((score-100)/1.8) };
 }
 
@@ -423,6 +440,29 @@ function calibrate(market, side, confRaw){
   return asPct(interp(map, confRaw));
 }
 
+// ---- Reasoning text for Free Picks (no hard numbers except final exp-goals) ----
+function buildFreeReason(f, h, a, m, side) {
+  const home = f.teams?.home?.name || 'Home';
+  const away = f.teams?.away?.name || 'Away';
+  const league = f.league?.name || 'this league';
+
+  if (/under/i.test(side)) {
+    return [
+      `${home} and ${away} trend toward controlled phases without many clean looks at goal.`,
+      `The midfield profiles point to slower progression and fewer high-value chances.`,
+      `Set-piece volatility is limited and the matchup rewards compact shapes over risk.`,
+      `We project around ${m.expGoals.toFixed(2)} goals.`
+    ].join(' ');
+  } else {
+    return [
+      `${home} and ${away} both carry attacking intent and can be stretched when pressed.`,
+      `Transitions should appear and finishing volume builds as the game opens up.`,
+      `Market pricing doesn't fully reflect the style clash that favors goals.`,
+      `We project around ${m.expGoals.toFixed(2)} goals.`
+    ].join(' ');
+  }
+}
+
 // ---------------- FREE PICKS ----------------
 async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false }){
   const fixtures = await fetchAllEuropeFixturesFast(date);
@@ -431,10 +471,14 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false 
   const pool = fixtures.filter(f=>{
     const c=f.league?.country, id=f.league?.id, t=(f.league?.type||'').toLowerCase();
     if (isYouthFixture(f)) return false;
-    if (UEFA_IDS.has(id)) return false;
-    if (!EURO_COUNTRIES.has(c)) return false;
-    if (t!=='league') return false;
-    if (ALLOWED_SET.has(id)) return false; // exclude Pro pool
+    if (UEFA_IDS.has(id)) return false;                 // no international comps
+    if (!EURO_COUNTRIES.has(c)) return false;           // only Europe
+    if (t!=='league') return false;                     // no cups
+    if (ALLOWED_SET.has(id)) return false;              // exclude Pro pool
+    // If a curated whitelist exists, require it; otherwise accept all remaining leagues
+    if (FREE_PICKS_COMP_IDS && FREE_PICKS_COMP_IDS.size) {
+      return FREE_PICKS_COMP_IDS.has(id);
+    }
     return true;
   });
 
@@ -550,7 +594,7 @@ app.get('/api/free-picks', async (req,res)=>{
       odds: (typeof x.odds==='number') ? x.odds.toFixed(2) : '—',
       confidence: x.confidence,
       confidenceRaw: x.confidenceRaw,
-      reasoning: `${x.f.league.name}: ${x.f.teams.home.name} vs ${x.f.teams.away.name}. Exp goals ≈ ${x.model.expGoals.toFixed(2)}.`
+      reasoning: buildFreeReason(x.f, x.h, x.a, x.model, x.side)
     }));
 
     const payload = {
