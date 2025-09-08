@@ -209,24 +209,25 @@
   ["weekly","monthly","quarterly","yearly"].forEach(setPriceUI);
 
   // ---------- Auth UI ----------
-  const loginBtn  = document.getElementById('loginBtn');
-  const logoutBtn = document.getElementById('logoutBtn');
-  const userEmail = document.getElementById('userEmail');
-  const userBox   = document.getElementById('userBox');
+const loginBtn  = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const userEmail = document.getElementById('userEmail');
+const userBox   = document.getElementById('userBox');
 
-  function setAuthUI(user){
-    if(user){
-      if (loginBtn)  loginBtn.hidden = true;
-      if (logoutBtn) logoutBtn.hidden = false;
-      if (userEmail) userEmail.textContent = user.email || '';
-      if (userBox)   userBox.style.display = '';
-    } else {
-      if (loginBtn)  loginBtn.hidden = false;
-      if (logoutBtn) logoutBtn.hidden = true;
-      if (userEmail) userEmail.textContent = '';
-      if (userBox)   userBox.style.display = 'none';
-    }
+function setAuthUI(user){
+  if (user) {
+    loginBtn.hidden = true;
+    logoutBtn.hidden = false;
+    userEmail.textContent = user.email || "";
+    if (userBox) userBox.style.display = "";
+  } else {
+    loginBtn.hidden = false;
+    logoutBtn.hidden = true;
+    userEmail.textContent = "";
+    if (userBox) userBox.style.display = "none";
   }
+}
+
   onAuthStateChanged(auth, setAuthUI);
 
   loginBtn?.addEventListener('click', async () => {
@@ -299,6 +300,3 @@
 </script>
 </body>
 </html>
-
-
-
