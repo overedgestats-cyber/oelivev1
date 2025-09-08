@@ -24,7 +24,6 @@
     <a href="/about.html">About</a>
     <a href="/FAQ.html">FAQ</a>
 
-    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
     <span style="float:right; line-height:1.2; text-align:right">
       <button id="loginBtn" class="btn">Sign in</button>
 
@@ -40,12 +39,7 @@
 
 <main style="max-width:800px;margin:0 auto">
   <h1>Account</h1>
-
   <div class="card" id="acctCard">Loading…</div>
-
-  <p>
-    <a class="btn" id="manageBilling">Manage subscription</a>
-  </p>
 </main>
 
 <footer>
@@ -66,7 +60,6 @@
 
   const apiBase = location.origin;
   const card = document.getElementById("acctCard");
-  const manageBtn = document.getElementById("manageBilling");
 
   function fmtDate(iso) {
     if (!iso) return "—";
@@ -115,25 +108,6 @@
     }
   }
 
-  // Manage subscription → Stripe Customer Portal
-  manageBtn?.addEventListener("click", async (e) => {
-    e.preventDefault();
-    try {
-      const token = await getToken();
-      if (!token) { await signIn(); return; }
-      const resp = await fetch(`${apiBase}/api/stripe/portal-link`, {
-        method: "POST",
-        headers: { Authorization: "Bearer " + token }
-      });
-      const text = await resp.text(); let json = null; try { json = JSON.parse(text); } catch {}
-      if (!resp.ok || !json?.url) throw new Error((json && (json.message || json.error)) || text.slice(0,160));
-      location.href = json.url;
-    } catch (e2) {
-      alert("Could not open billing portal: " + e2.message);
-    }
-  });
-
-  // initial load & when auth changes (app.js also updates header buttons)
   document.addEventListener("DOMContentLoaded", loadAccount);
   auth.onAuthStateChanged(loadAccount);
 </script>
