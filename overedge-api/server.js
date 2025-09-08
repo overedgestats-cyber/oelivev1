@@ -352,18 +352,39 @@ function scoreUnder25(h,a,odds){
   return { score, confidence: asPct((score-100)/1.8) };
 }
 
-// Fixtures
+// replace the existing fetchAllEuropeFixturesFast in overedge-api/server.js
+
 async function fetchAllEuropeFixturesFast(date){
+  const out = [];
+  let page = 1, total = 1;
+
   try {
-    const url = `https://v3.football.api-sports.io/fixtures?date=${date}`;
-    const r = await axios.get(url, AXIOS);
-    const all = r.data?.response ?? [];
-    return all.filter(f=>{
-      const c = f.league?.country, lid = f.league?.id;
-      return EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid);
-    });
-  } catch (e) { console.error('fixtures err', e.message); return []; }
+    do {
+      const url = `https://v3.football.api-sports.io/fixtures?date=${date}&page=${page}`;
+      const r = await axios.get(url, AXIOS);
+      const resp = r.data || {};
+      total = resp?.paging?.total || 1;
+
+      const arr = resp?.response || [];
+      for (const f of arr) {
+        const c = f.league?.country;
+        const lid = f.league?.id;
+        // keep only Europe / UEFA competitions
+        if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
+      }
+
+      page += 1;
+
+      // tiny delay to be kind to the rate limit when many pages
+      if (page <= total) await new Promise(r => setTimeout(r, 120));
+    } while (page <= total);
+  } catch (e) {
+    console.error('fixtures err', e.message);
+  }
+
+  return out;
 }
+
 
 function isYouthFixture(f){
   const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name].filter(Boolean).join(' ').toLowerCase();
