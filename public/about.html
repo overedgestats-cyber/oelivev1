@@ -1,14 +1,5 @@
 ﻿<!doctype html>
 <html lang="en">
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-88C4MQ3EF8');
-</script>
 <head>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="/og.png" type="image/png">
@@ -16,27 +7,48 @@
   <meta property="og:title" content="OverEdge — Data beats gut" />
   <meta property="og:description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet." />
   <meta property="og:image" content="https://overedge.info/og.png?v=1" />
-  <meta property="og:url" content="https://overedge.info/" />
+  <meta property="og:url" content="https://overedge.info/about.html" />
   <meta property="og:type" content="website" />
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>About · OverEdge</title>
+  <link rel="canonical" href="https://overedge.info/about.html">
   <link rel="stylesheet" href="/style.css"/>
   <style>
     .kpi { display:flex; gap:1rem; flex-wrap:wrap }
     .kpi .card { flex: 1 1 220px }
     .social-list { list-style: none; padding-left: 0; margin: .5rem 0 0; }
     .social-list li { margin: .25rem 0; }
-
-    /* small hero/banner using og.png */
-    .hero-banner{
-      background: url("/og.png") center/cover no-repeat;
-      height: 220px;
-      border-radius: 12px;
-      border: 1px solid #23283a;
-      margin: 12px 0 16px;
-    }
+    .hero-banner{ background:url("/og.png") center/cover no-repeat; height:220px; border-radius:12px; border:1px solid #23283a; margin:12px 0 16px;}
   </style>
+
+  <!-- JSON-LD: Organization + Website -->
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"Organization",
+    "name":"OverEdge",
+    "url":"https://overedge.info/",
+    "logo":"https://overedge.info/og.png",
+    "sameAs":[
+      "https://www.facebook.com/profile.php?id=61579190114778",
+      "https://www.instagram.com/overedgefootball"
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"WebSite",
+    "name":"OverEdge",
+    "url":"https://overedge.info/",
+    "potentialAction":{
+      "@type":"SearchAction",
+      "target":"https://overedge.info/?q={search_term_string}",
+      "query-input":"required name=search_term_string"
+    }
+  }
+  </script>
 </head>
 <body>
 <header>
@@ -48,15 +60,12 @@
     <a href="/about.html">About</a>
     <a href="/FAQ.html">FAQ</a>
 
-    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
     <span style="float:right; line-height:1.2; text-align:right">
       <button id="loginBtn" class="btn">Sign in</button>
-
       <span id="userBox" style="display:none">
         <small id="userEmail"></small><br/>
         <a id="accountLink" href="/account.html">Account</a>
       </span>
-
       <button id="logoutBtn" class="btn" hidden>Sign out</button>
     </span>
   </nav>
@@ -101,10 +110,8 @@
   <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
 </footer>
 
-<!-- Firebase + app wiring -->
 <script src="/firebase-config.js"></script>
 <script type="module" src="/firebase-init.js"></script>
-<script type="module" src="/app.js?v=10"></script>
+<script type="module" src="/app.js?v=9"></script>
 </body>
 </html>
-
