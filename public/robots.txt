@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /api/
+Disallow: /account.html
+Disallow: /pro.html
+Allow: /
+
+Sitemap: https://overedge.info/sitemap.xml
