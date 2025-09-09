@@ -3,6 +3,11 @@ import { auth, signIn, signOutUser, watchAuth, getToken } from "./firebase-init.
 
 const apiBase = location.origin;
 
+// --- GA helper (safe/no PII) ---
+function ga(event, params = {}) {
+  try { window.gtag && window.gtag("event", event, params); } catch {}
+}
+
 function setHidden(el, state) {
   if (!el) return;
   if (state) {
@@ -33,6 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Hide "Sign in" when signed-in; show "Sign out"
     setHiddenAll(loginBtns,  !!user);
     setHiddenAll(logoutBtns, !user);
+
+    // GA auth events (fire once per session change)
+    if (user && !window.__gaLogged) { ga("login", { method: "Google" }); window.__gaLogged = true; }
+    if (!user && window.__gaLogged) { ga("logout"); window.__gaLogged = false; }
 
     const proGuard = document.getElementById("requirePro");
     if (proGuard) await enforcePro(proGuard);
@@ -68,8 +77,13 @@ async function loadFreePicks(container){
           </div>
         `).join("")
       : "No picks yet. Try later.";
+
+    // GA: report count loaded
+    ga("free_picks_loaded", { count: picks.length || 0 });
   } catch (e){
     container.innerHTML = `<div class="card">Couldn't load picks: ${e.message}</div>`;
+    // optional GA error ping
+    ga("free_picks_error", { message: String(e && e.message || e) });
   }
 }
 
@@ -93,8 +107,13 @@ async function enforcePro(container){
     }
     if (!j?.active){
       container.textContent = "No active subscription.";
+      // GA: pro gate fail
+      ga("pro_gate_no_sub");
       return;
     }
+
+    // GA: pro gate passed
+    ga("pro_gate_passed");
 
     // ---- User is Pro -> show loader button and board container ----
     container.innerHTML = '<a class="btn" href="#" id="loadPro">Load Pro Board</a><div id="proBoard"></div>';
@@ -102,6 +121,9 @@ async function enforcePro(container){
       e.preventDefault();
       const boardEl = document.getElementById("proBoard");
       boardEl.innerHTML = "Loading…";
+
+      // GA: requested board
+      ga("pro_board_requested");
 
       const pr = await fetch(`${apiBase}/api/pro-board`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -113,6 +135,8 @@ async function enforcePro(container){
         const msg = (data && (data.message || data.error)) || prRaw.slice(0,160);
         boardEl.innerHTML = `<div class="card">Server error: ${msg}</div>`;
         console.error("pro-board endpoint error:", { status: pr.status, prRaw, data });
+        // GA: error loading board
+        ga("pro_board_error", { status: pr.status || 0 });
         return;
       }
 
@@ -125,8 +149,12 @@ async function enforcePro(container){
             </div>
           `).join("")
         : "No Pro rows right now.";
+
+      // GA: board loaded
+      ga("pro_board_loaded", { rows: list.length || 0 });
     });
   } catch (e){
     container.textContent = `Error: ${e.message}`;
   }
 }
+

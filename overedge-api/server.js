@@ -202,7 +202,6 @@ let FREE_PICKS_COMP_IDS = new Set();
 try {
   const cmp = require('./lib/competitions');
   if (cmp && cmp.FREE_PICKS_COMP_IDS) {
-    // Accept numbers or strings; normalize to numbers if possible
     FREE_PICKS_COMP_IDS = new Set(
       Array.from(cmp.FREE_PICKS_COMP_IDS).map(x => {
         const n = Number(x);
@@ -352,8 +351,7 @@ function scoreUnder25(h,a,odds){
   return { score, confidence: asPct((score-100)/1.8) };
 }
 
-// replace the existing fetchAllEuropeFixturesFast in overedge-api/server.js
-
+// Paginated fixtures fetch for Europe / UEFA
 async function fetchAllEuropeFixturesFast(date){
   const out = [];
   let page = 1, total = 1;
@@ -369,13 +367,10 @@ async function fetchAllEuropeFixturesFast(date){
       for (const f of arr) {
         const c = f.league?.country;
         const lid = f.league?.id;
-        // keep only Europe / UEFA competitions
         if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
       }
 
       page += 1;
-
-      // tiny delay to be kind to the rate limit when many pages
       if (page <= total) await new Promise(r => setTimeout(r, 120));
     } while (page <= total);
   } catch (e) {
@@ -384,7 +379,6 @@ async function fetchAllEuropeFixturesFast(date){
 
   return out;
 }
-
 
 function isYouthFixture(f){
   const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name].filter(Boolean).join(' ').toLowerCase();
@@ -485,8 +479,9 @@ function buildFreeReason(f, h, a, m, side) {
 }
 
 // ---------------- FREE PICKS ----------------
-async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false }){
+async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false, wantDebug=false }){
   const fixtures = await fetchAllEuropeFixturesFast(date);
+  const fixturesTotal = fixtures.length;
 
   // primary pool: domestic top-2 excluding Pro set
   const pool = fixtures.filter(f=>{
@@ -510,6 +505,7 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false 
         !isYouthFixture(f) &&
         (UEFA_IDS.has(f.league?.id) || ['cup'].includes((f.league?.type || '').toLowerCase()))
       );
+  const listUsed = list.length;
 
   for (const f of list) {
     try {
@@ -581,7 +577,15 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false 
   }
 
   const poolSize = list.length;
-  return { cand, poolSize };
+  const dbg = wantDebug ? {
+    fixturesTotal,
+    poolPrimary: pool.length,
+    listUsed,
+    leaguesSample: Array.from(new Set(list.map(x => x.league?.id))).slice(0, 20),
+    countriesSample: Array.from(new Set(list.map(x => x.league?.country))).slice(0, 12),
+  } : undefined;
+
+  return { cand, poolSize, dbg };
 }
 
 app.get('/api/free-picks', async (req,res)=>{
@@ -594,6 +598,7 @@ app.get('/api/free-picks', async (req,res)=>{
     const minOdds = Number(req.query.minOdds || 1.50);
     const strictOnly = req.query.strict === '1';
     const force = req.query.refresh === '1';
+    const wantDebug = req.query.debug === '1';
 
     await ensureDataFiles();
     CAL = await loadJSON(CAL_FILE, defaultCalibration());
@@ -601,10 +606,12 @@ app.get('/api/free-picks', async (req,res)=>{
 
     const cacheKey = `${date}|${minConf}|${minOdds}|${strictOnly}`;
     if (!force && dailyPicksCache.has(cacheKey)){
-      return res.json({ ...(dailyPicksCache.get(cacheKey)), cached:true });
+      const cachedPayload = { ...(dailyPicksCache.get(cacheKey)), cached:true };
+      // if debug requested, recompute once (don’t return stale meta) but don’t save
+      if (!wantDebug) return res.json(cachedPayload);
     }
 
-    const { cand, poolSize } = await pickEuropeTwo({ date, season, minConf, minOdds, strictOnly });
+    const { cand, poolSize, dbg } = await pickEuropeTwo({ date, season, minConf, minOdds, strictOnly, wantDebug });
 
     const picks = cand.slice(0,2).map(x => ({
       match: `${x.f.teams.home.name} vs ${x.f.teams.away.name}`,
@@ -622,14 +629,17 @@ app.get('/api/free-picks', async (req,res)=>{
       dateRequested: date,
       dateUsed: date,
       thresholds: { minConf, minOdds, strictOnly },
-      meta: { poolSize, candidates: cand.length },
+      meta: { poolSize, candidates: cand.length, ...(wantDebug ? { debug: dbg } : {}) },
       picks,
       computedAt: new Date().toISOString(),
       cached:false
     };
 
-    dailyPicksCache.set(cacheKey, payload);
-    await persistDailyCache();
+    // cache only non-debug payloads
+    if (!wantDebug) {
+      dailyPicksCache.set(cacheKey, payload);
+      await persistDailyCache();
+    }
 
     res.json(payload);
   }catch(e){
@@ -677,7 +687,7 @@ function pickFromModelForFixture(f, h, a, m){
   const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
   const cornersEst = CORNERS_BASE + CORNERS_PACE_K * (pace - PRIOR_EXP_GOALS);
   const pCornersOver = logistic(cornersEst - CORNERS_OU_LINE, 1.2);
-  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CARDS_OU_LINE}`:`Under ${CARDS_OU_LINE}`,
+  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CARSDS_OU_LINE}`:`Under ${CARDS_OU_LINE}`,
     confidenceRaw: asPct(50 + Math.abs(pCardsOver-0.5)*90), confidence: asPct(50 + Math.abs(pCardsOver-0.5)*90) });
   out.push({ market:'CORNERS', selection: pCornersOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`,
     confidenceRaw: asPct(50 + Math.abs(pCornersOver-0.5)*85), confidence: asPct(50 + Math.abs(pCornersOver-0.5)*85) });
