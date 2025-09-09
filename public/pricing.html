@@ -219,11 +219,153 @@
   <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
 </footer>
 
+<!-- Firebase config must set: window.FIREBASE_CONFIG -->
 <script src="/firebase-config.js"></script>
 
-<!-- (your existing payment/auth script stays the same) -->
+<!-- Prices render immediately; Firebase is soft-fail so UI still works if CDN/config hiccups -->
 <script type="module">
-  /* ... your existing Firebase + Stripe Payment Links code unchanged ... */
+  // ---------- 1) Prices (run first, independent of Firebase) ----------
+  const DISPLAY_PRICES = { currency: "EUR", weekly: 6.99, monthly: 17.99, quarterly: 44.99, yearly: 146.99 };
+  const SYMBOLS = { USD:"$", EUR:"€", GBP:"£" };
+  function fmt(amount, currency){
+    if (amount==null) return "—";
+    const s = SYMBOLS[currency]||"";
+    return s ? `${s}${amount.toFixed(2)}` : `${amount.toFixed(2)} ${currency||""}`.trim();
+  }
+  function monthlyEquivalent(plan, dp){
+    switch(plan){
+      case "weekly":    return (dp.weekly??0)*52/12;
+      case "monthly":   return (dp.monthly??0);
+      case "quarterly": return (dp.quarterly??0)/3;
+      case "yearly":    return (dp.yearly??0)/12;
+      default: return 0;
+    }
+  }
+  function savingsPercent(plan, dp){
+    const mon=dp.monthly, eq=monthlyEquivalent(plan,dp);
+    if(!mon||!eq) return null;
+    return Math.round((1-(eq/mon))*100);
+  }
+  function setPriceUI(plan){
+    const p=document.getElementById(`price_${plan}`);
+    const s=document.getElementById(`save_${plan}`);
+    if(p) p.textContent=fmt(DISPLAY_PRICES[plan], DISPLAY_PRICES.currency);
+    const sp=savingsPercent(plan, DISPLAY_PRICES);
+    if(s) s.textContent=sp?`Save ${sp}% vs monthly`:"";
+  }
+  ["weekly","monthly","quarterly","yearly"].forEach(setPriceUI);
+
+  // ---------- 2) Helpers ----------
+  function withParams(url, params) {
+    const u = new URL(url);
+    for (const [k, v] of Object.entries(params || {})) if (v) u.searchParams.set(k, v);
+    return u.toString();
+  }
+  const LINKS = {
+    weekly:    "https://buy.stripe.com/bJe28s9DGabedyv5108k800",
+    monthly:   "https://buy.stripe.com/5kQ4gA6rudnqcur5108k801",
+    quarterly: "https://buy.stripe.com/8x24gAeY0erucurgJI8k802",
+    yearly:    "https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803"
+  };
+
+  const loginBtn  = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const userEmail = document.getElementById('userEmail');
+  const userBox   = document.getElementById('userBox');
+
+  // ---------- 3) Firebase (soft-fail) ----------
+  let auth = null, GoogleAuthProvider = null, signInWithPopup = null, signOut = null, onAuthStateChanged = null;
+
+  (async () => {
+    try {
+      const firebaseConfig = window.FIREBASE_CONFIG;
+      const appMod  = await import("https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js");
+      const authMod = await import("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js");
+
+      const app = appMod.getApps().length ? appMod.getApps()[0] : appMod.initializeApp(firebaseConfig);
+      auth = authMod.getAuth(app);
+      ({ GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod);
+
+      function setAuthUI(user){
+        if (user) {
+          if (loginBtn)  loginBtn.hidden = true;
+          if (logoutBtn) logoutBtn.hidden = false;
+          if (userEmail) userEmail.textContent = user.email || "";
+          if (userBox)   userBox.style.display = "";
+        } else {
+          if (loginBtn)  loginBtn.hidden = false;
+          if (logoutBtn) logoutBtn.hidden = true;
+          if (userEmail) userEmail.textContent = "";
+          if (userBox)   userBox.style.display = "none";
+        }
+      }
+      onAuthStateChanged(auth, setAuthUI);
+
+      loginBtn?.addEventListener('click', async () => {
+        try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+        catch(e){ alert('Sign-in failed: ' + (e?.message||e)); }
+      });
+      logoutBtn?.addEventListener('click', async () => {
+        try { await signOut(auth); }
+        catch(e){ alert('Sign-out failed: ' + (e?.message||e)); }
+      });
+    } catch (e) {
+      console.warn('[pricing] Firebase init skipped:', e?.message || e);
+      if (loginBtn)  loginBtn.hidden = false;
+      if (logoutBtn) logoutBtn.hidden = true;
+      if (userBox)   userBox.style.display = "none";
+    }
+  })();
+
+  // ---------- 4) Subscribe buttons (require login, graceful copy) ----------
+  async function openPaymentLink(plan, msgEl){
+    try {
+      const user = auth?.currentUser;
+      if (!user) {
+        if (loginBtn) loginBtn.focus();
+        msgEl.textContent = "Please sign in first.";
+        return;
+      }
+      const link = LINKS[plan];
+      if (!link) { msgEl.textContent = "Plan link not configured."; return; }
+      const url = withParams(link, {
+        prefilled_email: user.email || "",
+        client_reference_id: user.uid
+      });
+      location.href = url;
+    } catch (e) {
+      msgEl.textContent = `Error: ${e.message || e}`;
+      console.error(e);
+    }
+  }
+  document.querySelectorAll(".subscribe").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const plan = btn.dataset.plan;
+      const msgEl = document.getElementById(`msg_${plan}`);
+      openPaymentLink(plan, msgEl);
+    });
+  });
+
+  // ---------- 5) Optional post-checkout polling ----------
+  (function pollActivation(){
+    const params = new URLSearchParams(location.search);
+    if (!params.get('session_id')) return;
+    document.getElementById('post-checkout-card').style.display = 'block';
+    const msg = document.getElementById('post-checkout-message');
+    async function tick() {
+      try {
+        const user = auth?.currentUser;
+        if (!user) { msg.textContent = 'Please sign in to finalize activation…'; return setTimeout(tick, 1500); }
+        const token = await user.getIdToken(true);
+        const r = await fetch('/api/subscription/status', { headers: { Authorization: 'Bearer ' + token }});
+        if (!r.ok) return setTimeout(tick, 2000);
+        const s = await r.json().catch(()=>null);
+        if (s?.active) location.href = '/pro.html';
+        else { msg.textContent = 'Still waiting for confirmation…'; setTimeout(tick, 2000); }
+      } catch { setTimeout(tick, 2000); }
+    }
+    tick();
+  })();
 </script>
 </body>
 </html>
