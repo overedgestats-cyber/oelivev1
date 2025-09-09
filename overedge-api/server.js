@@ -161,10 +161,46 @@ app.use(express.json());
 const API_KEY = process.env.API_FOOTBALL_KEY || '';
 if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY');
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, hasKey: !!API_KEY }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, hasKey: !!API_KEY, tz: API_TZ }));
 app.get('/__debug/whoami', requireAuth, (req, res) => {
   const { uid, email, aud, iss } = req.user || {};
   res.json({ ok: true, uid, email, aud, iss });
+});
+
+// Quick raw fixtures probe (helps verify API returns anything for a date)
+app.get('/__debug/raw-fixtures', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
+    const date = req.query.date || todayYMD();
+    const tzs = [API_TZ, 'Europe/London', 'UTC'];
+    const tries = [];
+    for (const tz of tzs) {
+      const url = `https://v3.football.api-sports.io/fixtures?date=${date}&page=1&timezone=${encodeURIComponent(tz)}`;
+      try {
+        const r = await axios.get(url, AXIOS);
+        const resp = r.data || {};
+        const arr  = resp?.response || [];
+        tries.push({ tz, count: arr.length, paging: resp?.paging || null });
+        if (arr.length) {
+          return res.json({
+            date, tried: tries, sampleCount: arr.length,
+            sample: arr.slice(0, 12).map(f => ({
+              fixtureId: f.fixture?.id,
+              leagueId: f.league?.id, league: f.league?.name,
+              country: f.league?.country, type: f.league?.type,
+              home: f.teams?.home?.name, away: f.teams?.away?.name,
+              kickoff: f.fixture?.date
+            }))
+          });
+        }
+      } catch (e) {
+        tries.push({ tz, error: e?.response?.status || e.message });
+      }
+    }
+    res.json({ date, tried: tries, sampleCount: 0 });
+  } catch (e) {
+    res.status(500).json({ error: 'raw_fixtures_failed', detail: e.response?.data || e.message });
+  }
 });
 
 // ---------------- Helpers / model ----------------
@@ -357,13 +393,13 @@ function scoreUnder25(h, a, odds){
   return { score: raw, confidence: asPct(raw) };
 }
 
-// Paginated fixtures fetch for Europe / UEFA (TZ-aware + fallback)
+// Paginated fixtures fetch for Europe / UEFA (TZ-aware + multi-fallback)
 async function fetchAllEuropeFixturesFast(date){
-  const tryFetch = async (query) => {
+  const tryFetch = async (query, tz) => {
     const out = [];
     let page = 1, total = 1;
     do {
-      const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(API_TZ)}`;
+      const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(tz)}`;
       try {
         const r = await axios.get(url, AXIOS);
         const resp = r.data || {};
@@ -376,25 +412,30 @@ async function fetchAllEuropeFixturesFast(date){
           if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
         }
       } catch (e) {
-        console.error('fixtures err', { date, query, tz: API_TZ, status: e?.response?.status, detail: e?.response?.data || e.message });
+        console.error('fixtures err', { date, query, tz, status: e?.response?.status, detail: e?.response?.data || e.message });
         break;
       }
-
       page += 1;
       if (page <= total) await new Promise(r => setTimeout(r, 120));
     } while (page <= total);
     return out;
   };
 
-  // Single-day query first
-  const a = await tryFetch(`date=${date}`);
-  if (a.length) return a;
+  const TZ_FALLBACKS = [API_TZ, 'Europe/London', 'UTC'];
 
-  // Fallback to from/to (same day) to avoid TZ edge empties
-  const b = await tryFetch(`from=${date}&to=${date}`);
-  if (b.length) return b;
+  // 1) Single-day query across TZs
+  for (const tz of TZ_FALLBACKS) {
+    const a = await tryFetch(`date=${date}`, tz);
+    if (a.length) return a;
+  }
 
-  console.warn('⚠️ fixtures empty after both queries', { date, tz: API_TZ });
+  // 2) Same-day from/to across TZs (helps edge cases)
+  for (const tz of TZ_FALLBACKS) {
+    const b = await tryFetch(`from=${date}&to=${date}`, tz);
+    if (b.length) return b;
+  }
+
+  console.warn('⚠️ fixtures empty after all queries', { date, tzTried: TZ_FALLBACKS });
   return [];
 }
 
@@ -809,7 +850,7 @@ function pickFromModelForFixture(f, h, a, m){
   const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
   const cornersEst = CORNERS_BASE + CORNERS_PACE_K * (pace - PRIOR_EXP_GOALS);
   const pCornersOver = logistic(cornersEst - CORNERS_OU_LINE, 1.2);
-  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CARDS_OU_LINE}`:`Under ${CARDS_OU_LINE}`,
+  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`,
     confidenceRaw: asPct(50 + Math.abs(pCardsOver-0.5)*90), confidence: asPct(50 + Math.abs(pCardsOver-0.5)*90) });
   out.push({ market:'CORNERS', selection: pCornersOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`,
     confidenceRaw: asPct(50 + Math.abs(pCornersOver-0.5)*85), confidence: asPct(50 + Math.abs(pCornersOver-0.5)*85) });
