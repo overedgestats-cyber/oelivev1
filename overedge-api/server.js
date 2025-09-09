@@ -324,31 +324,39 @@ function estimateLambdasFromTeamStats(h,a){
   };
 }
 
-// Scoring heuristics for OU
+// Scoring heuristics for OU  — OPTION A (re-centered confidence)
 function asPct(n){ return Math.max(1, Math.min(99, Math.round(Number(n)||0))); }
-function scoreOver25(h,a,odds){
-  const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
-  const o25  = (h.o25pct + a.o25pct)/2;
-  let boost=0;
-  if (typeof odds==='number'){
-    if (odds>=1.60 && odds<=2.20) boost=10;
-    else if (odds>2.20 && odds<=2.60) boost=5;
-    else if (odds<1.45 || odds>3.20) boost=-10;
+
+function scoreOver25(h, a, odds){
+  const paceTotal = ((h.avgGF + h.avgGA) + (a.avgGF + a.avgGA)) / 2; // expected total pace
+  const hist = (h.o25pct + a.o25pct) / 2; // 0–100
+  let boost = 0;
+  if (typeof odds === 'number'){
+    if (odds >= 1.60 && odds <= 2.20) boost = 6;
+    else if (odds > 2.20 && odds <= 2.60) boost = 3;
+    else if (odds < 1.45 || odds > 3.20)  boost = -6;
   }
-  const score = (o25*0.60) + (pace*8) + boost;
-  return { score, confidence: asPct((score-100)/1.8) };
+  let raw = 50;
+  raw += (hist - 50) * 0.50;                 // historical O2.5 tilt
+  raw += (paceTotal - PRIOR_EXP_GOALS) * 20; // pace vs 2.6 baseline
+  raw += boost;
+  return { score: raw, confidence: asPct(raw) };
 }
-function scoreUnder25(h,a,odds){
-  const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
-  const o25  = (h.o25pct + a.o25pct)/2;
-  let boost=0;
-  if (typeof odds==='number'){
-    if (odds>=1.50 && odds<=2.00) boost=8;
-    else if (odds>2.00 && odds<=2.40) boost=3;
-    else if (odds<1.40 || odds>3.00) boost=-8;
+
+function scoreUnder25(h, a, odds){
+  const paceTotal = ((h.avgGF + h.avgGA) + (a.avgGF + a.avgGA)) / 2;
+  const hist = (h.o25pct + a.o25pct) / 2; // 0–100
+  let boost = 0;
+  if (typeof odds === 'number'){
+    if (odds >= 1.50 && odds <= 2.10) boost = 5;
+    else if (odds > 2.10 && odds <= 2.50) boost = 2;
+    else if (odds < 1.40 || odds > 3.00)  boost = -5;
   }
-  const score = ((100-o25)*0.60) + ((3.8 - Math.min(pace,3.8))*20) + boost;
-  return { score, confidence: asPct((score-100)/1.8) };
+  let raw = 50;
+  raw += (50 - hist) * 0.50;                 // lower O2.5 history favors Under
+  raw += (PRIOR_EXP_GOALS - paceTotal) * 22; // slower than baseline favors Under
+  raw += boost;
+  return { score: raw, confidence: asPct(raw) };
 }
 
 // Paginated fixtures fetch for Europe / UEFA
@@ -687,7 +695,7 @@ function pickFromModelForFixture(f, h, a, m){
   const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
   const cornersEst = CORNERS_BASE + CORNERS_PACE_K * (pace - PRIOR_EXP_GOALS);
   const pCornersOver = logistic(cornersEst - CORNERS_OU_LINE, 1.2);
-  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CARSDS_OU_LINE}`:`Under ${CARDS_OU_LINE}`,
+  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CARDS_OU_LINE}`:`Under ${CARDS_OU_LINE}`,
     confidenceRaw: asPct(50 + Math.abs(pCardsOver-0.5)*90), confidence: asPct(50 + Math.abs(pCardsOver-0.5)*90) });
   out.push({ market:'CORNERS', selection: pCornersOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`,
     confidenceRaw: asPct(50 + Math.abs(pCornersOver-0.5)*85), confidence: asPct(50 + Math.abs(pCornersOver-0.5)*85) });
