@@ -656,6 +656,113 @@ app.get('/api/free-picks', async (req,res)=>{
   }
 });
 
+/* ======================= ADDED: League ID helpers ======================= */
+
+// Single-date leagues list for Free pool
+app.get('/api/free-picks/leagues', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
+    const date = req.query.date || todayYMD();
+    const fixtures = await fetchAllEuropeFixturesFast(date);
+
+    const pool = fixtures.filter(f => {
+      const c = f.league?.country, id = f.league?.id, t = (f.league?.type || '').toLowerCase();
+      if (isYouthFixture(f)) return false;
+      if (UEFA_IDS.has(id)) return false;
+      if (!EURO_COUNTRIES.has(c)) return false;
+      if (t !== 'league') return false;
+      if (ALLOWED_SET.has(id)) return false;
+      return true;
+    });
+
+    const leagues = Array.from(
+      new Map(pool.map(f => [f.league.id, {
+        id: f.league.id,
+        name: f.league.name,
+        country: f.league.country,
+        type: f.league.type
+      }])).values()
+    ).sort((a,b) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
+
+    res.json({ date, count: leagues.length, leagues });
+  } catch (e) {
+    console.error('free-picks/leagues error', e);
+    res.status(500).json({ error: 'leagues_failed', detail: e?.message || String(e) });
+  }
+});
+
+// Date-range scan → paste-ready competitions.js snippet with numeric IDs
+app.get('/api/free-picks/scan-leagues', async (req, res) => {
+  try {
+    if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
+
+    const ymd = (d) => d.toISOString().slice(0,10);
+    let dates = [];
+
+    if (req.query.from && req.query.to) {
+      const start = new Date(req.query.from + 'T00:00:00Z');
+      const end   = new Date(req.query.to   + 'T00:00:00Z');
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate()+1)) dates.push(ymd(d));
+    } else {
+      const days = Math.max(1, Math.min(90, parseInt(req.query.days || '14', 10)));
+      const end = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(end); d.setUTCDate(d.getUTCDate() - i);
+        dates.push(ymd(d));
+      }
+    }
+
+    const leagues = new Map(); // id -> {id,name,country,type,fixtures}
+    for (const date of dates) {
+      const fixtures = await fetchAllEuropeFixturesFast(date);
+      for (const f of fixtures) {
+        const c = f.league?.country, id = f.league?.id, t = (f.league?.type || '').toLowerCase();
+        if (!id || !c) continue;
+        if (isYouthFixture(f)) continue;
+        if (!EURO_COUNTRIES.has(c)) continue;
+        if (UEFA_IDS.has(id)) continue;
+        if (t !== 'league') continue;
+        if (ALLOWED_SET.has(id)) continue; // Pro pool excluded
+        if (!leagues.has(id)) {
+          leagues.set(id, { id, name: f.league.name || '', country: c, type: f.league.type || '', fixtures: 0 });
+        }
+        leagues.get(id).fixtures += 1;
+      }
+      await new Promise(r => setTimeout(r, 100)); // gentle on rate limit
+    }
+
+    const list = Array.from(leagues.values())
+      .sort((a,b) => (b.fixtures - a.fixtures) || a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
+
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '150', 10)));
+    const top = list.slice(0, limit);
+
+    const competitionsJs = `
+/**
+ * Curated Free Picks leagues — numeric API-Football league IDs.
+ * Generated ${new Date().toISOString()}
+ */
+const FREE_PICKS_COMP_IDS = new Set([
+  ${top.map(x => x.id).join(', ')}
+]);
+module.exports = { FREE_PICKS_COMP_IDS };
+`.trim();
+
+    res.json({
+      scannedDates: { from: dates[0], to: dates[dates.length-1], count: dates.length },
+      totals: { leagues: list.length, fixtures: list.reduce((s,x)=>s+x.fixtures,0) },
+      leagues: list,
+      snippetCount: top.length,
+      competitionsJs
+    });
+  } catch (e) {
+    console.error('scan-leagues error', e);
+    res.status(500).json({ error: 'scan_failed', detail: e?.message || String(e) });
+  }
+});
+
+/* ===================== END ADDED HELPERS ===================== */
+
 // ---------------- Pro Board + Hero ----------------
 const THRESH_OU      = Number(process.env.THRESH_OU      || 0.58);
 const THRESH_BTTS    = Number(process.env.THRESH_BTTS    || 0.57);
