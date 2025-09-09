@@ -17,6 +17,80 @@ const bodyParser = require('body-parser');
 const app = express();
 app.set('trust proxy', 1);
 
+// ---------------- CORS ----------------
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
+const allowlist = FRONTEND_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    if (!allowlist.length || allowlist.includes(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: !!allowlist.length
+}));
+
+// ---------------- Firebase Admin (auth + subs) ----------------
+const admin = require('firebase-admin');
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || null;
+
+try {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (raw) {
+    const svc = JSON.parse(raw);
+    admin.initializeApp({ credential: admin.credential.cert(svc) });
+  } else {
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      ...(FIREBASE_PROJECT_ID ? { projectId: FIREBASE_PROJECT_ID } : {})
+    });
+  }
+  console.log('🔐 Firebase initialized', FIREBASE_PROJECT_ID ? `(project: ${FIREBASE_PROJECT_ID})` : '');
+} catch (e) {
+  console.log('⚠️ Firebase init:', e.message);
+}
+
+const db = (() => { try { return admin.firestore(); } catch { return null; } })();
+const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing').split(',').map(s => s.trim().toLowerCase());
+
+function decodeJwtNoVerify(token) {
+  try {
+    const p = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
+  } catch { return null; }
+}
+
+async function hasActiveSub(uid) {
+  if (!db) return false;
+  try {
+    const q = await db.collection(`customers/${uid}/subscriptions`)
+      .where('status', 'in', OK_STATUSES).limit(1).get();
+    return !q.empty;
+  } catch (e) { console.log('sub check:', e.message); return false; }
+}
+
+async function requireAuth(req, res, next) {
+  const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  if (!m) return res.status(401).json({ error: 'missing_token' });
+  try {
+    req.user = await admin.auth().verifyIdToken(m[1]);
+    next();
+  } catch (e) {
+    const claims = decodeJwtNoVerify(m[1]) || {};
+    return res.status(401).json({
+      error: 'invalid_token',
+      detail: e.errorInfo?.message || e.message || String(e),
+      aud: claims.aud, iss: claims.iss, expectedProject: FIREBASE_PROJECT_ID || null
+    });
+  }
+}
+
+async function requirePro(req, res, next) {
+  if (!req.user?.uid) return res.status(401).json({ error: 'missing_auth' });
+  const ok = await hasActiveSub(req.user.uid);
+  if (!ok) return res.status(401).json({ error: 'no_subscription' });
+  next();
+}
+
 // ---------------- Stripe (optional) ----------------
 let stripe = null;
 if (process.env.STRIPE_SECRET) {
@@ -33,6 +107,7 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
 
     const writeSub = async (uid, sub) => {
       try {
+        if (!db) throw new Error('firestore_not_initialized');
         const ref = db.collection('customers').doc(uid).collection('subscriptions').doc(sub.id);
         await ref.set({
           id: sub.id,
@@ -79,85 +154,6 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
 
 // AFTER webhook: parse JSON for all other routes
 app.use(express.json());
-
-// ---------------- CORS ----------------
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
-const allowlist = FRONTEND_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
-app.use(cors({
-  origin(origin, cb) {
-    if (!origin) return cb(null, true);
-    if (!allowlist.length || allowlist.includes(origin)) return cb(null, true);
-    cb(new Error('Not allowed by CORS'));
-  },
-  credentials: !!allowlist.length
-}));
-
-// ---------------- Firebase Admin (auth + subs) ----------------
-const admin = require('firebase-admin');
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || null;
-
-try {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (raw) {
-    const svc = JSON.parse(raw);
-    admin.initializeApp({ credential: admin.credential.cert(svc) });
-  } else {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      ...(FIREBASE_PROJECT_ID ? { projectId: FIREBASE_PROJECT_ID } : {})
-    });
-  }
-  console.log('🔐 Firebase initialized', FIREBASE_PROJECT_ID ? `(project: ${FIREBASE_PROJECT_ID})` : '');
-} catch (e) {
-  console.log('⚠️ Firebase init:', e.message);
-}
-
-function decodeJwtNoVerify(token) {
-  try {
-    const p = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
-  } catch { return null; }
-}
-
-async function requireAuth(req, res, next) {
-  const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-  if (!m) return res.status(401).json({ error: 'missing_token' });
-  try {
-    req.user = await admin.auth().verifyIdToken(m[1]);
-    next();
-  } catch (e) {
-    const claims = decodeJwtNoVerify(m[1]) || {};
-    return res.status(401).json({
-      error: 'invalid_token',
-      detail: e.errorInfo?.message || e.message || String(e),
-      aud: claims.aud, iss: claims.iss, expectedProject: FIREBASE_PROJECT_ID || null
-    });
-  }
-}
-
-const db = (() => { try { return admin.firestore(); } catch { return null; } })();
-const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing').split(',').map(s => s.trim().toLowerCase());
-
-async function hasActiveSub(uid) {
-  if (!db) return false;
-  try {
-    const q = await db.collection(`customers/${uid}/subscriptions`)
-      .where('status', 'in', OK_STATUSES).limit(1).get();
-    return !q.empty;
-  } catch (e) { console.log('sub check:', e.message); return false; }
-}
-
-async function requirePro(req, res, next) {
-  if (!req.user?.uid) return res.status(401).json({ error: 'missing_auth' });
-  const ok = await hasActiveSub(req.user.uid);
-  if (!ok) return res.status(401).json({ error: 'no_subscription' });
-  next();
-}
-
-app.get('/api/subscription/status', requireAuth, async (req, res) => {
-  const active = await hasActiveSub(req.user.uid);
-  res.json({ active });
-});
 
 // ---------------- Health / debug ----------------
 const API_KEY = process.env.API_FOOTBALL_KEY || '';
@@ -530,7 +526,7 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false,
 
       const model = estimateLambdasFromTeamStats(h, a);
 
-      // optional odds (median)
+      // optional odds (median) — used ONLY for free picks screening; Pro/Hero ignore odds sources
       let over = null, under = null;
       try {
         const r = await axios.get(
@@ -893,9 +889,9 @@ async function selectHero(date){
       const cBcal  = calibrate('BTTS', sideB, cBraw);
 
       const candidates = [
-        { market:'OU25', selection: ouSide,  confidence: ouCal, raw: ouRaw },
+        { market:'OU25',    selection: ouSide, confidence: ouCal, raw: ouRaw },
         { market:'ONE_X_TWO', selection: side1, confidence: c1cal, raw: c1raw },
-        { market:'BTTS', selection: sideB, confidence: cBcal, raw: cBraw }
+        { market:'BTTS',    selection: sideB, confidence: cBcal, raw: cBraw }
       ].sort((a,b)=> b.confidence - a.confidence);
 
       const top = candidates[0];
