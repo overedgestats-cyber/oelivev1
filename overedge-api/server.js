@@ -12,6 +12,8 @@ const fs      = require('fs');
 const fsp     = require('fs/promises');
 const cors    = require('cors');
 const bodyParser = require('body-parser');
+// Make API-Football "date=" match what you see locally (Flashscore)
+const API_TZ = process.env.API_FOOTBALL_TZ || 'Europe/Sofia';
 
 // ---------------- App / basic setup ----------------
 const app = express();
@@ -355,33 +357,45 @@ function scoreUnder25(h, a, odds){
   return { score: raw, confidence: asPct(raw) };
 }
 
-// Paginated fixtures fetch for Europe / UEFA
+// Paginated fixtures fetch for Europe / UEFA (TZ-aware + fallback)
 async function fetchAllEuropeFixturesFast(date){
-  const out = [];
-  let page = 1, total = 1;
-
-  try {
+  const tryFetch = async (query) => {
+    const out = [];
+    let page = 1, total = 1;
     do {
-      const url = `https://v3.football.api-sports.io/fixtures?date=${date}&page=${page}`;
-      const r = await axios.get(url, AXIOS);
-      const resp = r.data || {};
-      total = resp?.paging?.total || 1;
+      const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(API_TZ)}`;
+      try {
+        const r = await axios.get(url, AXIOS);
+        const resp = r.data || {};
+        total = resp?.paging?.total || 1;
 
-      const arr = resp?.response || [];
-      for (const f of arr) {
-        const c = f.league?.country;
-        const lid = f.league?.id;
-        if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
+        const arr = resp?.response || [];
+        for (const f of arr) {
+          const c = f.league?.country;
+          const lid = f.league?.id;
+          if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
+        }
+      } catch (e) {
+        console.error('fixtures err', { date, query, tz: API_TZ, status: e?.response?.status, detail: e?.response?.data || e.message });
+        break;
       }
 
       page += 1;
       if (page <= total) await new Promise(r => setTimeout(r, 120));
     } while (page <= total);
-  } catch (e) {
-    console.error('fixtures err', e.message);
-  }
+    return out;
+  };
 
-  return out;
+  // Single-day query first
+  const a = await tryFetch(`date=${date}`);
+  if (a.length) return a;
+
+  // Fallback to from/to (same day) to avoid TZ edge empties
+  const b = await tryFetch(`from=${date}&to=${date}`);
+  if (b.length) return b;
+
+  console.warn('⚠️ fixtures empty after both queries', { date, tz: API_TZ });
+  return [];
 }
 
 function isYouthFixture(f){
@@ -459,7 +473,7 @@ function calibrate(market, side, confRaw){
   return asPct(interp(map, confRaw));
 }
 
-// ---- Reasoning text for Free Picks (no hard numbers except final exp-goals) ----
+// ---- Reasoning text for Free Picks ----
 function buildFreeReason(f, h, a, m, side) {
   const home = f.teams?.home?.name || 'Home';
   const away = f.teams?.away?.name || 'Away';
@@ -495,7 +509,6 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false,
     if (!EURO_COUNTRIES.has(c)) return false;           // only Europe
     if (t!=='league') return false;                     // no cups
     if (ALLOWED_SET.has(id)) return false;              // exclude Pro pool
-    // If a curated whitelist exists, require it; otherwise accept all remaining leagues
     if (FREE_PICKS_COMP_IDS && FREE_PICKS_COMP_IDS.size) {
       return FREE_PICKS_COMP_IDS.has(id);
     }
@@ -526,7 +539,7 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false,
 
       const model = estimateLambdasFromTeamStats(h, a);
 
-      // optional odds (median) — used ONLY for free picks screening; Pro/Hero ignore odds sources
+      // optional odds (median) — used ONLY for free picks screening
       let over = null, under = null;
       try {
         const r = await axios.get(
@@ -611,7 +624,6 @@ app.get('/api/free-picks', async (req,res)=>{
     const cacheKey = `${date}|${minConf}|${minOdds}|${strictOnly}`;
     if (!force && dailyPicksCache.has(cacheKey)){
       const cachedPayload = { ...(dailyPicksCache.get(cacheKey)), cached:true };
-      // if debug requested, recompute once (don’t return stale meta) but don’t save
       if (!wantDebug) return res.json(cachedPayload);
     }
 
@@ -639,7 +651,6 @@ app.get('/api/free-picks', async (req,res)=>{
       cached:false
     };
 
-    // cache only non-debug payloads
     if (!wantDebug) {
       dailyPicksCache.set(cacheKey, payload);
       await persistDailyCache();
