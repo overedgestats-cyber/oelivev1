@@ -1,162 +1,170 @@
 ﻿<!doctype html>
 <html lang="en">
   <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-88C4MQ3EF8');
+  </script>
 
-  gtag('config', 'G-88C4MQ3EF8');
-</script>
-<head>
-  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Pro · OverEdge</title>
-  <link rel="stylesheet" href="/style.css"/>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Pro · OverEdge</title>
+    <link rel="stylesheet" href="/style.css"/>
 
-  <!-- Favicon -->
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="alternate icon" href="/og.png" type="image/png">
-</head>
-<body>
-<header>
-  <nav>
-    <a href="/home.html">Home</a>
-    <a href="/free-picks.html">Free Picks</a>
-    <a href="/pro.html">Pro</a>
-    <a href="/pricing.html">Pricing</a>
-    <a href="/about.html">About</a>
-    <a href="/FAQ.html">FAQ</a>
+    <!-- Favicon -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="alternate icon" href="/og.png" type="image/png">
+  </head>
 
-    <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
-    <span style="float:right; line-height:1.2; text-align:right">
-      <button id="loginBtn" class="btn">Sign in</button>
+  <body>
+    <header>
+      <nav>
+        <a href="/home.html">Home</a>
+        <a href="/free-picks.html">Free Picks</a>
+        <a href="/pro.html">Pro</a>
+        <a href="/pricing.html">Pricing</a>
+        <a href="/about.html">About</a>
+        <a href="/FAQ.html">FAQ</a>
 
-      <span id="userBox" style="display:none">
-        <small id="userEmail"></small><br/>
-        <a id="accountLink" href="/account.html">Account</a>
-      </span>
+        <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
+        <span style="float:right; line-height:1.2; text-align:right">
+          <button id="loginBtn" class="btn">Sign in</button>
 
-      <button id="logoutBtn" class="btn" hidden>Sign out</button>
-    </span>
-  </nav>
-</header>
+          <span id="userBox" style="display:none">
+            <small id="userEmail"></small><br/>
+            <a id="accountLink" href="/account.html">Account</a>
+          </span>
 
-<main>
-  <h1>Pro Board</h1>
-  <!-- app.js will control this container (show messages / add "Load Pro Board" button / inject #proBoard) -->
-  <div id="requirePro" class="card">Checking your subscription…</div>
-</main>
+          <button id="logoutBtn" class="btn" hidden>Sign out</button>
+        </span>
+      </nav>
+    </header>
 
-<footer>
-  © OverEdge ·
-  <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
-  <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">Facebook</a> ·
-  <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
-</footer>
+    <main>
+      <h1>Pro Board</h1>
+      <!-- app.js will control this container (show messages / add "Load Pro Board" button / inject #proBoard) -->
+      <div id="requirePro" class="card">Checking your subscription…</div>
+    </main>
 
-<!-- Firebase config (sets window.FIREBASE_CONFIG) -->
-<script src="/firebase-config.js"></script>
-<!-- Your Firebase init helpers (exports auth, signIn, signOutUser, watchAuth, getToken) -->
-<script type="module" src="/firebase-init.js"></script>
-<!-- App logic (does Pro gate + renders board); cache-busted -->
-<script type="module" src="/app.js?v=11"></script>
+    <footer>
+      © OverEdge ·
+      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
+      <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">Facebook</a> ·
+      <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
+    </footer>
 
-<!-- NEW: inline guard that uses /api/subscription/status then loads /api/pro-board -->
-<script type="module">
-  (function () {
-    const statusBox = document.getElementById('requirePro');
+    <!-- Firebase config (sets window.FIREBASE_CONFIG) -->
+    <script src="/firebase-config.js"></script>
+    <!-- Your Firebase init helpers (exports auth, signIn, signOutUser, watchAuth, getToken) -->
+    <script type="module" src="/firebase-init.js"></script>
+    <!-- App logic (does header auth UI etc.); cache-busted -->
+    <script type="module" src="/app.js?v=11"></script>
 
-    function renderBoard(data) {
-      // very lightweight render so you can see content immediately;
-      // swap to your existing renderer if you prefer.
-      const wrap = document.createElement('div');
-      wrap.id = 'proBoard';
-      if (!data || !Array.isArray(data.items) || !data.items.length) {
-        wrap.innerHTML = '<div class="card">No qualifying fixtures for this date.</div>';
-      } else {
-        wrap.innerHTML = data.items.map(it => {
-          const top = (it.topBets && it.topBets[0]) || null;
-          const when = new Date(it.kickoff).toLocaleString();
-          const pick = top ? `${top.market}: <b>${top.pick}</b> · <span>${top.confidence}%</span>` : '';
-          return `
-            <div class="card" style="margin-bottom:12px">
-              <div><small>${when}</small></div>
-              <div><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
-              <div><small>${it.competition || (it.league && it.league.name) || ''}</small></div>
-              ${pick ? `<div style="margin-top:6px">${pick}</div>` : ''}
-            </div>`;
-        }).join('');
-      }
-      statusBox.insertAdjacentElement('afterend', wrap);
-    }
+    <!-- Inline guard: verify sub via /api/subscription/status, then load /api/pro-board -->
+    <script type="module">
+      (function () {
+        const statusBox = document.getElementById('requirePro');
 
-    // Wait for Firebase auth and then check subscription status (no-cache)
-    const waitForFirebase = () => new Promise(resolve => {
-      if (window.firebase && firebase.apps && firebase.apps.length) return resolve();
-      const iv = setInterval(() => {
-        if (window.firebase && firebase.apps && firebase.apps.length) {
-          clearInterval(iv); resolve();
-        }
-      }, 50);
-      setTimeout(() => { clearInterval(iv); resolve(); }, 5000);
-    });
+        function renderBoard(data) {
+          const wrap = document.createElement('div');
+          wrap.id = 'proBoard';
 
-    (async () => {
-      await waitForFirebase();
-      if (!window.firebase) {
-        statusBox.textContent = 'Auth not ready.';
-        return;
-      }
+          if (!data || !Array.isArray(data.items) || !data.items.length) {
+            wrap.innerHTML = '<div class="card">No qualifying fixtures for this date.</div>';
+          } else {
+            wrap.innerHTML = data.items.map(it => {
+              const top = (it.topBets && it.topBets[0]) || null;
+              const when = new Date(it.kickoff).toLocaleString();
+              const pick = top ? `${top.market}: <b>${top.pick}</b> · <span>${top.confidence}%</span>` : '';
+              return `
+                <div class="card" style="margin-bottom:12px">
+                  <div><small>${when}</small></div>
+                  <div><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
+                  <div><small>${it.competition || (it.league && it.league.name) || ''}</small></div>
+                  ${pick ? `<div style="margin-top:6px">${pick}</div>` : ''}
+                </div>`;
+            }).join('');
+          }
 
-      firebase.auth().onAuthStateChanged(async (user) => {
-        if (!user) {
-          statusBox.textContent = 'Please sign in to view the Pro Board.';
-          return;
+          statusBox.insertAdjacentElement('afterend', wrap);
         }
 
-        try {
-          const token = await user.getIdToken(true); // force refresh to avoid stale tokens
-          // cache-bust the status endpoint to avoid 304 CDN cache hits
-          const st = await fetch('/api/subscription/status?t=' + Date.now(), {
-            headers: { Authorization: 'Bearer ' + token }
+        // Wait until firebase-init.js has exposed global helpers
+        const waitForHelpers = () => new Promise(resolve => {
+          if (window.watchAuth && window.getToken) return resolve();
+          const iv = setInterval(() => {
+            if (window.watchAuth && window.getToken) {
+              clearInterval(iv); resolve();
+            }
+          }, 50);
+          setTimeout(() => { clearInterval(iv); resolve(); }, 5000);
+        });
+
+        (async () => {
+          await waitForHelpers();
+
+          if (!window.watchAuth || !window.getToken) {
+            statusBox.textContent = 'Auth not ready.';
+            return;
+          }
+
+          window.watchAuth(async (user) => {
+            if (!user) {
+              statusBox.textContent = 'Please sign in to view the Pro Board.';
+              return;
+            }
+
+            try {
+              const token = await window.getToken();
+              if (!token) {
+                statusBox.textContent = 'Could not get auth token.';
+                return;
+              }
+
+              // Cache-bust the status endpoint to avoid CDN 304s
+              const st = await fetch('/api/subscription/status?t=' + Date.now(), {
+                headers: { Authorization: 'Bearer ' + token },
+              });
+
+              if (!st.ok) {
+                const txt = await st.text().catch(() => '');
+                statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
+                console.warn('sub status failed:', st.status, txt);
+                return;
+              }
+
+              const { active } = await st.json();
+              if (!active) {
+                statusBox.textContent = 'No active subscription.';
+                return;
+              }
+
+              statusBox.textContent = 'Loading Pro Board…';
+              const pb = await fetch('/api/pro-board', {
+                headers: { Authorization: 'Bearer ' + token },
+              });
+
+              if (!pb.ok) {
+                const txt = await pb.text().catch(() => '');
+                statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
+                console.warn('pro-board failed:', pb.status, txt);
+                return;
+              }
+
+              const data = await pb.json();
+              statusBox.style.display = 'none';
+              renderBoard(data);
+            } catch (e) {
+              console.error(e);
+              statusBox.textContent = 'Error checking subscription.';
+            }
           });
-
-          if (!st.ok) {
-            const txt = await st.text().catch(()=> '');
-            statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
-            console.warn('sub status failed:', st.status, txt);
-            return;
-          }
-
-          const { active } = await st.json();
-          if (!active) {
-            statusBox.textContent = 'No active subscription.';
-            return;
-          }
-
-          statusBox.textContent = 'Loading Pro Board…';
-          const pb = await fetch('/api/pro-board', {
-            headers: { Authorization: 'Bearer ' + token }
-          });
-
-          if (!pb.ok) {
-            const txt = await pb.text().catch(()=> '');
-            statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
-            console.warn('pro-board failed:', pb.status, txt);
-            return;
-          }
-
-          const data = await pb.json();
-          statusBox.style.display = 'none';
-          renderBoard(data);
-        } catch (e) {
-          console.error(e);
-          statusBox.textContent = 'Error checking subscription.';
-        }
-      });
-    })();
-  })();
-</script>
-</body>
+        })();
+      })();
+    </script>
+  </body>
 </html>

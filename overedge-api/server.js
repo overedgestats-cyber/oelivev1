@@ -164,10 +164,13 @@ const API_KEY = process.env.API_FOOTBALL_KEY || '';
 if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY');
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, hasKey: !!API_KEY, tz: API_TZ }));
-app.get('/__debug/whoami', requireAuth, (req, res) => {
+
+// whoami: make it available on /api/* AND the old dev path
+app.get(['/api/whoami', '/api/__debug/whoami', '/__debug/whoami'], requireAuth, (req, res) => {
   const { uid, email, aud, iss } = req.user || {};
   res.json({ ok: true, uid, email, aud, iss });
 });
+
 
 // --- Subscription status (no-cache to avoid 304 on Vercel/CDN) ---
 app.get('/api/subscription/status', requireAuth, async (req, res) => {
