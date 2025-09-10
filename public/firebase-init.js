@@ -47,3 +47,9 @@ export async function getToken() {
 }
 
 export const auth = (() => ensureInit().auth)();
+
+// after your existing exports
+window.getToken     = getToken;
+window.watchAuth    = watchAuth;
+window.signIn       = signIn;
+window.signOutUser  = signOutUser;
