@@ -167,6 +167,19 @@ app.get('/__debug/whoami', requireAuth, (req, res) => {
   res.json({ ok: true, uid, email, aud, iss });
 });
 
+// --- Subscription status (no-cache to avoid 304 on Vercel/CDN) ---
+app.get('/api/subscription/status', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  try {
+    const active = await hasActiveSub(req.user.uid);
+    res.json({ active, uid: req.user.uid });
+  } catch (e) {
+    res.status(500).json({ error: 'sub_check_failed', detail: e?.message || String(e) });
+  }
+});
+
 // Quick raw fixtures probe (helps verify API returns anything for a date)
 app.get('/__debug/raw-fixtures', async (req, res) => {
   try {
