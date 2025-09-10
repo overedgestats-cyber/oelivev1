@@ -165,11 +165,90 @@ if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY');
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, hasKey: !!API_KEY, tz: API_TZ }));
 
-// whoami: make it available on /api/* AND the old dev path
-app.get(['/api/whoami', '/api/__debug/whoami', '/__debug/whoami'], requireAuth, (req, res) => {
+// Alias the whoami route under both /__debug/* (local) and /api/__debug/* (Vercel)
+const whoamiHandler = (req, res) => {
   const { uid, email, aud, iss } = req.user || {};
   res.json({ ok: true, uid, email, aud, iss });
+};
+app.get('/__debug/whoami', requireAuth, whoamiHandler);
+app.get('/api/__debug/whoami', requireAuth, whoamiHandler);
+
+// --- Subscription helpers / status ---
+async function hasActiveSub(uid) {
+  if (!db) return false;
+  try {
+    const custRef = db.collection('customers').doc(uid);
+
+    // 1) Manual override: customers/{uid}.proUntil (Timestamp or ISO) in the future
+    const custDoc = await custRef.get();
+    const proUntilRaw = custDoc.exists ? (custDoc.data()?.proUntil || null) : null;
+    let proUntil = null;
+    if (proUntilRaw) {
+      // Support Firestore Timestamp or ISO string/number
+      proUntil = typeof proUntilRaw.toDate === 'function' ? proUntilRaw.toDate() : new Date(proUntilRaw);
+      if (!isNaN(proUntil) && proUntil > new Date()) return true;
+    }
+
+    // 2) Stripe-backed sub in OK statuses
+    const q = await custRef.collection('subscriptions')
+      .where('status', 'in', OK_STATUSES).limit(1).get();
+    return !q.empty;
+  } catch (e) {
+    console.log('sub check:', e.message);
+    return false;
+  }
+}
+
+// No-cache subscription status with debug info
+app.get('/api/subscription/status', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
+  try {
+    const uid = req.user.uid;
+    const email = req.user.email || null;
+
+    let proUntil = null;
+    let statuses = [];
+    if (db) {
+      const custRef = db.collection('customers').doc(uid);
+      const [custDoc, subsSnap] = await Promise.all([
+        custRef.get(),
+        custRef.collection('subscriptions').orderBy('updatedAt', 'desc').limit(5).get().catch(() => null),
+      ]);
+      if (custDoc.exists) {
+        const raw = custDoc.data()?.proUntil || null;
+        if (raw) proUntil = typeof raw.toDate === 'function' ? raw.toDate() : new Date(raw);
+      }
+      if (subsSnap && !subsSnap.empty) {
+        statuses = subsSnap.docs.map(d => {
+          const x = d.data() || {};
+          return {
+            id: d.id,
+            status: (x.status || '').toLowerCase(),
+            current_period_end: x.current_period_end || null,
+            updatedAt: x.updatedAt || null,
+          };
+        });
+      }
+    }
+
+    const active = await hasActiveSub(uid);
+    res.json({
+      active,
+      uid,
+      email,
+      proUntil,
+      statuses,              // recent sub docs to see what's stored
+      okStatuses: OK_STATUSES,
+      source: 'firestore'
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'sub_check_failed', detail: e?.message || String(e) });
+  }
 });
+
 
 
 // --- Subscription status (no-cache to avoid 304 on Vercel/CDN) ---
