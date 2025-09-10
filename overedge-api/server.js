@@ -165,13 +165,15 @@ if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY');
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, hasKey: !!API_KEY, tz: API_TZ }));
 
-// Alias the whoami route under both /__debug/* (local) and /api/__debug/* (Vercel)
+// One handler, three paths: works locally and on Vercel
 const whoamiHandler = (req, res) => {
   const { uid, email, aud, iss } = req.user || {};
   res.json({ ok: true, uid, email, aud, iss });
 };
-app.get('/__debug/whoami', requireAuth, whoamiHandler);
+app.get('/api/whoami', requireAuth, whoamiHandler);       // new, simple alias under /api
 app.get('/api/__debug/whoami', requireAuth, whoamiHandler);
+app.get('/__debug/whoami', requireAuth, whoamiHandler);
+
 
 // --- Subscription helpers / status ---
 async function hasActiveSub(uid) {
