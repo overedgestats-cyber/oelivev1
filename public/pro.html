@@ -4,11 +4,10 @@
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
-    function gtag(){ dataLayer.push(arguments); }
+    function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
-
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -19,7 +18,6 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="alternate icon" href="/og.png" type="image/png">
   </head>
-
   <body>
     <header>
       <nav>
@@ -30,7 +28,6 @@
         <a href="/about.html">About</a>
         <a href="/FAQ.html">FAQ</a>
 
-        <!-- Right side: auth controls + email + Account link (shown only when logged in) -->
         <span style="float:right; line-height:1.2; text-align:right">
           <button id="loginBtn" class="btn">Sign in</button>
 
@@ -46,7 +43,6 @@
 
     <main>
       <h1>Pro Board</h1>
-      <!-- app.js will control this container (show messages / add "Load Pro Board" button / inject #proBoard) -->
       <div id="requirePro" class="card">Checking your subscription…</div>
     </main>
 
@@ -59,112 +55,101 @@
 
     <!-- Firebase config (sets window.FIREBASE_CONFIG) -->
     <script src="/firebase-config.js"></script>
-    <!-- Your Firebase init helpers (exports auth, signIn, signOutUser, watchAuth, getToken) -->
+    <!-- Firebase helpers (exports: watchAuth, getToken, signIn, signOutUser) -->
     <script type="module" src="/firebase-init.js"></script>
-    <!-- App logic (does header auth UI etc.); cache-busted -->
-    <script type="module" src="/app.js?v=11"></script>
+    <!-- App logic (used elsewhere, cache-busted) -->
+    <script type="module" src="/app.js?v=12"></script>
 
-    <!-- Inline guard: verify sub via /api/subscription/status, then load /api/pro-board -->
+    <!-- Inline Pro guard: import module API directly -->
     <script type="module">
-      (function () {
-        const statusBox = document.getElementById('requirePro');
+      import { watchAuth, getToken, signIn, signOutUser } from '/firebase-init.js';
 
-        function renderBoard(data) {
-          const wrap = document.createElement('div');
-          wrap.id = 'proBoard';
+      const statusBox   = document.getElementById('requirePro');
+      const loginBtn    = document.getElementById('loginBtn');
+      const logoutBtn   = document.getElementById('logoutBtn');
+      const userBox     = document.getElementById('userBox');
+      const userEmailEl = document.getElementById('userEmail');
 
-          if (!data || !Array.isArray(data.items) || !data.items.length) {
-            wrap.innerHTML = '<div class="card">No qualifying fixtures for this date.</div>';
-          } else {
-            wrap.innerHTML = data.items.map(it => {
-              const top = (it.topBets && it.topBets[0]) || null;
-              const when = new Date(it.kickoff).toLocaleString();
-              const pick = top ? `${top.market}: <b>${top.pick}</b> · <span>${top.confidence}%</span>` : '';
-              return `
-                <div class="card" style="margin-bottom:12px">
-                  <div><small>${when}</small></div>
-                  <div><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
-                  <div><small>${it.competition || (it.league && it.league.name) || ''}</small></div>
-                  ${pick ? `<div style="margin-top:6px">${pick}</div>` : ''}
-                </div>`;
-            }).join('');
-          }
+      loginBtn.addEventListener('click',  () => signIn().catch(console.error));
+      logoutBtn.addEventListener('click', () => signOutUser().catch(console.error));
 
-          statusBox.insertAdjacentElement('afterend', wrap);
+      function renderBoard(data) {
+        const wrap = document.createElement('div');
+        wrap.id = 'proBoard';
+        if (!data || !Array.isArray(data.items) || !data.items.length) {
+          wrap.innerHTML = '<div class="card">No qualifying fixtures for this date.</div>';
+        } else {
+          wrap.innerHTML = data.items.map(it => {
+            const top = (it.topBets && it.topBets[0]) || null;
+            const when = new Date(it.kickoff).toLocaleString();
+            const pick = top ? `${top.market}: <b>${top.pick}</b> · <span>${top.confidence}%</span>` : '';
+            return `
+              <div class="card" style="margin-bottom:12px">
+                <div><small>${when}</small></div>
+                <div><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
+                <div><small>${it.competition || (it.league && it.league.name) || ''}</small></div>
+                ${pick ? `<div style="margin-top:6px">${pick}</div>` : ''}
+              </div>`;
+          }).join('');
+        }
+        statusBox.insertAdjacentElement('afterend', wrap);
+      }
+
+      // React to auth and gate the board
+      watchAuth(async (user) => {
+        if (!user) {
+          userBox.style.display = 'none';
+          logoutBtn.hidden = true;
+          loginBtn.hidden  = false;
+          statusBox.textContent = 'Please sign in to view the Pro Board.';
+          return;
         }
 
-        // Wait until firebase-init.js has exposed global helpers
-        const waitForHelpers = () => new Promise(resolve => {
-          if (window.watchAuth && window.getToken) return resolve();
-          const iv = setInterval(() => {
-            if (window.watchAuth && window.getToken) {
-              clearInterval(iv); resolve();
-            }
-          }, 50);
-          setTimeout(() => { clearInterval(iv); resolve(); }, 5000);
-        });
+        userBox.style.display = '';
+        logoutBtn.hidden = false;
+        loginBtn.hidden  = true;
+        userEmailEl.textContent = user.email || '';
 
-        (async () => {
-          await waitForHelpers();
+        try {
+          const token = await getToken();
+          // cache-bust to dodge CDN 304s
+          const st = await fetch('/api/subscription/status?t=' + Date.now(), {
+            headers: { Authorization: 'Bearer ' + token }
+          });
 
-          if (!window.watchAuth || !window.getToken) {
-            statusBox.textContent = 'Auth not ready.';
+          if (!st.ok) {
+            const txt = await st.text().catch(()=> '');
+            statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
+            console.warn('sub status failed:', st.status, txt);
             return;
           }
 
-          window.watchAuth(async (user) => {
-            if (!user) {
-              statusBox.textContent = 'Please sign in to view the Pro Board.';
-              return;
-            }
+          const { active } = await st.json();
+          if (!active) {
+            statusBox.textContent = 'No active subscription.';
+            return;
+          }
 
-            try {
-              const token = await window.getToken();
-              if (!token) {
-                statusBox.textContent = 'Could not get auth token.';
-                return;
-              }
-
-              // Cache-bust the status endpoint to avoid CDN 304s
-              const st = await fetch('/api/subscription/status?t=' + Date.now(), {
-                headers: { Authorization: 'Bearer ' + token },
-              });
-
-              if (!st.ok) {
-                const txt = await st.text().catch(() => '');
-                statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
-                console.warn('sub status failed:', st.status, txt);
-                return;
-              }
-
-              const { active } = await st.json();
-              if (!active) {
-                statusBox.textContent = 'No active subscription.';
-                return;
-              }
-
-              statusBox.textContent = 'Loading Pro Board…';
-              const pb = await fetch('/api/pro-board', {
-                headers: { Authorization: 'Bearer ' + token },
-              });
-
-              if (!pb.ok) {
-                const txt = await pb.text().catch(() => '');
-                statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
-                console.warn('pro-board failed:', pb.status, txt);
-                return;
-              }
-
-              const data = await pb.json();
-              statusBox.style.display = 'none';
-              renderBoard(data);
-            } catch (e) {
-              console.error(e);
-              statusBox.textContent = 'Error checking subscription.';
-            }
+          statusBox.textContent = 'Loading Pro Board…';
+          const pb = await fetch('/api/pro-board', {
+            headers: { Authorization: 'Bearer ' + token }
           });
-        })();
-      })();
+
+          if (!pb.ok) {
+            const txt = await pb.text().catch(()=> '');
+            statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
+            console.warn('pro-board failed:', pb.status, txt);
+            return;
+          }
+
+          const data = await pb.json();
+          statusBox.style.display = 'none';
+          renderBoard(data);
+        } catch (e) {
+          console.error(e);
+          statusBox.textContent = 'Error checking subscription.';
+        }
+      });
     </script>
   </body>
 </html>
