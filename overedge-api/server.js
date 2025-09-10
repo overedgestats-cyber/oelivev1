@@ -18,6 +18,8 @@ const API_TZ = process.env.API_FOOTBALL_TZ || 'Europe/Sofia';
 // ---------------- App / basic setup ----------------
 const app = express();
 app.set('trust proxy', 1);
+// Disable ETag to avoid 304 caching issues for auth-guarded APIs on Vercel/CDN
+app.set('etag', false);
 
 // ---------------- CORS ----------------
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
@@ -169,14 +171,17 @@ app.get('/__debug/whoami', requireAuth, (req, res) => {
 
 // --- Subscription status (no-cache to avoid 304 on Vercel/CDN) ---
 app.get('/api/subscription/status', requireAuth, async (req, res) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  // Strong no-cache + vary by Authorization so each user gets their own response
+  res.set('Cache-Control', 'no-store, private, max-age=0');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
+  res.set('Vary', 'Authorization');
+
   try {
     const active = await hasActiveSub(req.user.uid);
-    res.json({ active, uid: req.user.uid });
+    res.json({ ok: true, active, uid: req.user.uid });
   } catch (e) {
-    res.status(500).json({ error: 'sub_check_failed', detail: e?.message || String(e) });
+    res.status(500).json({ ok: false, error: 'sub_check_failed', detail: e?.message || String(e) });
   }
 });
 

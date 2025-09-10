@@ -60,7 +60,103 @@
 <!-- Your Firebase init helpers (exports auth, signIn, signOutUser, watchAuth, getToken) -->
 <script type="module" src="/firebase-init.js"></script>
 <!-- App logic (does Pro gate + renders board); cache-busted -->
-<script type="module" src="/app.js?v=10"></script>
+<script type="module" src="/app.js?v=11"></script>
+
+<!-- NEW: inline guard that uses /api/subscription/status then loads /api/pro-board -->
+<script type="module">
+  (function () {
+    const statusBox = document.getElementById('requirePro');
+
+    function renderBoard(data) {
+      // very lightweight render so you can see content immediately;
+      // swap to your existing renderer if you prefer.
+      const wrap = document.createElement('div');
+      wrap.id = 'proBoard';
+      if (!data || !Array.isArray(data.items) || !data.items.length) {
+        wrap.innerHTML = '<div class="card">No qualifying fixtures for this date.</div>';
+      } else {
+        wrap.innerHTML = data.items.map(it => {
+          const top = (it.topBets && it.topBets[0]) || null;
+          const when = new Date(it.kickoff).toLocaleString();
+          const pick = top ? `${top.market}: <b>${top.pick}</b> · <span>${top.confidence}%</span>` : '';
+          return `
+            <div class="card" style="margin-bottom:12px">
+              <div><small>${when}</small></div>
+              <div><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
+              <div><small>${it.competition || (it.league && it.league.name) || ''}</small></div>
+              ${pick ? `<div style="margin-top:6px">${pick}</div>` : ''}
+            </div>`;
+        }).join('');
+      }
+      statusBox.insertAdjacentElement('afterend', wrap);
+    }
+
+    // Wait for Firebase auth and then check subscription status (no-cache)
+    const waitForFirebase = () => new Promise(resolve => {
+      if (window.firebase && firebase.apps && firebase.apps.length) return resolve();
+      const iv = setInterval(() => {
+        if (window.firebase && firebase.apps && firebase.apps.length) {
+          clearInterval(iv); resolve();
+        }
+      }, 50);
+      setTimeout(() => { clearInterval(iv); resolve(); }, 5000);
+    });
+
+    (async () => {
+      await waitForFirebase();
+      if (!window.firebase) {
+        statusBox.textContent = 'Auth not ready.';
+        return;
+      }
+
+      firebase.auth().onAuthStateChanged(async (user) => {
+        if (!user) {
+          statusBox.textContent = 'Please sign in to view the Pro Board.';
+          return;
+        }
+
+        try {
+          const token = await user.getIdToken(true); // force refresh to avoid stale tokens
+          // cache-bust the status endpoint to avoid 304 CDN cache hits
+          const st = await fetch('/api/subscription/status?t=' + Date.now(), {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+
+          if (!st.ok) {
+            const txt = await st.text().catch(()=> '');
+            statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
+            console.warn('sub status failed:', st.status, txt);
+            return;
+          }
+
+          const { active } = await st.json();
+          if (!active) {
+            statusBox.textContent = 'No active subscription.';
+            return;
+          }
+
+          statusBox.textContent = 'Loading Pro Board…';
+          const pb = await fetch('/api/pro-board', {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+
+          if (!pb.ok) {
+            const txt = await pb.text().catch(()=> '');
+            statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
+            console.warn('pro-board failed:', pb.status, txt);
+            return;
+          }
+
+          const data = await pb.json();
+          statusBox.style.display = 'none';
+          renderBoard(data);
+        } catch (e) {
+          console.error(e);
+          statusBox.textContent = 'Error checking subscription.';
+        }
+      });
+    })();
+  })();
+</script>
 </body>
 </html>
-
