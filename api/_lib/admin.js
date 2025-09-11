@@ -1,34 +1,70 @@
-// api/_lib/admin.js
-import admin from 'firebase-admin';
+// Firebase Admin bootstrap used by all API routes
+const admin = require('firebase-admin');
 
-let app;
-try {
-  if (!admin.apps.length) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (raw) {
-      const svc = JSON.parse(raw);
-      app = admin.initializeApp({ credential: admin.credential.cert(svc) });
+if (!admin.apps.length) {
+  try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const svc = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      admin.initializeApp({ credential: admin.credential.cert(svc) });
     } else {
-      const projectId =
-        process.env.FIREBASE_PROJECT_ID ||
-        process.env.GCLOUD_PROJECT ||
-        process.env.GOOGLE_CLOUD_PROJECT;
-
-      app = admin.initializeApp({
+      admin.initializeApp({
         credential: admin.credential.applicationDefault(),
-        ...(projectId ? { projectId } : {}),
+        projectId: process.env.FIREBASE_PROJECT_ID || undefined,
       });
     }
-  } else {
-    app = admin.app();
+    // eslint-disable-next-line no-console
+    console.log('Firebase Admin initialized.');
+  } catch (e) {
+    console.error('Firebase Admin init failed:', e);
   }
-} catch (e) {
-  console.error('Firebase admin init error:', e.message);
 }
 
-export const db = (() => {
-  try { return admin.firestore(); } catch { return null; }
-})();
+const db = (() => { try { return admin.firestore(); } catch { return null; } })();
+const auth = (() => { try { return admin.auth(); } catch { return null; } })();
 
-export { admin };
+const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
+  .split(',').map(s => s.trim().toLowerCase());
 
+function getToken(req) {
+  const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  if (!m) {
+    const err = new Error('missing_token');
+    err.status = 401;
+    throw err;
+  }
+  return m[1];
+}
+
+async function verify(req) {
+  if (!auth) {
+    const err = new Error('auth_not_initialized');
+    err.status = 500;
+    throw err;
+  }
+  return auth.verifyIdToken(getToken(req));
+}
+
+async function hasActiveSub(uid) {
+  if (!db) return false;
+  try {
+    const cust = db.collection('customers').doc(uid);
+
+    // Manual override: proUntil on customers/{uid}
+    const doc = await cust.get();
+    const raw = doc.exists ? (doc.data()?.proUntil || null) : null;
+    if (raw) {
+      const d = typeof raw?.toDate === 'function' ? raw.toDate() : new Date(raw);
+      if (!isNaN(d) && d > new Date()) return true;
+    }
+
+    // Stripe subs
+    const snap = await cust.collection('subscriptions')
+      .where('status', 'in', OK_STATUSES).limit(1).get();
+    return !snap.empty;
+  } catch (e) {
+    console.log('hasActiveSub error', e.message);
+    return false;
+  }
+}
+
+module.exports = { admin, db, auth, verify, hasActiveSub };

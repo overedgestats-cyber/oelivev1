@@ -1,17 +1,11 @@
-// api/whoami.js
-import { admin } from './_lib/admin';
+const { verify } = require('./_lib/admin');
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   try {
-    const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-    if (!m) return res.status(401).send('missing_token');
-
-    const user = await admin.auth().verifyIdToken(m[1]);
-    const { uid, email, aud, iss } = user;
-
-    res.setHeader('Cache-Control', 'no-store, private, max-age=0');
-    return res.status(200).json({ ok: true, uid, email, aud, iss });
+    const u = await verify(req);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json({ ok: true, uid: u.uid, email: u.email });
   } catch (e) {
-    return res.status(401).json({ ok: false, error: 'invalid_token', detail: e.message });
+    res.status(e.status || 401).json({ ok: false, error: e.message || String(e) });
   }
-}
+};
