@@ -35,49 +35,96 @@ app.use(cors({
 
 // ---------------- Firebase Admin (auth + subs) ----------------
 const admin = require('firebase-admin');
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || null;
 
-try {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (raw) {
-    const svc = JSON.parse(raw);
-    admin.initializeApp({ credential: admin.credential.cert(svc) });
-  } else {
+function initFirebaseAdmin() {
+  const projectIdEnv = process.env.FIREBASE_PROJECT_ID || undefined;
+
+  const tryInitWithServiceJson = (raw) => {
+    if (!raw) return false;
+    let txt = raw.trim();
+
+    // If it doesn't look like JSON, maybe it’s base64-encoded JSON
+    if (!txt.startsWith('{')) {
+      try { txt = Buffer.from(txt, 'base64').toString('utf8'); } catch {}
+    }
+
+    let svc;
+    try { svc = JSON.parse(txt); } catch { return false; }
+
+    // Ensure private_key has real newlines
+    if (svc.private_key && svc.private_key.includes('\\n')) {
+      svc.private_key = svc.private_key.replace(/\\n/g, '\n');
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.cert(svc),
+      projectId: svc.project_id || projectIdEnv
+    });
+    console.log('🔐 Firebase initialized (service json)', svc.project_id || projectIdEnv || '');
+    return true;
+  };
+
+  const tryInitWithPair = (email, key) => {
+    if (!email || !key) return false;
+    let pk = key;
+    if (pk.includes('\\n')) pk = pk.replace(/\\n/g, '\n');
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        client_email: email,
+        private_key: pk,
+        project_id: projectIdEnv
+      }),
+      projectId: projectIdEnv
+    });
+    console.log('🔐 Firebase initialized (email/private key pair)', projectIdEnv || '');
+    return true;
+  };
+
+  try {
+    if (tryInitWithServiceJson(process.env.FIREBASE_SERVICE_ACCOUNT)) return;
+    if (tryInitWithPair(process.env.FIREBASE_CLIENT_EMAIL, process.env.FIREBASE_PRIVATE_KEY)) return;
+
+    // Last resort (works only if Vercel has GCP ADC, which it usually doesn't)
     admin.initializeApp({
       credential: admin.credential.applicationDefault(),
-      ...(FIREBASE_PROJECT_ID ? { projectId: FIREBASE_PROJECT_ID } : {})
+      ...(projectIdEnv ? { projectId: projectIdEnv } : {})
     });
+    console.log('🔐 Firebase initialized (ADC fallback)', projectIdEnv || '');
+  } catch (e) {
+    console.log('❌ Firebase init failed:', e.message);
   }
-  console.log('🔐 Firebase initialized', FIREBASE_PROJECT_ID ? `(project: ${FIREBASE_PROJECT_ID})` : '');
-} catch (e) {
-  console.log('⚠️ Firebase init:', e.message);
 }
+initFirebaseAdmin();
 
 const db = (() => { try { return admin.firestore(); } catch { return null; } })();
-const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing').split(',').map(s => s.trim().toLowerCase());
 
-function decodeJwtNoVerify(token) {
+// Minimal debug: see what the server actually has at runtime (no secrets)
+app.get('/api/__debug/admin', (_req, res) => {
   try {
-    const p = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
-  } catch { return null; }
-}
-
-async function requireAuth(req, res, next) {
-  const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-  if (!m) return res.status(401).json({ error: 'missing_token' });
-  try {
-    req.user = await admin.auth().verifyIdToken(m[1]);
-    next();
+    const appInfo = admin.app();
+    res.json({
+      ok: true,
+      hasDb: !!db,
+      projectId:
+        appInfo?.options?.projectId ||
+        appInfo?.options?.credential?.projectId ||
+        null,
+      env: {
+        hasServiceJson: !!process.env.FIREBASE_SERVICE_ACCOUNT,
+        hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
+        hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
+        projectIdEnv: process.env.FIREBASE_PROJECT_ID || null,
+      },
+    });
   } catch (e) {
-    const claims = decodeJwtNoVerify(m[1]) || {};
-    return res.status(401).json({
-      error: 'invalid_token',
-      detail: e.errorInfo?.message || e.message || String(e),
-      aud: claims.aud, iss: claims.iss, expectedProject: FIREBASE_PROJECT_ID || null
+    res.status(500).json({
+      ok: false,
+      err: e.message,
+      env: { hasServiceJson: !!process.env.FIREBASE_SERVICE_ACCOUNT }
     });
   }
-}
+});
+
 
 /** Unified Pro status:
  * - Active if customers/{uid}.proUntil (Timestamp or ISO) is in the future
