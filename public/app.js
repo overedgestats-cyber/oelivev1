@@ -157,4 +157,3 @@ async function enforcePro(container){
     container.textContent = `Error: ${e.message}`;
   }
 }
-
