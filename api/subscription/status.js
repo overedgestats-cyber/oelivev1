@@ -1,72 +1,54 @@
-﻿// /api/subscription/status.js
-module.exports.config = { runtime: "nodejs20.x" };
+﻿const admin = require('firebase-admin');
 
-const admin = require("firebase-admin");
-
-function getAdmin() {
-  try {
-    if (admin.apps.length) return admin;
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (!raw) return null;
-    const svc = JSON.parse(raw);
-    if (svc.private_key && svc.private_key.includes("\\n")) {
-      svc.private_key = svc.private_key.replace(/\\n/g, "\n");
-    }
-    admin.initializeApp({ credential: admin.credential.cert(svc) });
-    return admin;
-  } catch (e) {
-    console.error("firebase admin init error:", e);
-    return null;
-  }
+if (!admin.apps.length) {
+  const svc = process.env.FIREBASE_SERVICE_ACCOUNT
+    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    : null;
+  if (svc) admin.initializeApp({ credential: admin.credential.cert(svc) });
+  else admin.initializeApp();
 }
 
-function setCORS(res) {
-  res.setHeader("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+function toDate(raw) {
+  if (!raw) return null;
+  return typeof raw?.toDate === 'function' ? raw.toDate() : new Date(raw);
 }
+
+const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
+  .split(',').map(s => s.trim().toLowerCase());
 
 module.exports = async (req, res) => {
-  setCORS(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
-  if (req.method !== "GET") return res.status(405).end();
+  res.setHeader('Cache-Control', 'no-store, private, max-age=0');
 
-  const adm = getAdmin();
-  if (!adm) {
-    return res.status(500).json({
-      error: "firebase_admin_unconfigured",
-      message: "Set FIREBASE_SERVICE_ACCOUNT_JSON in Vercel and redeploy."
-    });
-  }
+  const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  if (!m) return res.status(401).json({ ok:false, error:'missing_token' });
 
   try {
-    const authz = req.headers.authorization || "";
-    const idToken = authz.startsWith("Bearer ") ? authz.slice(7) : null;
-    if (!idToken) return res.status(401).json({ error: "not_authenticated" });
+    const user = await admin.auth().verifyIdToken(m[1]);
+    const uid = user.uid;
+    const email = user.email || null;
 
-    const decoded = await adm.auth().verifyIdToken(idToken, true);
-    const uid = decoded.uid;
-    const email = decoded.email || null;
+    const db = admin.firestore();
+    const custRef = db.collection('customers').doc(uid);
 
-    const snap = await adm.firestore().collection("customers").doc(uid).get();
-    const d = snap.exists ? snap.data() : {};
+    const [custDoc, subsSnap] = await Promise.all([
+      custRef.get(),
+      custRef.collection('subscriptions').orderBy('updatedAt', 'desc').limit(5).get().catch(() => null),
+    ]);
 
-    let active = !!d?.proActive;
-    let proUntil = d?.proUntil || null;
-    let source = "firestore";
+    let proUntil = null;
+    if (custDoc.exists) proUntil = toDate(custDoc.data().proUntil);
 
-    if (!active && decoded?.pro) {
+    let active = false;
+    if (proUntil && proUntil > new Date()) {
       active = true;
-      proUntil = decoded.proUntil || proUntil || null;
-      source = "claims";
+    } else if (subsSnap && !subsSnap.empty) {
+      active = subsSnap.docs.some(d =>
+        OK_STATUSES.includes((d.data().status || '').toLowerCase())
+      );
     }
 
-    if (proUntil && typeof proUntil?.toDate === "function") proUntil = proUntil.toDate();
-    if (proUntil instanceof Date) proUntil = proUntil.toISOString();
-
-    return res.json({ active, proUntil, uid, email, source });
+    res.json({ ok:true, active, uid, email, proUntil, okStatuses: OK_STATUSES, source: 'function' });
   } catch (e) {
-    console.error("status error:", e);
-    return res.status(500).json({ error: "status_error", message: e.message });
+    res.status(500).json({ ok:false, error:'sub_check_failed', detail:e.message });
   }
 };
