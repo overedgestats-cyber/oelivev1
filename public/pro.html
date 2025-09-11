@@ -17,6 +17,14 @@
     <!-- Favicon -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="alternate icon" href="/og.png" type="image/png">
+
+    <!-- Week bar tiny styles -->
+    <style>
+      .weekbar { display:flex; align-items:center; gap:.5rem; margin:.75rem 0 1rem; flex-wrap:wrap; }
+      .week-btn { padding:6px 10px; font-size:.9rem; }
+      .week-btn.active { box-shadow: 0 0 0 2px #3EDCFF inset; }
+      .week-range { opacity:.8; font-size:.9rem; margin-left:.25rem; }
+    </style>
   </head>
   <body>
     <header>
@@ -43,6 +51,15 @@
 
     <main>
       <h1>Pro Board</h1>
+
+      <!-- Week bar (Mon–Sun) -->
+      <div class="weekbar" id="weekBar">
+        <button class="btn" id="prevWeek" aria-label="Previous week">‹</button>
+        <div id="weekNav"></div>
+        <button class="btn" id="nextWeek" aria-label="Next week">›</button>
+        <span class="week-range" id="weekRange"></span>
+      </div>
+
       <div id="requirePro" class="card">Checking your subscription...</div>
 
       <!-- Hero Pick (shown only after Pro check passes) -->
@@ -66,13 +83,14 @@
     <script src="/firebase-config.js"></script>
     <!-- Firebase helpers (exports: watchAuth, getToken, signIn, signOutUser) -->
     <script type="module" src="/firebase-init.js"></script>
-    <!-- App helpers (optional, safe to include) -->
+    <!-- App helpers (safe to include) -->
     <script type="module" src="/app.js?v=12"></script>
 
-    <!-- Inline Pro logic (no nested backticks) -->
+    <!-- Inline Pro + Week logic -->
     <script type="module">
       import { watchAuth, getToken, signIn, signOutUser } from '/firebase-init.js';
 
+      // ---- DOM refs
       const statusBox    = document.getElementById('requirePro');
       const loginBtn     = document.getElementById('loginBtn');
       const logoutBtn    = document.getElementById('logoutBtn');
@@ -83,10 +101,71 @@
       const loadHeroBtn  = document.getElementById('loadHero');
       const heroBetEl    = document.getElementById('heroBet');
 
-      loginBtn.addEventListener('click',  () => signIn().catch(console.error));
-      logoutBtn.addEventListener('click', () => signOutUser().catch(console.error));
+      const weekNav      = document.getElementById('weekNav');
+      const weekRangeEl  = document.getElementById('weekRange');
+      const prevWeekBtn  = document.getElementById('prevWeek');
+      const nextWeekBtn  = document.getElementById('nextWeek');
 
+      // ---- Helpers
+      const fmtYMD = (d) => new Date(d).toISOString().slice(0,10);
+      const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+      const startOfISOWeek = (anchor) => {
+        const d = new Date(anchor);
+        const dow = d.getDay();           // Sun=0..Sat=6
+        const diff = (dow + 6) % 7;       // 0 for Mon
+        d.setHours(0,0,0,0);
+        d.setDate(d.getDate() - diff);    // move to Monday
+        return d;
+      };
+
+      let anchorDate  = new Date();       // week anchor (today initially)
+      let selectedYMD = fmtYMD(anchorDate);
+      let cachedToken = null;
+
+      loginBtn.addEventListener('click', (e) => { e.preventDefault(); signIn().catch(console.error); });
+      logoutBtn.addEventListener('click',(e) => { e.preventDefault(); signOutUser().catch(console.error); });
+
+      // ---- Week UI
+      function renderWeek() {
+        weekNav.innerHTML = '';
+        const mon = startOfISOWeek(anchorDate);
+        const sun = addDays(mon, 6);
+        weekRangeEl.textContent = mon.toLocaleDateString() + ' – ' + sun.toLocaleDateString();
+
+        for (let i = 0; i < 7; i++) {
+          const d = addDays(mon, i);
+          const ymd = fmtYMD(d);
+          const btn = document.createElement('button');
+          btn.className = 'btn week-btn';
+          btn.dataset.date = ymd;
+          btn.textContent = d.toLocaleDateString(undefined, { weekday:'short', month:'numeric', day:'numeric' });
+          if (ymd === selectedYMD) btn.classList.add('active');
+          btn.addEventListener('click', () => selectDate(ymd));
+          weekNav.appendChild(btn);
+        }
+      }
+
+      prevWeekBtn.addEventListener('click', () => {
+        anchorDate = addDays(startOfISOWeek(anchorDate), -7);
+        renderWeek();
+        selectDate(fmtYMD(startOfISOWeek(anchorDate)));
+      });
+      nextWeekBtn.addEventListener('click', () => {
+        anchorDate = addDays(startOfISOWeek(anchorDate),  7);
+        renderWeek();
+        selectDate(fmtYMD(startOfISOWeek(anchorDate)));
+      });
+
+      function setWeekActive(ymd) {
+        document.querySelectorAll('.week-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.date === ymd);
+        });
+      }
+
+      // ---- Rendering the board
       function renderBoard(data) {
+        document.getElementById('proBoard')?.remove();
+
         const wrap = document.createElement('div');
         wrap.id = 'proBoard';
 
@@ -97,7 +176,6 @@
             const top  = (it.topBets && it.topBets[0]) || null;
             const when = new Date(it.kickoff).toLocaleString();
 
-            // build pick safely without nested template literals
             let pickDiv = '';
             if (top) {
               pickDiv =
@@ -105,9 +183,7 @@
                   top.market + ': <b>' + top.pick + '</b> · <span>' + top.confidence + '%</span>' +
                 '</div>';
             }
-
             const comp = (it.competition || (it.league && it.league.name) || '');
-
             return (
               '<div class="card" style="margin-bottom:12px">' +
                 '<div><small>' + when + '</small></div>' +
@@ -118,39 +194,95 @@
             );
           }).join('');
         }
-
         statusBox.insertAdjacentElement('afterend', wrap);
       }
 
-      async function loadHero(token) {
-        heroBetEl.innerHTML = 'Loading...';
-        try {
-          const resp = await fetch('/api/hero-bet', {
-            headers: { Authorization: 'Bearer ' + token }
-          });
-          const raw = await resp.text();
-          let j = null; try { j = JSON.parse(raw); } catch {}
-
-          if (!resp.ok) {
-            const msg = (j && (j.error || j.message)) || raw.slice(0,160);
-            heroBetEl.innerHTML = '<div class="card">Error: ' + msg + '</div>';
-            console.warn('hero-bet failed:', resp.status, raw);
-            return;
-          }
-
-          const h = j.hero || j;
-          const when = new Date(h.kickoff).toLocaleString();
-          heroBetEl.innerHTML =
-            '<div class="card">' +
-              '<div><small>' + when + '</small></div>' +
-              '<div><strong>' + h.match + '</strong> — ' + h.league + '</div>' +
-              '<div style="margin-top:6px">' + h.market + ': <b>' + h.prediction + '</b> · <span>' + h.confidence + '%</span></div>' +
-            '</div>';
-        } catch (e) {
-          heroBetEl.innerHTML = '<div class="card">Error: ' + e.message + '</div>';
-        }
+      async function ensureToken() {
+        if (!cachedToken) cachedToken = await getToken();
+        return cachedToken;
       }
 
+      // ---- Load board for a specific date
+      async function loadBoardFor(ymd) {
+        statusBox.textContent = 'Loading Pro Board...';
+        const token = await ensureToken();
+
+        // Verify subscription
+        const st = await fetch('/api/subscription/status?t=' + Date.now(), {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!st.ok) {
+          const txt = await st.text().catch(()=> '');
+          statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
+          heroSection.style.display = 'none';
+          console.warn('sub status failed:', st.status, txt);
+          return;
+        }
+        const { active } = await st.json();
+        if (!active) {
+          statusBox.textContent = 'No active subscription.';
+          heroSection.style.display = 'none';
+          return;
+        }
+
+        // Load Pro Board (date-specific)
+        const pb = await fetch('/api/pro-board?date=' + encodeURIComponent(ymd), {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!pb.ok) {
+          const txt = await pb.text().catch(()=> '');
+          statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
+          heroSection.style.display = 'none';
+          console.warn('pro-board failed:', pb.status, txt);
+          return;
+        }
+        const data = await pb.json();
+        statusBox.style.display = 'none';
+        renderBoard(data);
+
+        // Enable Hero for this date
+        heroSection.style.display = '';
+        loadHeroBtn.onclick = function(e){ e.preventDefault(); loadHero(ymd); };
+      }
+
+      async function loadHero(ymd) {
+        heroBetEl.innerHTML = 'Loading...';
+        const token = await ensureToken();
+
+        const resp = await fetch('/api/hero-bet?date=' + encodeURIComponent(ymd), {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        let j = {};
+        try { j = await resp.json(); } catch {}
+
+        if (j && (j.no_hero_pick || j.error === 'no_hero_pick')) {
+          heroBetEl.innerHTML = '<div class="card">No hero pick for this date.</div>';
+          return;
+        }
+        if (!resp.ok) {
+          heroBetEl.innerHTML = '<div class="card">Error: ' + (j.error || resp.status) + '</div>';
+          return;
+        }
+
+        const h = j.hero || j;
+        const when = new Date(h.kickoff).toLocaleString();
+        heroBetEl.innerHTML =
+          '<div class="card">' +
+            '<div><small>' + when + '</small></div>' +
+            '<div><strong>' + h.match + '</strong> — ' + h.league + '</div>' +
+            '<div style="margin-top:6px"><b>' + h.market + '</b>: ' + h.prediction + ' · <b>' + h.confidence + '%</b></div>' +
+            (h.reasoning ? ('<div style="margin-top:6px">' + h.reasoning + '</div>') : '') +
+          '</div>';
+      }
+
+      async function selectDate(ymd) {
+        selectedYMD = ymd;
+        setWeekActive(ymd);
+        await loadBoardFor(ymd);
+        heroBetEl.textContent = ''; // clear hero area until user clicks
+      }
+
+      // ---- Auth + initial load
       watchAuth(async (user) => {
         if (!user) {
           userBox.style.display = 'none';
@@ -166,52 +298,11 @@
         loginBtn.hidden  = true;
         userEmailEl.textContent = user.email || '';
 
-        try {
-          const token = await getToken();
-          const st = await fetch('/api/subscription/status?t=' + Date.now(), {
-            headers: { Authorization: 'Bearer ' + token }
-          });
+        cachedToken = null; // refresh on user change
 
-          if (!st.ok) {
-            const txt = await st.text().catch(() => '');
-            statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
-            heroSection.style.display = 'none';
-            console.warn('sub status failed:', st.status, txt);
-            return;
-          }
-
-          const { active } = await st.json();
-          if (!active) {
-            statusBox.textContent = 'No active subscription.';
-            heroSection.style.display = 'none';
-            return;
-          }
-
-          statusBox.textContent = 'Loading Pro Board...';
-          const pb = await fetch('/api/pro-board', {
-            headers: { Authorization: 'Bearer ' + token }
-          });
-
-          if (!pb.ok) {
-            const txt = await pb.text().catch(() => '');
-            statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
-            heroSection.style.display = 'none';
-            console.warn('pro-board failed:', pb.status, txt);
-            return;
-          }
-
-          const data = await pb.json();
-          statusBox.style.display = 'none';
-          renderBoard(data);
-
-          // enable Hero section
-          heroSection.style.display = '';
-          loadHeroBtn.onclick = function(e){ e.preventDefault(); loadHero(token); };
-        } catch (e) {
-          console.error(e);
-          statusBox.textContent = 'Error checking subscription.';
-          heroSection.style.display = 'none';
-        }
+        // Build week & load today
+        renderWeek();
+        await selectDate(fmtYMD(new Date()));
       });
     </script>
   </body>
