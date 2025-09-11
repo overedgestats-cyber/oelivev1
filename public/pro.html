@@ -43,7 +43,16 @@
 
     <main>
       <h1>Pro Board</h1>
-      <div id="requirePro" class="card">Checking your subscription…</div>
+      <div id="requirePro" class="card">Checking your subscription...</div>
+
+      <!-- Hero Pick (shown only after Pro check passes) -->
+      <section id="heroSection" class="card" style="display:none; margin-top:16px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong>Hero Pick</strong>
+          <a href="#" id="loadHero" class="btn" style="margin-left:auto;">Load Hero Pick</a>
+        </div>
+        <div id="heroBet" style="margin-top:8px;"></div>
+      </section>
     </main>
 
     <footer>
@@ -57,18 +66,22 @@
     <script src="/firebase-config.js"></script>
     <!-- Firebase helpers (exports: watchAuth, getToken, signIn, signOutUser) -->
     <script type="module" src="/firebase-init.js"></script>
-    <!-- App logic (used elsewhere, cache-busted) -->
+    <!-- App helpers (optional, safe to include) -->
     <script type="module" src="/app.js?v=12"></script>
 
-    <!-- Inline Pro guard: import module API directly -->
+    <!-- Inline Pro logic (no nested backticks) -->
     <script type="module">
       import { watchAuth, getToken, signIn, signOutUser } from '/firebase-init.js';
 
-      const statusBox   = document.getElementById('requirePro');
-      const loginBtn    = document.getElementById('loginBtn');
-      const logoutBtn   = document.getElementById('logoutBtn');
-      const userBox     = document.getElementById('userBox');
-      const userEmailEl = document.getElementById('userEmail');
+      const statusBox    = document.getElementById('requirePro');
+      const loginBtn     = document.getElementById('loginBtn');
+      const logoutBtn    = document.getElementById('logoutBtn');
+      const userBox      = document.getElementById('userBox');
+      const userEmailEl  = document.getElementById('userEmail');
+
+      const heroSection  = document.getElementById('heroSection');
+      const loadHeroBtn  = document.getElementById('loadHero');
+      const heroBetEl    = document.getElementById('heroBet');
 
       loginBtn.addEventListener('click',  () => signIn().catch(console.error));
       logoutBtn.addEventListener('click', () => signOutUser().catch(console.error));
@@ -76,32 +89,75 @@
       function renderBoard(data) {
         const wrap = document.createElement('div');
         wrap.id = 'proBoard';
-        if (!data || !Array.isArray(data.items) || !data.items.length) {
+
+        if (!data || !Array.isArray(data.items) || data.items.length === 0) {
           wrap.innerHTML = '<div class="card">No qualifying fixtures for this date.</div>';
         } else {
-          wrap.innerHTML = data.items.map(it => {
-            const top = (it.topBets && it.topBets[0]) || null;
+          wrap.innerHTML = data.items.map(function(it){
+            const top  = (it.topBets && it.topBets[0]) || null;
             const when = new Date(it.kickoff).toLocaleString();
-            const pick = top ? `${top.market}: <b>${top.pick}</b> · <span>${top.confidence}%</span>` : '';
-            return `
-              <div class="card" style="margin-bottom:12px">
-                <div><small>${when}</small></div>
-                <div><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
-                <div><small>${it.competition || (it.league && it.league.name) || ''}</small></div>
-                ${pick ? `<div style="margin-top:6px">${pick}</div>` : ''}
-              </div>`;
+
+            // build pick safely without nested template literals
+            let pickDiv = '';
+            if (top) {
+              pickDiv =
+                '<div style="margin-top:6px">' +
+                  top.market + ': <b>' + top.pick + '</b> · <span>' + top.confidence + '%</span>' +
+                '</div>';
+            }
+
+            const comp = (it.competition || (it.league && it.league.name) || '');
+
+            return (
+              '<div class="card" style="margin-bottom:12px">' +
+                '<div><small>' + when + '</small></div>' +
+                '<div><strong>' + it.home + '</strong> vs <strong>' + it.away + '</strong></div>' +
+                '<div><small>' + comp + '</small></div>' +
+                pickDiv +
+              '</div>'
+            );
           }).join('');
         }
+
         statusBox.insertAdjacentElement('afterend', wrap);
       }
 
-      // React to auth and gate the board
+      async function loadHero(token) {
+        heroBetEl.innerHTML = 'Loading...';
+        try {
+          const resp = await fetch('/api/hero-bet', {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+          const raw = await resp.text();
+          let j = null; try { j = JSON.parse(raw); } catch {}
+
+          if (!resp.ok) {
+            const msg = (j && (j.error || j.message)) || raw.slice(0,160);
+            heroBetEl.innerHTML = '<div class="card">Error: ' + msg + '</div>';
+            console.warn('hero-bet failed:', resp.status, raw);
+            return;
+          }
+
+          const h = j.hero || j;
+          const when = new Date(h.kickoff).toLocaleString();
+          heroBetEl.innerHTML =
+            '<div class="card">' +
+              '<div><small>' + when + '</small></div>' +
+              '<div><strong>' + h.match + '</strong> — ' + h.league + '</div>' +
+              '<div style="margin-top:6px">' + h.market + ': <b>' + h.prediction + '</b> · <span>' + h.confidence + '%</span></div>' +
+            '</div>';
+        } catch (e) {
+          heroBetEl.innerHTML = '<div class="card">Error: ' + e.message + '</div>';
+        }
+      }
+
       watchAuth(async (user) => {
         if (!user) {
           userBox.style.display = 'none';
           logoutBtn.hidden = true;
           loginBtn.hidden  = false;
           statusBox.textContent = 'Please sign in to view the Pro Board.';
+          heroSection.style.display = 'none';
           return;
         }
 
@@ -112,14 +168,14 @@
 
         try {
           const token = await getToken();
-          // cache-bust to dodge CDN 304s
           const st = await fetch('/api/subscription/status?t=' + Date.now(), {
             headers: { Authorization: 'Bearer ' + token }
           });
 
           if (!st.ok) {
-            const txt = await st.text().catch(()=> '');
+            const txt = await st.text().catch(() => '');
             statusBox.textContent = 'Could not verify subscription (' + st.status + ').';
+            heroSection.style.display = 'none';
             console.warn('sub status failed:', st.status, txt);
             return;
           }
@@ -127,17 +183,19 @@
           const { active } = await st.json();
           if (!active) {
             statusBox.textContent = 'No active subscription.';
+            heroSection.style.display = 'none';
             return;
           }
 
-          statusBox.textContent = 'Loading Pro Board…';
+          statusBox.textContent = 'Loading Pro Board...';
           const pb = await fetch('/api/pro-board', {
             headers: { Authorization: 'Bearer ' + token }
           });
 
           if (!pb.ok) {
-            const txt = await pb.text().catch(()=> '');
+            const txt = await pb.text().catch(() => '');
             statusBox.textContent = 'Failed to load Pro Board (' + pb.status + ').';
+            heroSection.style.display = 'none';
             console.warn('pro-board failed:', pb.status, txt);
             return;
           }
@@ -145,9 +203,14 @@
           const data = await pb.json();
           statusBox.style.display = 'none';
           renderBoard(data);
+
+          // enable Hero section
+          heroSection.style.display = '';
+          loadHeroBtn.onclick = function(e){ e.preventDefault(); loadHero(token); };
         } catch (e) {
           console.error(e);
           statusBox.textContent = 'Error checking subscription.';
+          heroSection.style.display = 'none';
         }
       });
     </script>
