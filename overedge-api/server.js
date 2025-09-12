@@ -19,6 +19,10 @@ const API_TZ   = process.env.API_FOOTBALL_TZ || 'Europe/London';
 const API_KEY  = process.env.API_FOOTBALL_KEY || '';
 if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY (data routes will 500)');
 
+const REQUEST_TIMEOUT_MS    = Number(process.env.REQUEST_TIMEOUT_MS || 10000);
+const MAX_FIXTURE_PAGES     = Number(process.env.MAX_FIXTURE_PAGES  || 3);   // limit API pages per TZ
+const MAX_FIXTURES_TO_SCORE = Number(process.env.MAX_FIXTURES_TO_SCORE || 220);
+
 const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
   .split(',').map(s => s.trim().toLowerCase());
 
@@ -30,9 +34,6 @@ const PRO_MAX_ROWS = Number(process.env.PRO_MAX_ROWS || 200);
 
 // Free Picks (model-only) threshold
 const FREEPICKS_MIN_CONF = Number(process.env.FREEPICKS_MIN_CONF || 65);
-
-// Hard limits to avoid timeouts
-const MAX_FIXTURES_TO_SCORE = Number(process.env.MAX_FIXTURES_TO_SCORE || 220);
 
 // ====== APP ==================================================================
 const app = express();
@@ -181,7 +182,8 @@ app.get('/api/whoami', requireAuth, (req,res)=> res.json({ ok:true, uid:req.user
 // ====== FIXTURE HELPERS / FETCH =============================================
 function todayYMD(){ return new Date().toISOString().slice(0,10); }
 function seasonFromDate(dateStr){ const d = new Date(dateStr); const y = d.getUTCFullYear(), m = d.getUTCMonth()+1; return (m >= 7) ? y : y - 1; }
-const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: 15000 };
+
+const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: REQUEST_TIMEOUT_MS };
 
 const EURO_COUNTRIES = new Set([
   'England','Spain','Italy','Germany','France','Scotland','Wales','Northern Ireland','Ireland',
@@ -215,9 +217,13 @@ async function fetchAllEuropeFixturesFast(date){
         const resp = r.data || {};
         total = resp?.paging?.total || 1;
         const arr = resp?.response || [];
-        for (const f of arr) if (inEuropeClubScope(f)) out.push(f);
+        for (const f of arr) {
+          if (inEuropeClubScope(f)) out.push(f);
+          if (out.length >= MAX_FIXTURES_TO_SCORE) return out; // early exit
+        }
       } catch (e) { break; }
       page += 1;
+      if (page > MAX_FIXTURE_PAGES) break;                     // page cap
       if (page <= total) await new Promise(r => setTimeout(r, 120));
     } while (page <= total);
     return out;
@@ -274,6 +280,7 @@ function interp(mapping, x){
 }
 function asPct(n){ return Math.max(1, Math.min(99, Math.round(Number(n)||0))); }
 function calibrate(market, side, confRaw){ const m = CAL.markets?.[market]; const map = m?.[side]?.mapping; return asPct(interp(map, confRaw)); }
+
 // ====== MODEL: team stats + probabilities ===================================
 const statsCache = new Map(); // key raw_{league}_{season}_{team}
 async function fetchTeamStatsRaw(leagueId, season, teamId){
