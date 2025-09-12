@@ -331,7 +331,6 @@ app.get('/__debug/raw-fixtures', async (req, res) => {
     res.status(500).json({ error: 'raw_fixtures_failed', detail: e.response?.data || e.message });
   }
 });
-
 // === MODEL / SCORING / DATA LAYER ===========================================
 
 const EURO_COUNTRIES = new Set([
@@ -928,7 +927,6 @@ module.exports = { FREE_PICKS_COMP_IDS };
     res.status(500).json({ error: 'scan_failed', detail: e?.message || String(e) });
   }
 });
-
 // === PRO BOARD + HERO BET ====================================================
 
 const THRESH_OU      = Number(process.env.THRESH_OU      || 0.58);
