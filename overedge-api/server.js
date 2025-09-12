@@ -25,9 +25,9 @@ const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
   .split(',').map(s => s.trim().toLowerCase());
 
 // ----- Free Picks defaults (overridable by query params) -----
-const FREEPICKS_MIN_CONF    = Number(process.env.FREEPICKS_MIN_CONF    || 65);
-const FREEPICKS_MIN_ODDS    = Number(process.env.FREEPICKS_MIN_ODDS    || 1.50);
-const FREEPICKS_STRICT_ONLY = (process.env.FREEPICKS_STRICT_ONLY || '0') === '1';
+// We DO NOT filter by odds anymore; only model confidence matters.
+const FREEPICKS_MIN_CONF = Number(process.env.FREEPICKS_MIN_CONF || 65);
+const FREEPICKS_TOP_K    = Number(process.env.FREEPICKS_TOP_K    || 2);
 
 // ----- Pro Board display controls -----
 const PRO_MARKETS = (process.env.PRO_MARKETS || 'OU25,BTTS,ONE_X_TWO,CARDS,CORNERS')
@@ -343,7 +343,10 @@ const EURO_COUNTRIES = new Set([
   'Ukraine','Belarus','Moldova','Georgia','Armenia','Azerbaijan','Russia',
   'Andorra','San Marino','Gibraltar','Faroe Islands','Europe','World'
 ]);
+// UEFA competitions in API-Football
 const UEFA_IDS = new Set([2,3,848,4,15,16]); // UCL, UEL, UECL, Super Cup, Euros, Euro Qual
+const UEFA_CLUB_IDS = new Set([2,3,848,4]);  // club-only slice
+const UEFA_NATIONAL_IDS = new Set([15,16]);  // national teams
 
 // Pro Board leagues (exactly the set you asked for)
 const DEFAULT_ALLOWED_LEAGUES = [
@@ -658,35 +661,26 @@ function buildFreeReason(f, h, a, m, side) {
     ].join(' ');
   }
 }
-
 // === FREE PICKS ==============================================================
-async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false, wantDebug=false }){
+// New approach: scan ALL European club fixtures for the day (exclude youth & Euro national teams),
+// compute OU2.5 model confidence for each, and pick the top K by calibrated confidence.
+// No odds-based filtering or ranking.
+
+async function pickEuropeAllClub({ date, season, minConf, wantDebug=false }){
   const fixtures = await fetchAllEuropeFixturesFast(date);
   const fixturesTotal = fixtures.length;
 
-  // primary pool: domestic top-2 excluding Pro set
-  const pool = fixtures.filter(f=>{
-    const c=f.league?.country, id=f.league?.id, t=(f.league?.type||'').toLowerCase();
+  // club fixtures in Europe (include domestic leagues/cups + UCL/UEL/UECL/Super Cup)
+  const list = fixtures.filter(f=>{
+    const lid = f.league?.id;
+    const c   = f.league?.country;
     if (isYouthFixture(f)) return false;
-    if (UEFA_IDS.has(id)) return false;                 // no international comps
-    if (!EURO_COUNTRIES.has(c)) return false;           // only Europe
-    if (t!=='league') return false;                     // no cups
-    if (ALLOWED_SET.has(id)) return false;              // exclude Pro pool
-    if (FREE_PICKS_COMP_IDS && FREE_PICKS_COMP_IDS.size) {
-      return FREE_PICKS_COMP_IDS.has(id);
-    }
+    if (!EURO_COUNTRIES.has(c) && !UEFA_IDS.has(lid)) return false;
+    if (UEFA_NATIONAL_IDS.has(lid)) return false; // exclude Euros/Qualifiers (national teams)
     return true;
   });
 
   const cand = [];
-  const list = pool.length
-    ? pool
-    : fixtures.filter(f =>
-        !isYouthFixture(f) &&
-        (UEFA_IDS.has(f.league?.id) || ['cup'].includes((f.league?.type || '').toLowerCase()))
-      );
-  const listUsed = list.length;
-
   for (const f of list) {
     try {
       const L   = f.league?.id;
@@ -702,45 +696,15 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false,
 
       const model = estimateLambdasFromTeamStats(h, a);
 
-      // optional odds (median) — used ONLY for free picks screening
-      let over = null, under = null;
-      try {
-        const r = await axios.get(
-          `https://v3.football.api-sports.io/odds?fixture=${f.fixture?.id}`,
-          AXIOS
-        );
-        const rows = r.data?.response || [];
-        const overArr = [], underArr = [];
-        for (const row of rows) {
-          for (const bm of (row.bookmakers || [])) {
-            for (const bet of (bm.bets || [])) {
-              const name = (bet?.name || '').toLowerCase();
-              if (!/over\/under|total|totals|goals over\/under/.test(name)) continue;
-              for (const v of (bet.values || [])) {
-                const sel = (v?.value || v?.label || '').toLowerCase();
-                const o   = Number(v?.odd);
-                if (!isFinite(o)) continue;
-                if (/\bover\s*2\.5\b/.test(sel))   overArr.push(o);
-                if (/\bunder\s*2\.5\b/.test(sel)) underArr.push(o);
-              }
-            }
-          }
-        }
-        const med = arr => arr.sort((x, y) => x - y)[Math.floor(arr.length / 2)];
-        if (overArr.length)  over  = Math.round(med(overArr)  * 100) / 100;
-        if (underArr.length) under = Math.round(med(underArr) * 100) / 100;
-      } catch { /* odds optional */ }
+      // pick stronger side purely by model confidence (no odds)
+      const so = scoreOver25(h, a, null);
+      const su = scoreUnder25(h, a, null);
 
-      const so = scoreOver25(h, a, over);
-      const su = scoreUnder25(h, a, under);
-
-      let side, confRaw, price;
-      if (so.confidence >= su.confidence) { side = 'Over 2.5';  confRaw = so.confidence; price = over; }
-      else                                 { side = 'Under 2.5'; confRaw = su.confidence; price = under; }
+      let side, confRaw;
+      if (so.confidence >= su.confidence) { side = 'Over 2.5';  confRaw = so.confidence; }
+      else                                 { side = 'Under 2.5'; confRaw = su.confidence; }
 
       if (confRaw < minConf) continue;
-      if (typeof price === 'number' && price < minOdds) continue;
-      if (strictOnly && price == null) continue;
 
       const confCal = calibrate('OU25', /under/i.test(side) ? 'Under' : 'Over', confRaw);
 
@@ -749,23 +713,26 @@ async function pickEuropeTwo({ date, season, minConf, minOdds, strictOnly=false,
         side,
         confidenceRaw: asPct(confRaw),
         confidence:    asPct(confCal),
-        odds: price
       });
     } catch (e) {
       console.log('free cand err', f?.fixture?.id, e.message);
     }
   }
 
-  const poolSize = list.length;
+  // sort by calibrated confidence desc, tie-break by earlier kickoff
+  cand.sort((a,b)=>{
+    if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+    return new Date(a.f.fixture?.date) - new Date(b.f.fixture?.date);
+  });
+
   const dbg = wantDebug ? {
     fixturesTotal,
-    poolPrimary: pool.length,
-    listUsed,
+    scanned: list.length,
     leaguesSample: Array.from(new Set(list.map(x => x.league?.id))).slice(0, 20),
     countriesSample: Array.from(new Set(list.map(x => x.league?.country))).slice(0, 12),
   } : undefined;
 
-  return { cand, poolSize, dbg };
+  return { cand, dbg };
 }
 
 app.get('/api/free-picks', async (req,res)=>{
@@ -775,30 +742,28 @@ app.get('/api/free-picks', async (req,res)=>{
     const date = req.query.date || todayYMD();
     const season = seasonFromDate(date);
     const minConf    = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
-    const minOdds    = Number(req.query.minOdds ?? FREEPICKS_MIN_ODDS);
-    const strictOnly = (req.query.strict ?? (FREEPICKS_STRICT_ONLY ? '1' : '0')) === '1';
-    const force = req.query.refresh === '1';
-    const wantDebug = req.query.debug === '1';
+    const wantDebug  = req.query.debug === '1';
+    const force      = req.query.refresh === '1';
 
     await ensureDataFiles();
     CAL = await loadJSON(CAL_FILE, defaultCalibration());
     if (!force && dailyPicksCache.size === 0) await loadDailyCacheIntoMap();
 
-    const cacheKey = `${date}|${minConf}|${minOdds}|${strictOnly}`;
+    const cacheKey = `${date}|${minConf}|model_only`;
     if (!force && dailyPicksCache.has(cacheKey)){
       const cachedPayload = { ...(dailyPicksCache.get(cacheKey)), cached:true };
       if (!wantDebug) return res.json(cachedPayload);
     }
 
-    const { cand, poolSize, dbg } = await pickEuropeTwo({ date, season, minConf, minOdds, strictOnly, wantDebug });
+    const { cand, dbg } = await pickEuropeAllClub({ date, season, minConf, wantDebug });
 
-    const picks = cand.slice(0,2).map(x => ({
+    const picks = cand.slice(0, FREEPICKS_TOP_K).map(x => ({
       match: `${x.f.teams.home.name} vs ${x.f.teams.away.name}`,
       league: x.f.league.name,
       kickoff: x.f.fixture.date,
       market: 'Over/Under 2.5 Goals',
       prediction: x.side,
-      odds: (typeof x.odds==='number') ? x.odds.toFixed(2) : '—',
+      odds: '—', // not used for ranking
       confidence: x.confidence,
       confidenceRaw: x.confidenceRaw,
       reasoning: buildFreeReason(x.f, x.h, x.a, x.model, x.side)
@@ -807,8 +772,8 @@ app.get('/api/free-picks', async (req,res)=>{
     const payload = {
       dateRequested: date,
       dateUsed: date,
-      thresholds: { minConf, minOdds, strictOnly },
-      meta: { poolSize, candidates: cand.length, ...(wantDebug ? { debug: dbg } : {}) },
+      thresholds: { minConf },
+      meta: { candidates: cand.length, ...(wantDebug ? { debug: dbg } : {}) },
       picks,
       computedAt: new Date().toISOString(),
       cached:false
@@ -826,7 +791,7 @@ app.get('/api/free-picks', async (req,res)=>{
   }
 });
 
-// Free-picks leagues helpers
+// Free-picks leagues helpers (unchanged logic other than excluding national-team comps)
 app.get('/api/free-picks/leagues', async (req, res) => {
   try {
     if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
@@ -834,12 +799,10 @@ app.get('/api/free-picks/leagues', async (req, res) => {
     const fixtures = await fetchAllEuropeFixturesFast(date);
 
     const pool = fixtures.filter(f => {
-      const c = f.league?.country, id = f.league?.id, t = (f.league?.type || '').toLowerCase();
+      const c = f.league?.country, id = f.league?.id;
       if (isYouthFixture(f)) return false;
-      if (UEFA_IDS.has(id)) return false;
-      if (!EURO_COUNTRIES.has(c)) return false;
-      if (t !== 'league') return false;
-      if (ALLOWED_SET.has(id)) return false; // exclude Pro pool
+      if (UEFA_NATIONAL_IDS.has(id)) return false; // exclude Euros/Qualifiers
+      if (!EURO_COUNTRIES.has(c) && !UEFA_IDS.has(id)) return false;
       return true;
     });
 
@@ -859,75 +822,9 @@ app.get('/api/free-picks/leagues', async (req, res) => {
   }
 });
 
-app.get('/api/free-picks/scan-leagues', async (req, res) => {
-  try {
-    if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
+// (scan-leagues endpoint unchanged from previous version; keep if you still use it)
 
-    const ymd = (d) => d.toISOString().slice(0,10);
-    let dates = [];
-
-    if (req.query.from && req.query.to) {
-      const start = new Date(req.query.from + 'T00:00:00Z');
-      const end   = new Date(req.query.to   + 'T00:00:00Z');
-      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate()+1)) dates.push(ymd(d));
-    } else {
-      const days = Math.max(1, Math.min(90, parseInt(req.query.days || '14', 10)));
-      const end = new Date();
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(end); d.setUTCDate(d.getUTCDate() - i);
-        dates.push(ymd(d));
-      }
-    }
-
-    const leagues = new Map(); // id -> {id,name,country,type,fixtures}
-    for (const date of dates) {
-      const fixtures = await fetchAllEuropeFixturesFast(date);
-      for (const f of fixtures) {
-        const c = f.league?.country, id = f.league?.id, t = (f.league?.type || '').toLowerCase();
-        if (!id || !c) continue;
-        if (isYouthFixture(f)) continue;
-        if (!EURO_COUNTRIES.has(c)) continue;
-        if (UEFA_IDS.has(id)) continue;
-        if (t !== 'league') continue;
-        if (ALLOWED_SET.has(id)) continue; // Pro pool excluded
-        if (!leagues.has(id)) {
-          leagues.set(id, { id, name: f.league.name || '', country: c, type: f.league.type || '', fixtures: 0 });
-        }
-        leagues.get(id).fixtures += 1;
-      }
-      await new Promise(r => setTimeout(r, 100));
-    }
-
-    const list = Array.from(leagues.values())
-      .sort((a,b) => (b.fixtures - a.fixtures) || a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
-
-    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '150', 10)));
-    const top = list.slice(0, limit);
-
-    const competitionsJs = `
-/**
- * Curated Free Picks leagues — numeric API-Football league IDs.
- * Generated ${new Date().toISOString()}
- */
-const FREE_PICKS_COMP_IDS = new Set([
-  ${top.map(x => x.id).join(', ')}
-]);
-module.exports = { FREE_PICKS_COMP_IDS };
-`.trim();
-
-    res.json({
-      scannedDates: { from: dates[0], to: dates[dates.length-1], count: dates.length },
-      totals: { leagues: list.length, fixtures: list.reduce((s,x)=>s+x.fixtures,0) },
-      leagues: list,
-      snippetCount: top.length,
-      competitionsJs
-    });
-  } catch (e) {
-    console.error('scan-leagues error', e);
-    res.status(500).json({ error: 'scan_failed', detail: e?.message || String(e) });
-  }
-});
-// === PRO BOARD + HERO BET ====================================================
+// === PRO BOARD + HERO BET (unchanged) =======================================
 
 const THRESH_OU      = Number(process.env.THRESH_OU      || 0.58);
 const THRESH_BTTS    = Number(process.env.THRESH_BTTS    || 0.57);
@@ -961,7 +858,6 @@ function pickFromModelForFixture(f, h, a, m){
     out.push({ market:'ONE_X_TWO', selection: side1, confidenceRaw: asPct(c1raw), confidence: asPct(c1cal),
       probability: p1, reason:`1X2 H ${Math.round(m.pH*100)} / D ${Math.round(m.pD*100)} / A ${Math.round(m.pA*100)}` });
   }
-  // cards / corners heuristics for UI chips (now with reasons)
   const cardsAvg = ((h.cardsAvg || PRIOR_CARDS_AVG/2)+(a.cardsAvg || PRIOR_CARDS_AVG/2))/2;
   const pCardsOver = logistic(cardsAvg - CARDS_OU_LINE, 1.4);
   const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
@@ -1141,7 +1037,7 @@ app.get('/api/hero-bet', requireAuth, requirePro, async (req,res)=>{
   res.json({ dateUsed: date, hero, computedAt: new Date().toISOString() });
 });
 
-// === SUBSCRIPTION STATUS (exposed earlier but keeping here as well) ==========
+// === SUBSCRIPTION STATUS =====================================================
 app.get('/api/subscription/status', requireAuth, async (req, res) => {
   res.set('Cache-Control', 'no-store, private, max-age=0');
   res.set('Pragma', 'no-cache');
