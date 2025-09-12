@@ -5,13 +5,13 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
   try { require('dotenv').config(); } catch (_) {}
 }
 
-const express = require('express');
-const axios   = require('axios');
-const path    = require('path');
-const fs      = require('fs');
-const fsp     = require('fs/promises');
-const cors    = require('cors');
-const bodyParser = require('body-parser');
+const express     = require('express');
+const axios       = require('axios');
+const path        = require('path');
+const fs          = require('fs');
+const fsp         = require('fs/promises');
+const cors        = require('cors');
+const bodyParser  = require('body-parser');
 
 // ====== ENV / CONSTANTS ======================================================
 
@@ -20,7 +20,7 @@ const API_KEY  = process.env.API_FOOTBALL_KEY || '';
 if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY (data routes will 500)');
 
 const REQUEST_TIMEOUT_MS    = Number(process.env.REQUEST_TIMEOUT_MS || 10000);
-const MAX_FIXTURE_PAGES     = Number(process.env.MAX_FIXTURE_PAGES  || 3);   // limit API pages per TZ
+const MAX_FIXTURE_PAGES     = Number(process.env.MAX_FIXTURE_PAGES  || 3);    // page cap per TZ
 const MAX_FIXTURES_TO_SCORE = Number(process.env.MAX_FIXTURES_TO_SCORE || 220);
 
 const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
@@ -34,6 +34,9 @@ const PRO_MAX_ROWS = Number(process.env.PRO_MAX_ROWS || 200);
 
 // Free Picks (model-only) threshold
 const FREEPICKS_MIN_CONF = Number(process.env.FREEPICKS_MIN_CONF || 65);
+
+// Axios with key + timeout
+const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: REQUEST_TIMEOUT_MS };
 
 // ====== APP ==================================================================
 const app = express();
@@ -90,8 +93,10 @@ const admin = require('firebase-admin');
 const db = (() => { try { return admin.firestore(); } catch { return null; } })();
 
 function decodeJwtNoVerify(token) {
-  try { const p = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(Buffer.from(p, 'base64').toString('utf8')); }
-  catch { return null; }
+  try {
+    const p = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    return JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
+  } catch { return null; }
 }
 async function requireAuth(req, res, next) {
   const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
@@ -179,11 +184,71 @@ app.use(express.json());
 app.get('/api/health', (_req,res) => res.json({ ok:true, hasKey: !!API_KEY, tz: API_TZ }));
 app.get('/api/whoami', requireAuth, (req,res)=> res.json({ ok:true, uid:req.user?.uid||null, email:req.user?.email||null }));
 
+// ====== DEBUG: check API-Sports and raw fixtures ============================
+app.get('/api/__debug/apisports-status', async (_req, res) => {
+  try {
+    const r = await axios.get('https://v3.football.api-sports.io/status', AXIOS);
+    res.json({ ok: true, status: r.status, data: r.data });
+  } catch (e) {
+    res.status(500).json({
+      ok: false,
+      message: e.message,
+      status: e.response?.status || null,
+      data: e.response?.data || null
+    });
+  }
+});
+
+app.get('/api/__debug/raw-fixtures', async (req, res) => {
+  const date = req.query.date || todayYMD();
+  const tz   = req.query.tz   || 'Europe/London';
+  const page = Number(req.query.page || 1);
+  const url  = `https://v3.football.api-sports.io/fixtures?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(tz)}&page=${page}`;
+
+  try {
+    const r = await axios.get(url, AXIOS);
+    const body = r.data || {};
+    const sample = (body.response || []).slice(0, 5).map(f => ({
+      id: f.fixture?.id,
+      date: f.fixture?.date,
+      leagueId: f.league?.id,
+      leagueName: f.league?.name,
+      leagueType: f.league?.type,
+      leagueCountry: f.league?.country,
+      home: f.teams?.home?.name,
+      away: f.teams?.away?.name
+    }));
+    res.json({
+      ok: true,
+      status: r.status,
+      date,
+      tz,
+      url,
+      paging: body.paging || null,
+      errors: body.errors || null,
+      count: (body.response || []).length,
+      sample
+    });
+  } catch (e) {
+    res.status(500).json({
+      ok: false,
+      date,
+      tz,
+      url,
+      message: e.message,
+      status: e.response?.status || null,
+      data: e.response?.data || null
+    });
+  }
+});
+
 // ====== FIXTURE HELPERS / FETCH =============================================
 function todayYMD(){ return new Date().toISOString().slice(0,10); }
-function seasonFromDate(dateStr){ const d = new Date(dateStr); const y = d.getUTCFullYear(), m = d.getUTCMonth()+1; return (m >= 7) ? y : y - 1; }
-
-const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: REQUEST_TIMEOUT_MS };
+function seasonFromDate(dateStr){
+  const d = new Date(dateStr);
+  const y = d.getUTCFullYear(), m = d.getUTCMonth()+1;
+  return (m >= 7) ? y : y - 1;
+}
 
 const EURO_COUNTRIES = new Set([
   'England','Spain','Italy','Germany','France','Scotland','Wales','Northern Ireland','Ireland',
@@ -198,18 +263,24 @@ const EURO_COUNTRIES = new Set([
 const UEFA_IDS = new Set([2,3,848,4,15,16]); // UCL, UEL, UECL, Super Cup, Euros, Euro Qual
 
 function isYouthFixture(f){
-  const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name].filter(Boolean).join(' ').toLowerCase();
+  const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name]
+    .filter(Boolean).join(' ').toLowerCase();
   return /\b(u1[6-9]|u2[0-3]|under\s?(1[6-9]|2[0-3])|youth|academy|women|ladies|fem(?:en|in)|reserve|reserves|b[\s-]?team)\b/.test(s);
 }
+
+// TEMPORARY: include both "league" and "cup" types so weekends show up fully
 function inEuropeClubScope(f){
   const lid = f?.league?.id, c = f?.league?.country;
   const t = (f?.league?.type || '').toLowerCase();
-  return !isYouthFixture(f) && (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) && t === 'league';
+  const typeOK = (t === 'league' || t === 'cup');
+  return !isYouthFixture(f) && (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) && typeOK;
 }
+
 async function fetchAllEuropeFixturesFast(date){
   const tryFetch = async (query, tz) => {
     const out = [];
     let page = 1, total = 1;
+
     do {
       const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(tz)}`;
       try {
@@ -217,15 +288,21 @@ async function fetchAllEuropeFixturesFast(date){
         const resp = r.data || {};
         total = resp?.paging?.total || 1;
         const arr = resp?.response || [];
+
         for (const f of arr) {
           if (inEuropeClubScope(f)) out.push(f);
           if (out.length >= MAX_FIXTURES_TO_SCORE) return out; // early exit
         }
-      } catch (e) { break; }
+      } catch (e) {
+        console.log('[fixtures fetch error]', url, e.response?.status, e.response?.data || e.message);
+        break;
+      }
+
       page += 1;
       if (page > MAX_FIXTURE_PAGES) break;                     // page cap
       if (page <= total) await new Promise(r => setTimeout(r, 120));
     } while (page <= total);
+
     return out;
   };
 
@@ -234,6 +311,7 @@ async function fetchAllEuropeFixturesFast(date){
   for (const tz of TZ) { const b = await tryFetch(`from=${date}&to=${date}`, tz); if (b.length) return b; }
   return [];
 }
+
 // ====== DATA DIR / CALIBRATION / CACHE ======================================
 const IS_VERCEL = !!process.env.VERCEL;
 const DATA_DIR  = process.env.DATA_DIR || (IS_VERCEL ? '/tmp/overedge-data' : path.join(__dirname, '..', 'data'));
@@ -244,9 +322,9 @@ function defaultCalibration(){
   return {
     updatedAt: null, horizonDays: 0,
     markets: {
-      OU25: { Over:{bins:[],mapping:[]}, Under:{bins:[],mapping:[]} },
-      BTTS: { Yes:{bins:[],mapping:[]},   No:{bins:[],mapping:[]} },
-      ONE_X_TWO: { Home:{bins:[],mapping:[]}, Draw:{bins:[],mapping:[]}, Away:{bins:[],mapping:[]} }
+      OU25:     { Over:{bins:[],mapping:[]}, Under:{bins:[],mapping:[]} },
+      BTTS:     { Yes:{bins:[],mapping:[]},   No:{bins:[],mapping:[]} },
+      ONE_X_TWO:{ Home:{bins:[],mapping:[]},  Draw:{bins:[],mapping:[]}, Away:{bins:[],mapping:[]} }
     },
     note: 'Identity mapping.'
   };
@@ -258,9 +336,14 @@ async function ensureDataFiles(){
 }
 async function loadJSON(f, fb){ try { return JSON.parse(await fsp.readFile(f,'utf-8')); } catch { return fb; } }
 async function saveJSON(f, obj){ await fsp.writeFile(f, JSON.stringify(obj, null, 2)); }
+
 let CAL = defaultCalibration();
 const dailyPicksCache = new Map();
-async function loadDailyCacheIntoMap(){ const obj = await loadJSON(DAILY_FILE, {}); dailyPicksCache.clear(); for (const [k,v] of Object.entries(obj)) dailyPicksCache.set(k,v); }
+async function loadDailyCacheIntoMap(){
+  const obj = await loadJSON(DAILY_FILE, {});
+  dailyPicksCache.clear();
+  for (const [k,v] of Object.entries(obj)) dailyPicksCache.set(k,v);
+}
 async function persistDailyCache(){
   const keepDays=14, cutoff = new Date(); cutoff.setDate(cutoff.getDate()-keepDays);
   const asObj = {};
@@ -275,14 +358,22 @@ function interp(mapping, x){
   if (!Array.isArray(mapping) || !mapping.length) return x;
   if (x <= mapping[0].x) return mapping[0].y;
   if (x >= mapping[mapping.length-1].x) return mapping[mapping.length-1].y;
-  for (let i=1;i<mapping.length;i++){ const a=mapping[i-1], b=mapping[i]; if (x <= b.x){ const t=(x-a.x)/(b.x-a.x||1); return a.y + t*(b.y-a.y); } }
+  for (let i=1;i<mapping.length;i++){
+    const a=mapping[i-1], b=mapping[i];
+    if (x <= b.x){ const t=(x-a.x)/(b.x-a.x||1); return a.y + t*(b.y-a.y); }
+  }
   return x;
 }
 function asPct(n){ return Math.max(1, Math.min(99, Math.round(Number(n)||0))); }
-function calibrate(market, side, confRaw){ const m = CAL.markets?.[market]; const map = m?.[side]?.mapping; return asPct(interp(map, confRaw)); }
+function calibrate(market, side, confRaw){
+  const m = CAL.markets?.[market];
+  const map = m?.[side]?.mapping;
+  return asPct(interp(map, confRaw));
+}
 
 // ====== MODEL: team stats + probabilities ===================================
 const statsCache = new Map(); // key raw_{league}_{season}_{team}
+
 async function fetchTeamStatsRaw(leagueId, season, teamId){
   const key = `raw_${leagueId}_${season}_${teamId}`;
   if (statsCache.has(key)) return statsCache.get(key);
@@ -292,7 +383,9 @@ async function fetchTeamStatsRaw(leagueId, season, teamId){
     const data = r.data?.response || null;
     statsCache.set(key, data);
     return data;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 function normalizeStats(resp){
   if (!resp) return null;
@@ -351,7 +444,10 @@ function probHomeWin(lambdaH, lambdaA, maxK=10){
 function probDraw(lambdaH, lambdaA, maxK=10){
   let p=0; for(let k=0;k<=maxK;k++){ p += poissonP(lambdaH,k)*poissonP(lambdaA,k); } return Math.min(Math.max(p,0),1);
 }
-function probBTTS_lambda(lambdaH, lambdaA){ const p0h=Math.exp(-lambdaH), p0a=Math.exp(-lambdaA); return Math.min(Math.max(1 - p0h - p0a + p0h*p0a, 0), 1); }
+function probBTTS_lambda(lambdaH, lambdaA){
+  const p0h=Math.exp(-lambdaH), p0a=Math.exp(-lambdaA);
+  return Math.min(Math.max(1 - p0h - p0a + p0h*p0a, 0), 1);
+}
 
 function estimateLambdasFromTeamStats(h,a){
   const estH = Math.max(((h.avgGF||0)+(a.avgGA||0))/2, 0.05);
@@ -416,8 +512,7 @@ function buildFreeReason(f, h, a, m, side) {
 // ====== FREE PICKS (model-only top 2) ========================================
 async function pickEuropeTwo({ date, season, minConf, wantDebug=false }){
   const fixturesFull = await fetchAllEuropeFixturesFast(date);
-  // Cap amount we score to avoid timeouts
-  const fixtures = fixturesFull.slice(0, MAX_FIXTURES_TO_SCORE);
+  const fixtures = fixturesFull.slice(0, MAX_FIXTURES_TO_SCORE); // safety cap
 
   const cand = [];
   for (const f of fixtures) {
@@ -470,8 +565,8 @@ app.get('/api/free-picks', async (req,res)=>{
 
     const date = req.query.date || todayYMD();
     const season = seasonFromDate(date);
-    const minConf = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
-    const force   = req.query.refresh === '1';
+    const minConf   = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
+    const force     = req.query.refresh === '1';
     const wantDebug = req.query.debug === '1';
 
     await ensureDataFiles();
@@ -522,6 +617,7 @@ app.get('/api/free-picks', async (req,res)=>{
     res.status(500).json({ error:'failed_to_load_picks', detail:e?.message || String(e) });
   }
 });
+
 // ====== Pro Board helper =====================================================
 function logistic(p, k=1.2){ return 1/(1+Math.exp(-k*p)); }
 
@@ -675,6 +771,12 @@ module.exports = app;
 
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  (async () => { try { await ensureDataFiles(); CAL = await loadJSON(CAL_FILE, defaultCalibration()); await loadDailyCacheIntoMap(); } catch {} })();
+  (async () => {
+    try {
+      await ensureDataFiles();
+      CAL = await loadJSON(CAL_FILE, defaultCalibration());
+      await loadDailyCacheIntoMap();
+    } catch {}
+  })();
   app.listen(PORT, ()=> console.log(`🟢 http://localhost:${PORT}`));
 }
