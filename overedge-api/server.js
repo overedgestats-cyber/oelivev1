@@ -1,17 +1,17 @@
 ﻿// overedge-api/server.js
-// OverEdge API (clean): Free Picks + Pro Board + Hero Bet (+ Stripe, Firebase auth)
+// OverEdge API: Free Picks + Pro Board + Hero Bet (+ Stripe, Firebase auth)
 
 if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
   try { require('dotenv').config(); } catch (_) {}
 }
 
-const express     = require('express');
-const axios       = require('axios');
-const path        = require('path');
-const fs          = require('fs');
-const fsp         = require('fs/promises');
-const cors        = require('cors');
-const bodyParser  = require('body-parser');
+const express = require('express');
+const axios   = require('axios');
+const path    = require('path');
+const fs      = require('fs');
+const fsp     = require('fs/promises');
+const cors    = require('cors');
+const bodyParser = require('body-parser');
 
 // ====== ENV / CONSTANTS ======================================================
 
@@ -20,23 +20,17 @@ const API_KEY  = process.env.API_FOOTBALL_KEY || '';
 if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY (data routes will 500)');
 
 const REQUEST_TIMEOUT_MS    = Number(process.env.REQUEST_TIMEOUT_MS || 10000);
-const MAX_FIXTURE_PAGES     = Number(process.env.MAX_FIXTURE_PAGES  || 3);    // page cap per TZ
+const MAX_FIXTURE_PAGES     = Number(process.env.MAX_FIXTURE_PAGES  || 3);
 const MAX_FIXTURES_TO_SCORE = Number(process.env.MAX_FIXTURES_TO_SCORE || 220);
 
 const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
   .split(',').map(s => s.trim().toLowerCase());
 
-// Pro Board markets (UI filter)
 const PRO_MARKETS = (process.env.PRO_MARKETS || 'OU25,BTTS,ONE_X_TWO,CARDS,CORNERS')
   .split(',').map(s => s.trim().toUpperCase());
-
 const PRO_MAX_ROWS = Number(process.env.PRO_MAX_ROWS || 200);
 
-// Free Picks (model-only) threshold
 const FREEPICKS_MIN_CONF = Number(process.env.FREEPICKS_MIN_CONF || 65);
-
-// Axios with key + timeout
-const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: REQUEST_TIMEOUT_MS };
 
 // ====== APP ==================================================================
 const app = express();
@@ -93,10 +87,8 @@ const admin = require('firebase-admin');
 const db = (() => { try { return admin.firestore(); } catch { return null; } })();
 
 function decodeJwtNoVerify(token) {
-  try {
-    const p = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
-    return JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
-  } catch { return null; }
+  try { const p = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(Buffer.from(p, 'base64').toString('utf8')); }
+  catch { return null; }
 }
 async function requireAuth(req, res, next) {
   const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
@@ -184,72 +176,13 @@ app.use(express.json());
 app.get('/api/health', (_req,res) => res.json({ ok:true, hasKey: !!API_KEY, tz: API_TZ }));
 app.get('/api/whoami', requireAuth, (req,res)=> res.json({ ok:true, uid:req.user?.uid||null, email:req.user?.email||null }));
 
-// ====== DEBUG: check API-Sports and raw fixtures ============================
-app.get('/api/__debug/apisports-status', async (_req, res) => {
-  try {
-    const r = await axios.get('https://v3.football.api-sports.io/status', AXIOS);
-    res.json({ ok: true, status: r.status, data: r.data });
-  } catch (e) {
-    res.status(500).json({
-      ok: false,
-      message: e.message,
-      status: e.response?.status || null,
-      data: e.response?.data || null
-    });
-  }
-});
-
-app.get('/api/__debug/raw-fixtures', async (req, res) => {
-  const date = req.query.date || todayYMD();
-  const tz   = req.query.tz   || 'Europe/London';
-  const page = Number(req.query.page || 1);
-  const url  = `https://v3.football.api-sports.io/fixtures?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(tz)}&page=${page}`;
-
-  try {
-    const r = await axios.get(url, AXIOS);
-    const body = r.data || {};
-    const sample = (body.response || []).slice(0, 5).map(f => ({
-      id: f.fixture?.id,
-      date: f.fixture?.date,
-      leagueId: f.league?.id,
-      leagueName: f.league?.name,
-      leagueType: f.league?.type,
-      leagueCountry: f.league?.country,
-      home: f.teams?.home?.name,
-      away: f.teams?.away?.name
-    }));
-    res.json({
-      ok: true,
-      status: r.status,
-      date,
-      tz,
-      url,
-      paging: body.paging || null,
-      errors: body.errors || null,
-      count: (body.response || []).length,
-      sample
-    });
-  } catch (e) {
-    res.status(500).json({
-      ok: false,
-      date,
-      tz,
-      url,
-      message: e.message,
-      status: e.response?.status || null,
-      data: e.response?.data || null
-    });
-  }
-});
-
 // ====== FIXTURE HELPERS / FETCH =============================================
 function todayYMD(){ return new Date().toISOString().slice(0,10); }
-function seasonFromDate(dateStr){
-  const d = new Date(dateStr);
-  const y = d.getUTCFullYear(), m = d.getUTCMonth()+1;
-  return (m >= 7) ? y : y - 1;
-}
+function seasonFromDate(dateStr){ const d = new Date(dateStr); const y = d.getUTCFullYear(), m = d.getUTCMonth()+1; return (m >= 7) ? y : y - 1; }
 
+const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: REQUEST_TIMEOUT_MS };
+
+// Europe domestic countries only (no 'Europe', no 'World')
 const EURO_COUNTRIES = new Set([
   'England','Spain','Italy','Germany','France','Scotland','Wales','Northern Ireland','Ireland',
   'Norway','Sweden','Denmark','Finland','Iceland','Estonia','Latvia','Lithuania',
@@ -258,29 +191,57 @@ const EURO_COUNTRIES = new Set([
   'Bulgaria','Romania','Hungary','Czech Republic','Slovakia','Poland',
   'Portugal','Greece','Turkey','Cyprus','Malta',
   'Ukraine','Belarus','Moldova','Georgia','Armenia','Azerbaijan',
-  'Andorra','San Marino','Gibraltar','Faroe Islands','Europe','World'
+  'Andorra','San Marino','Gibraltar','Faroe Islands'
 ]);
-const UEFA_IDS = new Set([2,3,848,4,15,16]); // UCL, UEL, UECL, Super Cup, Euros, Euro Qual
 
 function isYouthFixture(f){
-  const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name]
-    .filter(Boolean).join(' ').toLowerCase();
+  const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name].filter(Boolean).join(' ').toLowerCase();
   return /\b(u1[6-9]|u2[0-3]|under\s?(1[6-9]|2[0-3])|youth|academy|women|ladies|fem(?:en|in)|reserve|reserves|b[\s-]?team)\b/.test(s);
 }
 
-// TEMPORARY: include both "league" and "cup" types so weekends show up fully
-function inEuropeClubScope(f){
-  const lid = f?.league?.id, c = f?.league?.country;
+// Domestic only (exclude UEFA/World), still screen out youth/reserves
+function isDomesticFixture(f) {
+  if (isYouthFixture(f)) return false;
+  const c = f?.league?.country || '';
+  return EURO_COUNTRIES.has(c);
+}
+
+// Heuristics for L1/L2
+const TOP1_RX = /(premier|premiership|primera(?!\sfed)|la\s*liga\b(?!\s*2)|ligue\s*1\b|bundesliga(?!\s*2)|serie\s*a\b|eredivisie|super\s*lig(?!\s*2)|superliga(?!\s*2)|eliteserien|allsvenskan|superligaen|veikkausliiga|ekstraklasa|hnl\b|pro\s*league|jupiler|super\s*league(?!\s*2))/i;
+const TOP2_RX = /(championship\b|la\s*liga\s*2|laliga\s*2|segunda\s+divisi(?:ón|on)|serie\s*b\b|2\.\s*bundesliga|ligue\s*2|eerste\s*divisie|liga\s*portugal\s*2|obos|obos-ligaen|superettan|i\s*liga\b|1st\s*division|first\s*division|1\.\s*division|1st\s*div\b|liga\s*2\b|2nd\s*division\b)/i;
+const TIER3_PLUS_RX = /(league\s*one|league\s*two|3\.\s*liga|serie\s*c|primera\s*federaci|segunda\s*federaci|national\b(?!\scup)|regionalliga|tweede\s*divisie|liga\s*3\b|liga\s*iii\b)/i;
+
+function isTop2League(f) {
   const t = (f?.league?.type || '').toLowerCase();
-  const typeOK = (t === 'league' || t === 'cup');
-  return !isYouthFixture(f) && (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) && typeOK;
+  if (t !== 'league') return false;
+  const name = f?.league?.name || '';
+  if (TIER3_PLUS_RX.test(name)) return false;
+  return TOP1_RX.test(name) || TOP2_RX.test(name);
+}
+
+// National cups (exclude Super Cups/UEFA/etc.)
+const CUP_POS_RX = /(cup|copa|pokal|coupe|taça|kupa|kup|puchar|pohár|kubok|kypello|kypello|kypello)/i;
+const CUP_NEG_RX = /(super|shield|trophy|supercopa|supercup|community|uefa|champions|europa|conference)/i;
+
+function isNationalCup(f) {
+  const t = (f?.league?.type || '').toLowerCase();
+  if (t !== 'cup') return false;
+  if (!isDomesticFixture(f)) return false;
+  const name = f?.league?.name || '';
+  return CUP_POS_RX.test(name) && !CUP_NEG_RX.test(name);
+}
+
+// Filter used at fetch stage: domestic leagues & national cups only
+function inEuropeClubScope(f){
+  if (!isDomesticFixture(f)) return false;
+  const t = (f?.league?.type || '').toLowerCase();
+  return t === 'league' || t === 'cup';
 }
 
 async function fetchAllEuropeFixturesFast(date){
   const tryFetch = async (query, tz) => {
     const out = [];
     let page = 1, total = 1;
-
     do {
       const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(tz)}`;
       try {
@@ -288,21 +249,17 @@ async function fetchAllEuropeFixturesFast(date){
         const resp = r.data || {};
         total = resp?.paging?.total || 1;
         const arr = resp?.response || [];
-
         for (const f of arr) {
-          if (inEuropeClubScope(f)) out.push(f);
-          if (out.length >= MAX_FIXTURES_TO_SCORE) return out; // early exit
+          if (inEuropeClubScope(f)) {
+            out.push(f);
+            if (out.length >= MAX_FIXTURES_TO_SCORE) return out; // early cap
+          }
         }
-      } catch (e) {
-        console.log('[fixtures fetch error]', url, e.response?.status, e.response?.data || e.message);
-        break;
-      }
-
+      } catch { break; }
       page += 1;
-      if (page > MAX_FIXTURE_PAGES) break;                     // page cap
+      if (page > MAX_FIXTURE_PAGES) break;
       if (page <= total) await new Promise(r => setTimeout(r, 120));
     } while (page <= total);
-
     return out;
   };
 
@@ -322,9 +279,9 @@ function defaultCalibration(){
   return {
     updatedAt: null, horizonDays: 0,
     markets: {
-      OU25:     { Over:{bins:[],mapping:[]}, Under:{bins:[],mapping:[]} },
-      BTTS:     { Yes:{bins:[],mapping:[]},   No:{bins:[],mapping:[]} },
-      ONE_X_TWO:{ Home:{bins:[],mapping:[]},  Draw:{bins:[],mapping:[]}, Away:{bins:[],mapping:[]} }
+      OU25: { Over:{bins:[],mapping:[]}, Under:{bins:[],mapping:[]} },
+      BTTS: { Yes:{bins:[],mapping:[]},   No:{bins:[],mapping:[]} },
+      ONE_X_TWO: { Home:{bins:[],mapping:[]}, Draw:{bins:[],mapping:[]}, Away:{bins:[],mapping:[]} }
     },
     note: 'Identity mapping.'
   };
@@ -336,14 +293,9 @@ async function ensureDataFiles(){
 }
 async function loadJSON(f, fb){ try { return JSON.parse(await fsp.readFile(f,'utf-8')); } catch { return fb; } }
 async function saveJSON(f, obj){ await fsp.writeFile(f, JSON.stringify(obj, null, 2)); }
-
 let CAL = defaultCalibration();
 const dailyPicksCache = new Map();
-async function loadDailyCacheIntoMap(){
-  const obj = await loadJSON(DAILY_FILE, {});
-  dailyPicksCache.clear();
-  for (const [k,v] of Object.entries(obj)) dailyPicksCache.set(k,v);
-}
+async function loadDailyCacheIntoMap(){ const obj = await loadJSON(DAILY_FILE, {}); dailyPicksCache.clear(); for (const [k,v] of Object.entries(obj)) dailyPicksCache.set(k,v); }
 async function persistDailyCache(){
   const keepDays=14, cutoff = new Date(); cutoff.setDate(cutoff.getDate()-keepDays);
   const asObj = {};
@@ -358,22 +310,14 @@ function interp(mapping, x){
   if (!Array.isArray(mapping) || !mapping.length) return x;
   if (x <= mapping[0].x) return mapping[0].y;
   if (x >= mapping[mapping.length-1].x) return mapping[mapping.length-1].y;
-  for (let i=1;i<mapping.length;i++){
-    const a=mapping[i-1], b=mapping[i];
-    if (x <= b.x){ const t=(x-a.x)/(b.x-a.x||1); return a.y + t*(b.y-a.y); }
-  }
+  for (let i=1;i<mapping.length;i++){ const a=mapping[i-1], b=mapping[i]; if (x <= b.x){ const t=(x-a.x)/(b.x-a.x||1); return a.y + t*(b.y-a.y); } }
   return x;
 }
 function asPct(n){ return Math.max(1, Math.min(99, Math.round(Number(n)||0))); }
-function calibrate(market, side, confRaw){
-  const m = CAL.markets?.[market];
-  const map = m?.[side]?.mapping;
-  return asPct(interp(map, confRaw));
-}
+function calibrate(market, side, confRaw){ const m = CAL.markets?.[market]; const map = m?.[side]?.mapping; return asPct(interp(map, confRaw)); }
 
 // ====== MODEL: team stats + probabilities ===================================
 const statsCache = new Map(); // key raw_{league}_{season}_{team}
-
 async function fetchTeamStatsRaw(leagueId, season, teamId){
   const key = `raw_${leagueId}_${season}_${teamId}`;
   if (statsCache.has(key)) return statsCache.get(key);
@@ -383,9 +327,7 @@ async function fetchTeamStatsRaw(leagueId, season, teamId){
     const data = r.data?.response || null;
     statsCache.set(key, data);
     return data;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 function normalizeStats(resp){
   if (!resp) return null;
@@ -444,10 +386,7 @@ function probHomeWin(lambdaH, lambdaA, maxK=10){
 function probDraw(lambdaH, lambdaA, maxK=10){
   let p=0; for(let k=0;k<=maxK;k++){ p += poissonP(lambdaH,k)*poissonP(lambdaA,k); } return Math.min(Math.max(p,0),1);
 }
-function probBTTS_lambda(lambdaH, lambdaA){
-  const p0h=Math.exp(-lambdaH), p0a=Math.exp(-lambdaA);
-  return Math.min(Math.max(1 - p0h - p0a + p0h*p0a, 0), 1);
-}
+function probBTTS_lambda(lambdaH, lambdaA){ const p0h=Math.exp(-lambdaH), p0a=Math.exp(-lambdaA); return Math.min(Math.max(1 - p0h - p0a + p0h*p0a, 0), 1); }
 
 function estimateLambdasFromTeamStats(h,a){
   const estH = Math.max(((h.avgGF||0)+(a.avgGA||0))/2, 0.05);
@@ -509,48 +448,68 @@ function buildFreeReason(f, h, a, m, side) {
   }
 }
 
-// ====== FREE PICKS (model-only top 2) ========================================
+// ====== FREE PICKS (L1/L2 first, then cups fallback) =========================
 async function pickEuropeTwo({ date, season, minConf, wantDebug=false }){
   const fixturesFull = await fetchAllEuropeFixturesFast(date);
-  const fixtures = fixturesFull.slice(0, MAX_FIXTURES_TO_SCORE); // safety cap
+  const fixtures = fixturesFull.slice(0, MAX_FIXTURES_TO_SCORE);
 
-  const cand = [];
-  for (const f of fixtures) {
+  const leagueTop2  = fixtures.filter(isTop2League);
+  const cupDomestic = fixtures.filter(isNationalCup);
+
+  const scoreOne = async (f) => {
     try {
       const L   = f.league?.id;
       const hId = f.teams?.home?.id;
       const aId = f.teams?.away?.id;
-      if (!L || !hId || !aId) continue;
+      if (!L || !hId || !aId) return null;
 
       const [h, a] = await Promise.all([
         getTeamStatsBlended(L, season, hId),
         getTeamStatsBlended(L, season, aId),
       ]);
-      if (!h || !a) continue;
+      if (!h || !a) return null;
 
       const model = estimateLambdasFromTeamStats(h, a);
-
       const so = scoreOver25(h, a);
       const su = scoreUnder25(h, a);
-      let side, confRaw;
-      if (so.confidence >= su.confidence) { side = 'Over 2.5';  confRaw = so.confidence; }
-      else                                 { side = 'Under 2.5'; confRaw = su.confidence; }
 
-      if (confRaw < minConf) continue;
+      let side = 'Over 2.5';
+      let confRaw = so.confidence;
+      if (su.confidence > so.confidence) { side = 'Under 2.5'; confRaw = su.confidence; }
+      if (confRaw < minConf) return null;
+
       const confCal = calibrate('OU25', /under/i.test(side) ? 'Under' : 'Over', confRaw);
-
-      cand.push({
+      return {
         f, h, a, model,
         side,
         confidenceRaw: asPct(confRaw),
-        confidence:    asPct(confCal)
-      });
-    } catch (_) {}
+        confidence: asPct(confCal)
+      };
+    } catch { return null; }
+  };
+
+  const cand = [];
+
+  // Pass 1: top-two domestic leagues
+  for (const f of leagueTop2) {
+    const c = await scoreOne(f);
+    if (c) cand.push(c);
+  }
+
+  // Pass 2 (fallback): national cups
+  if (cand.length < 2) {
+    for (const f of cupDomestic) {
+      const c = await scoreOne(f);
+      if (c) cand.push(c);
+      if (cand.length >= 2) break;
+    }
   }
 
   const dbg = wantDebug ? {
     fixturesTotal: fixturesFull.length,
     fixturesScored: fixtures.length,
+    leaguesTop2: leagueTop2.length,
+    cupsDomestic: cupDomestic.length,
     countriesSample: Array.from(new Set(fixtures.map(x => x.league?.country))).slice(0, 10),
     leaguesSample: Array.from(new Set(fixtures.map(x => x.league?.name))).slice(0, 12),
   } : undefined;
@@ -565,8 +524,8 @@ app.get('/api/free-picks', async (req,res)=>{
 
     const date = req.query.date || todayYMD();
     const season = seasonFromDate(date);
-    const minConf   = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
-    const force     = req.query.refresh === '1';
+    const minConf = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
+    const force   = req.query.refresh === '1';
     const wantDebug = req.query.debug === '1';
 
     await ensureDataFiles();
@@ -590,7 +549,7 @@ app.get('/api/free-picks', async (req,res)=>{
         kickoff: x.f.fixture.date,
         market: 'Over/Under 2.5 Goals',
         prediction: x.side,
-        odds: '—', // model-only
+        odds: '—',
         confidence: x.confidence,
         confidenceRaw: x.confidenceRaw,
         reasoning: buildFreeReason(x.f, x.h, x.a, x.model, x.side)
@@ -637,7 +596,6 @@ function pickFromModelForFixture(f, h, a, m){
   const c1raw = Math.round(50+Math.abs(p1-0.5)*80), c1cal = calibrate('ONE_X_TWO', side1, c1raw);
   out.push({ market:'ONE_X_TWO', selection: side1, confidenceRaw: asPct(c1raw), confidence: asPct(c1cal), reason:`1X2 H ${Math.round(m.pH*100)} / D ${Math.round(m.pD*100)} / A ${Math.round(m.pA*100)}` });
 
-  // simple UI chips for cards / corners
   const PRIOR_CARDS_AVG= Number(process.env.PRIOR_CARDS_AVG||4.6);
   const CARDS_OU_LINE  = Number(process.env.CARDS_OU_LINE  || 4.5);
   const CORNERS_OU_LINE= Number(process.env.CORNERS_OU_LINE|| 9.5);
@@ -715,7 +673,7 @@ app.get('/api/pro-board', requireAuth, requirePro, async (req,res)=>{
   }
 });
 
-// ====== /api/hero-bet (model-only, OU window not enforced) ===================
+// ====== /api/hero-bet ========================================================
 app.get('/api/hero-bet', requireAuth, requirePro, async (req,res)=>{
   try{
     if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
@@ -771,12 +729,6 @@ module.exports = app;
 
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  (async () => {
-    try {
-      await ensureDataFiles();
-      CAL = await loadJSON(CAL_FILE, defaultCalibration());
-      await loadDailyCacheIntoMap();
-    } catch {}
-  })();
+  (async () => { try { await ensureDataFiles(); CAL = await loadJSON(CAL_FILE, defaultCalibration()); await loadDailyCacheIntoMap(); } catch {} })();
   app.listen(PORT, ()=> console.log(`🟢 http://localhost:${PORT}`));
 }
