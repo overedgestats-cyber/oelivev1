@@ -661,166 +661,131 @@ function buildFreeReason(f, h, a, m, side) {
     ].join(' ');
   }
 }
-// === FREE PICKS ==============================================================
-// New approach: scan ALL European club fixtures for the day (exclude youth & Euro national teams),
-// compute OU2.5 model confidence for each, and pick the top K by calibrated confidence.
-// No odds-based filtering or ranking.
+// === FREE PICKS (simple top-2) ==============================================
+const ODDS_MIN = 1.40, ODDS_MAX = 1.90;
+const FREEPICKS_SCAN_CAP = Number(process.env.FREEPICKS_SCAN_CAP || 200);  // safety cap
+const FREEPICKS_ODDS_CANDIDATES = Number(process.env.FREEPICKS_ODDS_CANDS || 30);
 
-async function pickEuropeAllClub({ date, season, minConf, wantDebug=false }){
-  const fixtures = await fetchAllEuropeFixturesFast(date);
-  const fixturesTotal = fixtures.length;
+function isDomesticLeagueTopTwo(f) {
+  if (!f?.league) return false;
+  if ((f.league.type || '').toLowerCase() !== 'league') return false; // exclude cups
+  if (!EURO_COUNTRIES.has(f.league.country)) return false;
+  if (isYouthFixture(f)) return false;
 
-  // club fixtures in Europe (include domestic leagues/cups + UCL/UEL/UECL/Super Cup)
-  const list = fixtures.filter(f=>{
-    const lid = f.league?.id;
-    const c   = f.league?.country;
-    if (isYouthFixture(f)) return false;
-    if (!EURO_COUNTRIES.has(c) && !UEFA_IDS.has(lid)) return false;
-    if (UEFA_NATIONAL_IDS.has(lid)) return false; // exclude Euros/Qualifiers (national teams)
-    return true;
-  });
+  // Heuristic: include likely 1st/2nd tiers; keeps it simple & broad.
+  const n = (f.league.name || '').toLowerCase();
+  return /\b(1|i|premier|super|elite|liga|ligue|bundes|serie a|first|top|premiership)\b/.test(n) ||
+         /\b(2|ii|segunda|liga 2|liga2|ligue 2|bundesliga 2|serie b|championship|first division b)\b/.test(n);
+}
 
-  const cand = [];
-  for (const f of list) {
+async function pickTop2Simple({ date, season, minConf = 65 }) {
+  const fixturesAll = await fetchAllEuropeFixturesFast(date);
+  const pool = fixturesAll
+    .filter(isDomesticLeagueTopTwo)
+    .sort((a,b) => new Date(a.fixture?.date || 0) - new Date(b.fixture?.date || 0))
+    .slice(0, FREEPICKS_SCAN_CAP);
+
+  // Step 1: model-only scoring for everyone (no odds yet)
+  const prelim = [];
+  for (const f of pool) {
     try {
-      const L   = f.league?.id;
-      const hId = f.teams?.home?.id;
-      const aId = f.teams?.away?.id;
+      const L = f.league?.id, hId = f.teams?.home?.id, aId = f.teams?.away?.id;
       if (!L || !hId || !aId) continue;
-
       const [h, a] = await Promise.all([
         getTeamStatsBlended(L, season, hId),
         getTeamStatsBlended(L, season, aId),
       ]);
       if (!h || !a) continue;
 
-      const model = estimateLambdasFromTeamStats(h, a);
-
-      // pick stronger side purely by model confidence (no odds)
+      const m = estimateLambdasFromTeamStats(h, a);
       const so = scoreOver25(h, a, null);
       const su = scoreUnder25(h, a, null);
 
-      let side, confRaw;
-      if (so.confidence >= su.confidence) { side = 'Over 2.5';  confRaw = so.confidence; }
-      else                                 { side = 'Under 2.5'; confRaw = su.confidence; }
-
+      const side = (so.confidence >= su.confidence) ? 'Over 2.5' : 'Under 2.5';
+      const confRaw = Math.max(so.confidence, su.confidence);
       if (confRaw < minConf) continue;
 
-      const confCal = calibrate('OU25', /under/i.test(side) ? 'Under' : 'Over', confRaw);
-
-      cand.push({
-        f, h, a, model,
-        side,
-        confidenceRaw: asPct(confRaw),
-        confidence:    asPct(confCal),
-      });
-    } catch (e) {
-      console.log('free cand err', f?.fixture?.id, e.message);
-    }
+      prelim.push({ f, h, a, m, side, confRaw });
+    } catch (_) {}
   }
 
-  // sort by calibrated confidence desc, tie-break by earlier kickoff
-  cand.sort((a,b)=>{
-    if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-    return new Date(a.f.fixture?.date) - new Date(b.f.fixture?.date);
-  });
+  // Keep top N to fetch odds
+  prelim.sort((a,b) => b.confRaw - a.confRaw);
+  const topForOdds = prelim.slice(0, FREEPICKS_ODDS_CANDIDATES);
 
-  const dbg = wantDebug ? {
-    fixturesTotal,
-    scanned: list.length,
-    leaguesSample: Array.from(new Set(list.map(x => x.league?.id))).slice(0, 20),
-    countriesSample: Array.from(new Set(list.map(x => x.league?.country))).slice(0, 12),
-  } : undefined;
+  // Step 2: fetch OU odds only for those and apply 1.40–1.90 screen
+  const screened = [];
+  for (const x of topForOdds) {
+    try {
+      const { over, under } = await fetchOuOddsMedian(x.f.fixture?.id);
+      const price = x.side.startsWith('Over') ? over : under;
+      if (typeof price !== 'number') continue;
+      if (price < ODDS_MIN || price > ODDS_MAX) continue;
 
-  return { cand, dbg };
+      // slight nudge using odds when available
+      const so = scoreOver25(x.h, x.a, over);
+      const su = scoreUnder25(x.h, x.a, under);
+      const confRaw = Math.max(so.confidence, su.confidence);
+      const confCal = calibrate('OU25', /under/i.test(x.side) ? 'Under' : 'Over', confRaw);
+
+      screened.push({
+        f: x.f, h: x.h, a: x.a, m: x.m,
+        side: x.side,
+        odds: price,
+        confidenceRaw: asPct(confRaw),
+        confidence: asPct(confCal),
+      });
+    } catch (_) {}
+  }
+
+  // Fallback: if odds screen killed everything, use model-only top 2 (no odds)
+  const finalList = (screened.length ? screened : prelim)
+    .sort((a,b) => (b.confidence || b.confRaw) - (a.confidence || a.confRaw))
+    .slice(0, 2);
+
+  // Shape picks for the UI
+  const picks = finalList.map(x => ({
+    match: `${x.f.teams.home.name} vs ${x.f.teams.away.name}`,
+    league: x.f.league.name,
+    kickoff: x.f.fixture.date,
+    market: 'Over/Under 2.5 Goals',
+    prediction: x.side,
+    odds: (typeof x.odds === 'number') ? x.odds.toFixed(2) : '—',
+    confidence: x.confidence || asPct(x.confRaw),
+    confidenceRaw: x.confidenceRaw || asPct(x.confRaw),
+    reasoning: buildFreeReason(x.f, x.h, x.a, x.m, x.side)
+  }));
+
+  return {
+    poolSize: pool.length,
+    candidates: prelim.length,
+    picks
+  };
 }
 
-app.get('/api/free-picks', async (req,res)=>{
-  try{
-    if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
-
-    const date = req.query.date || todayYMD();
-    const season = seasonFromDate(date);
-    const minConf    = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
-    const wantDebug  = req.query.debug === '1';
-    const force      = req.query.refresh === '1';
-
-    await ensureDataFiles();
-    CAL = await loadJSON(CAL_FILE, defaultCalibration());
-    if (!force && dailyPicksCache.size === 0) await loadDailyCacheIntoMap();
-
-    const cacheKey = `${date}|${minConf}|model_only`;
-    if (!force && dailyPicksCache.has(cacheKey)){
-      const cachedPayload = { ...(dailyPicksCache.get(cacheKey)), cached:true };
-      if (!wantDebug) return res.json(cachedPayload);
-    }
-
-    const { cand, dbg } = await pickEuropeAllClub({ date, season, minConf, wantDebug });
-
-    const picks = cand.slice(0, FREEPICKS_TOP_K).map(x => ({
-      match: `${x.f.teams.home.name} vs ${x.f.teams.away.name}`,
-      league: x.f.league.name,
-      kickoff: x.f.fixture.date,
-      market: 'Over/Under 2.5 Goals',
-      prediction: x.side,
-      odds: '—', // not used for ranking
-      confidence: x.confidence,
-      confidenceRaw: x.confidenceRaw,
-      reasoning: buildFreeReason(x.f, x.h, x.a, x.model, x.side)
-    }));
-
-    const payload = {
-      dateRequested: date,
-      dateUsed: date,
-      thresholds: { minConf },
-      meta: { candidates: cand.length, ...(wantDebug ? { debug: dbg } : {}) },
-      picks,
-      computedAt: new Date().toISOString(),
-      cached:false
-    };
-
-    if (!wantDebug) {
-      dailyPicksCache.set(cacheKey, payload);
-      await persistDailyCache();
-    }
-
-    res.json(payload);
-  }catch(e){
-    console.error('free-picks error', e.message);
-    res.status(500).json({ error:'failed_to_load_picks', detail:e.message });
-  }
-});
-
-// Free-picks leagues helpers (unchanged logic other than excluding national-team comps)
-app.get('/api/free-picks/leagues', async (req, res) => {
+app.get('/api/free-picks', async (req, res) => {
   try {
     if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
     const date = req.query.date || todayYMD();
-    const fixtures = await fetchAllEuropeFixturesFast(date);
+    const season = seasonFromDate(date);
+    const minConf = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
 
-    const pool = fixtures.filter(f => {
-      const c = f.league?.country, id = f.league?.id;
-      if (isYouthFixture(f)) return false;
-      if (UEFA_NATIONAL_IDS.has(id)) return false; // exclude Euros/Qualifiers
-      if (!EURO_COUNTRIES.has(c) && !UEFA_IDS.has(id)) return false;
-      return true;
+    const { poolSize, candidates, picks } = await pickTop2Simple({ date, season, minConf });
+
+    res.json({
+      dateRequested: date,
+      dateUsed: date,
+      thresholds: { minConf, oddsWindow: [ODDS_MIN, ODDS_MAX] },
+      meta: { poolSize, candidates },
+      picks,
+      computedAt: new Date().toISOString()
     });
-
-    const leagues = Array.from(
-      new Map(pool.map(f => [f.league.id, {
-        id: f.league.id,
-        name: f.league.name,
-        country: f.league.country,
-        type: f.league.type
-      }])).values()
-    ).sort((a,b) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
-
-    res.json({ date, count: leagues.length, leagues });
   } catch (e) {
-    console.error('free-picks/leagues error', e);
-    res.status(500).json({ error: 'leagues_failed', detail: e?.message || String(e) });
+    console.error('free-picks simple error', e.message);
+    res.status(500).json({ error: 'failed_to_load_picks', detail: e?.message || String(e) });
   }
 });
+
 
 // (scan-leagues endpoint unchanged from previous version; keep if you still use it)
 
