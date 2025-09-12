@@ -228,7 +228,6 @@ async function fetchAllEuropeFixturesFast(date){
   for (const tz of TZ) { const b = await tryFetch(`from=${date}&to=${date}`, tz); if (b.length) return b; }
   return [];
 }
-
 // ====== DATA DIR / CALIBRATION / CACHE ======================================
 const IS_VERCEL = !!process.env.VERCEL;
 const DATA_DIR  = process.env.DATA_DIR || (IS_VERCEL ? '/tmp/overedge-data' : path.join(__dirname, '..', 'data'));
