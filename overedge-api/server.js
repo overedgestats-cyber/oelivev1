@@ -1,5 +1,5 @@
 ﻿// overedge-api/server.js
-// OverEdge API: Free Picks + Pro Board + Hero Bet (+ Stripe, Firebase auth)
+// OverEdge API (clean): Free Picks + Pro Board + Hero Bet (+ Stripe, Firebase auth)
 
 if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
   try { require('dotenv').config(); } catch (_) {}
@@ -13,37 +13,33 @@ const fsp     = require('fs/promises');
 const cors    = require('cors');
 const bodyParser = require('body-parser');
 
-// === ENV / CONSTANTS =========================================================
+// ====== ENV / CONSTANTS ======================================================
 
-// API-Football timezone used for date-scoped queries
-const API_TZ   = process.env.API_FOOTBALL_TZ || 'Europe/Sofia';
+const API_TZ   = process.env.API_FOOTBALL_TZ || 'Europe/London';
 const API_KEY  = process.env.API_FOOTBALL_KEY || '';
-if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY (some routes will 500)');
+if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY (data routes will 500)');
 
-// Statuses that count as an active Stripe subscription
 const OK_STATUSES = (process.env.SUB_OK_STATUSES || 'active,trialing')
   .split(',').map(s => s.trim().toLowerCase());
 
-// ----- Free Picks defaults (overridable by query params) -----
-// We DO NOT filter by odds anymore; only model confidence matters.
-const FREEPICKS_MIN_CONF = Number(process.env.FREEPICKS_MIN_CONF || 65);
-const FREEPICKS_TOP_K    = Number(process.env.FREEPICKS_TOP_K    || 2);
-
-// ----- Pro Board display controls -----
+// Pro Board markets (UI filter)
 const PRO_MARKETS = (process.env.PRO_MARKETS || 'OU25,BTTS,ONE_X_TWO,CARDS,CORNERS')
   .split(',').map(s => s.trim().toUpperCase());
+
 const PRO_MAX_ROWS = Number(process.env.PRO_MAX_ROWS || 200);
 
-// Hero Bet odds window (slightly bigger odds)
-const HERO_MIN_ODDS = Number(process.env.HERO_MIN_ODDS || 1.75);
-const HERO_MAX_ODDS = Number(process.env.HERO_MAX_ODDS || 2.40);
+// Free Picks (model-only) threshold
+const FREEPICKS_MIN_CONF = Number(process.env.FREEPICKS_MIN_CONF || 65);
 
-// === APP SETUP ===============================================================
+// Hard limits to avoid timeouts
+const MAX_FIXTURES_TO_SCORE = Number(process.env.MAX_FIXTURES_TO_SCORE || 220);
+
+// ====== APP ==================================================================
 const app = express();
 app.set('trust proxy', 1);
 app.set('etag', false);
 
-// CORS
+// CORS (allowlist optional)
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
 const allowlist = FRONTEND_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({
@@ -55,153 +51,80 @@ app.use(cors({
   credentials: !!allowlist.length
 }));
 
-// === FIREBASE ADMIN (auth + subs) ============================================
+// ====== FIREBASE ADMIN (optional; auth for Pro/Hero) =========================
 const admin = require('firebase-admin');
 
-function initFirebaseAdmin() {
+(function initFirebaseAdmin() {
   const projectIdEnv = process.env.FIREBASE_PROJECT_ID || undefined;
 
   const tryInitWithServiceJson = (raw) => {
     if (!raw) return false;
     let txt = raw.trim();
-    if (!txt.startsWith('{')) { // maybe base64
-      try { txt = Buffer.from(txt, 'base64').toString('utf8'); } catch {}
-    }
+    if (!txt.startsWith('{')) { try { txt = Buffer.from(txt, 'base64').toString('utf8'); } catch {} }
     let svc; try { svc = JSON.parse(txt); } catch { return false; }
-    if (svc.private_key && svc.private_key.includes('\\n')) {
-      svc.private_key = svc.private_key.replace(/\\n/g, '\n');
-    }
-    admin.initializeApp({
-      credential: admin.credential.cert(svc),
-      projectId: svc.project_id || projectIdEnv
-    });
-    console.log('🔐 Firebase initialized (service json)', svc.project_id || projectIdEnv || '');
+    if (svc.private_key && svc.private_key.includes('\\n')) svc.private_key = svc.private_key.replace(/\\n/g, '\n');
+    admin.initializeApp({ credential: admin.credential.cert(svc), projectId: svc.project_id || projectIdEnv });
+    console.log('🔐 Firebase initialized (service json)');
     return true;
   };
 
   const tryInitWithPair = (email, key) => {
     if (!email || !key) return false;
-    let pk = key;
-    if (pk.includes('\\n')) pk = pk.replace(/\\n/g, '\n');
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        client_email: email,
-        private_key: pk,
-        project_id: projectIdEnv
-      }),
-      projectId: projectIdEnv
-    });
-    console.log('🔐 Firebase initialized (email/private key pair)', projectIdEnv || '');
+    let pk = key.includes('\\n') ? key.replace(/\\n/g, '\n') : key;
+    admin.initializeApp({ credential: admin.credential.cert({ client_email: email, private_key: pk, project_id: projectIdEnv }), projectId: projectIdEnv });
+    console.log('🔐 Firebase initialized (email/key)');
     return true;
   };
 
   try {
     if (tryInitWithServiceJson(process.env.FIREBASE_SERVICE_ACCOUNT)) return;
     if (tryInitWithPair(process.env.FIREBASE_CLIENT_EMAIL, process.env.FIREBASE_PRIVATE_KEY)) return;
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      ...(projectIdEnv ? { projectId: projectIdEnv } : {})
-    });
-    console.log('🔐 Firebase initialized (ADC fallback)', projectIdEnv || '');
+    admin.initializeApp({ credential: admin.credential.applicationDefault(), ...(projectIdEnv ? { projectId: projectIdEnv } : {}) });
+    console.log('🔐 Firebase initialized (ADC)');
   } catch (e) {
     console.log('❌ Firebase init failed:', e.message);
   }
-}
-initFirebaseAdmin();
+})();
 
 const db = (() => { try { return admin.firestore(); } catch { return null; } })();
 
-// Minimal admin debug (no secrets)
-app.get('/api/__debug/admin', (_req, res) => {
-  try {
-    const appInfo = admin.app();
-    res.json({
-      ok: true,
-      hasDb: !!db,
-      projectId: appInfo?.options?.projectId || appInfo?.options?.credential?.projectId || null,
-      env: {
-        hasServiceJson: !!process.env.FIREBASE_SERVICE_ACCOUNT,
-        hasClientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
-        hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY,
-        projectIdEnv: process.env.FIREBASE_PROJECT_ID || null,
-      },
-    });
-  } catch (e) {
-    res.status(500).json({
-      ok: false,
-      err: e.message,
-      env: { hasServiceJson: !!process.env.FIREBASE_SERVICE_ACCOUNT }
-    });
-  }
-});
-
-// === AUTH GUARD ==============================================================
-
 function decodeJwtNoVerify(token) {
-  try {
-    const p = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
-  } catch { return null; }
+  try { const p = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'); return JSON.parse(Buffer.from(p, 'base64').toString('utf8')); }
+  catch { return null; }
 }
-
 async function requireAuth(req, res, next) {
   const m = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
   if (!m) return res.status(401).json({ error: 'missing_token' });
-  try {
-    req.user = await admin.auth().verifyIdToken(m[1]);
-    next();
-  } catch (e) {
+  try { req.user = await admin.auth().verifyIdToken(m[1]); next(); }
+  catch (e) {
     const claims = decodeJwtNoVerify(m[1]) || {};
-    return res.status(401).json({
-      error: 'invalid_token',
-      detail: e.errorInfo?.message || e.message || String(e),
-      aud: claims.aud, iss: claims.iss, expectedProject: process.env.FIREBASE_PROJECT_ID || null
-    });
+    return res.status(401).json({ error:'invalid_token', detail: e.errorInfo?.message || e.message || String(e), aud: claims.aud, iss: claims.iss });
   }
 }
-
 async function getProStatus(uid) {
-  if (!db) return { active: false, proUntil: null, source: 'none' };
+  if (!db) return { active:false, proUntil:null, source:'none' };
   try {
     const custRef = db.collection('customers').doc(uid);
-    // 1) Firestore override
-    const custDoc = await custRef.get();
     let proUntil = null;
+    const custDoc = await custRef.get();
     if (custDoc.exists) {
       const raw = custDoc.data()?.proUntil || null;
       if (raw) proUntil = typeof raw.toDate === 'function' ? raw.toDate() : new Date(raw);
     }
     const activeViaFirestore = !!(proUntil && proUntil.getTime() > Date.now());
-    // 2) Stripe subs
-    const subsSnap = await custRef.collection('subscriptions')
-      .where('status', 'in', OK_STATUSES).limit(1).get();
+    const subsSnap = await custRef.collection('subscriptions').where('status','in',OK_STATUSES).limit(1).get();
     const activeViaStripe = subsSnap && !subsSnap.empty;
-
-    return {
-      active: activeViaStripe || activeViaFirestore,
-      proUntil: proUntil || null,
-      source: activeViaStripe ? 'stripe' : (activeViaFirestore ? 'firestore' : 'none')
-    };
-  } catch (e) {
-    console.log('pro status err:', e.message);
-    return { active: false, proUntil: null, source: 'error' };
-  }
+    return { active: activeViaStripe || activeViaFirestore, proUntil: proUntil || null, source: activeViaStripe ? 'stripe' : (activeViaFirestore ? 'firestore':'none') };
+  } catch { return { active:false, proUntil:null, source:'error' }; }
 }
-
 async function requirePro(req, res, next) {
-  if (!req.user?.uid) return res.status(401).json({ error: 'missing_auth' });
+  if (!req.user?.uid) return res.status(401).json({ error:'missing_auth' });
   const st = await getProStatus(req.user.uid);
-  if (!st.active) {
-    return res.status(401).json({
-      error: 'no_subscription',
-      proUntil: st.proUntil ? st.proUntil.toISOString() : null,
-      source: st.source
-    });
-  }
+  if (!st.active) return res.status(401).json({ error:'no_subscription', proUntil: st.proUntil ? st.proUntil.toISOString() : null, source: st.source });
   next();
 }
 
-// === STRIPE (optional) =======================================================
+// ====== STRIPE WEBHOOK (optional; safe no-op if not set) =====================
 let stripe = null;
 if (process.env.STRIPE_SECRET) {
   try { stripe = require('stripe')(process.env.STRIPE_SECRET); }
@@ -212,32 +135,24 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
   const sig = req.headers['stripe-signature'];
   try {
     const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-
     const writeSub = async (uid, sub) => {
       try {
         if (!db) throw new Error('firestore_not_initialized');
         const ref = db.collection('customers').doc(uid).collection('subscriptions').doc(sub.id);
         await ref.set({
-          id: sub.id,
-          status: sub.status,
-          current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
-          price: sub.items?.data?.[0]?.price?.id || null,
-          product: sub.items?.data?.[0]?.price?.product || null,
-          mode: 'subscription',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-        console.log(`✅ wrote sub ${sub.id} for uid ${uid} (${sub.status})`);
-      } catch (e) {
-        console.log('❌ Firestore write failed', e.message);
-      }
+          id: sub.id, status: sub.status,
+          current_period_end: sub.current_period_end ? new Date(sub.current_period_end*1000) : null,
+          price: sub.items?.data?.[0]?.price?.id || null, product: sub.items?.data?.[0]?.price?.product || null,
+          mode: 'subscription', updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge:true });
+      } catch (e) { console.log('❌ Firestore write failed', e.message); }
     };
-
     switch (event.type) {
       case 'checkout.session.completed': {
-        const sess = event.data.object;
-        const uid = sess.metadata?.firebaseUID || '';
-        if (uid && sess.subscription) {
-          const sub = await stripe.subscriptions.retrieve(sess.subscription);
+        const s = event.data.object;
+        const uid = s.metadata?.firebaseUID || '';
+        if (uid && s.subscription) {
+          const sub = await stripe.subscriptions.retrieve(s.subscription);
           await writeSub(uid, sub);
         }
         break;
@@ -252,86 +167,21 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
       }
       default: break;
     }
-    res.json({ received: true });
-  } catch (err) {
-    console.log('⚠️ Webhook signature failed', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+    res.json({ received:true });
+  } catch (err) { res.status(400).send(`Webhook Error: ${err.message}`); }
 });
 
-// AFTER webhook: parse JSON for all other routes
+// JSON body after webhook
 app.use(express.json());
 
-// === HEALTH / WHOAMI / SUB STATUS ===========================================
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, hasKey: !!API_KEY, tz: API_TZ });
-});
+// ====== HEALTH / WHOAMI ======================================================
+app.get('/api/health', (_req,res) => res.json({ ok:true, hasKey: !!API_KEY, tz: API_TZ }));
+app.get('/api/whoami', requireAuth, (req,res)=> res.json({ ok:true, uid:req.user?.uid||null, email:req.user?.email||null }));
 
-const whoamiHandler = (req, res) => {
-  const { uid, email, aud, iss } = req.user || {};
-  res.json({ ok: true, uid, email, aud, iss });
-};
-app.get('/api/whoami', requireAuth, whoamiHandler);
-app.get('/api/__debug/whoami', requireAuth, whoamiHandler);
-app.get('/__debug/whoami', requireAuth, whoamiHandler);
-
-// === FIXTURE HELPERS =========================================================
+// ====== FIXTURE HELPERS / FETCH =============================================
 function todayYMD(){ return new Date().toISOString().slice(0,10); }
 function seasonFromDate(dateStr){ const d = new Date(dateStr); const y = d.getUTCFullYear(), m = d.getUTCMonth()+1; return (m >= 7) ? y : y - 1; }
-
 const AXIOS = { headers: { 'x-apisports-key': API_KEY }, timeout: 15000 };
-
-app.get('/__debug/raw-fixtures', async (req, res) => {
-  try {
-    if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
-    const date = req.query.date || todayYMD();
-    const tzs = [API_TZ, 'Europe/London', 'UTC'];
-    const tries = [];
-    const tryFetch = async (query, tz) => {
-      const out = [];
-      let page = 1, total = 1;
-      do {
-        const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(tz)}`;
-        try {
-          const r = await axios.get(url, AXIOS);
-          const resp = r.data || {};
-          total = resp?.paging?.total || 1;
-          const arr = resp?.response || [];
-          for (const f of arr) {
-            const c = f.league?.country;
-            const lid = f.league?.id;
-            if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
-          }
-        } catch (e) {
-          tries.push({ tz, error: e?.response?.status || e.message });
-          break;
-        }
-        page += 1;
-        if (page <= total) await new Promise(r => setTimeout(r, 120));
-      } while (page <= total);
-      return out;
-    };
-
-    for (const tz of tzs) {
-      const a = await tryFetch(`date=${date}`, tz);
-      if (a.length) return res.json({ date, tried: tries, sampleCount: a.length, sample: a.slice(0,12).map(f => ({
-        fixtureId: f.fixture?.id,
-        leagueId: f.league?.id, league: f.league?.name,
-        country: f.league?.country, type: f.league?.type,
-        home: f.teams?.home?.name, away: f.teams?.away?.name,
-        kickoff: f.fixture?.date
-      })) });
-    }
-    for (const tz of tzs) {
-      const b = await tryFetch(`from=${date}&to=${date}`, tz);
-      if (b.length) return res.json({ date, tried: tries, sampleCount: b.length, sample: b.slice(0,12) });
-    }
-    res.json({ date, tried: tries, sampleCount: 0 });
-  } catch (e) {
-    res.status(500).json({ error: 'raw_fixtures_failed', detail: e.response?.data || e.message });
-  }
-});
-// === MODEL / SCORING / DATA LAYER ===========================================
 
 const EURO_COUNTRIES = new Set([
   'England','Spain','Italy','Germany','France','Scotland','Wales','Northern Ireland','Ireland',
@@ -340,52 +190,92 @@ const EURO_COUNTRIES = new Set([
   'Croatia','Serbia','Bosnia and Herzegovina','Slovenia','North Macedonia','Montenegro','Albania','Kosovo',
   'Bulgaria','Romania','Hungary','Czech Republic','Slovakia','Poland',
   'Portugal','Greece','Turkey','Cyprus','Malta',
-  'Ukraine','Belarus','Moldova','Georgia','Armenia','Azerbaijan','Russia',
+  'Ukraine','Belarus','Moldova','Georgia','Armenia','Azerbaijan',
   'Andorra','San Marino','Gibraltar','Faroe Islands','Europe','World'
 ]);
-// UEFA competitions in API-Football
 const UEFA_IDS = new Set([2,3,848,4,15,16]); // UCL, UEL, UECL, Super Cup, Euros, Euro Qual
-const UEFA_CLUB_IDS = new Set([2,3,848,4]);  // club-only slice
-const UEFA_NATIONAL_IDS = new Set([15,16]);  // national teams
 
-// Pro Board leagues (exactly the set you asked for)
-const DEFAULT_ALLOWED_LEAGUES = [
-  // England
-  39, 40,
-  // Italy
-  135, 136,
-  // Spain
-  140, 141,
-  // France
-  61, 62,
-  // Germany
-  78, 79,
-  // UEFA/FIFA tournaments
-  2, 3, 848, 4, 15, 16, 9, 26, 7
-];
-let ALLOWED_LEAGUES = (process.env.PRO_ALLOWED_LEAGUES || '')
-  .split(',').map(s => Number(s.trim())).filter(Boolean);
-if (!ALLOWED_LEAGUES.length) ALLOWED_LEAGUES = DEFAULT_ALLOWED_LEAGUES;
-const ALLOWED_SET = new Set(ALLOWED_LEAGUES);
+function isYouthFixture(f){
+  const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name].filter(Boolean).join(' ').toLowerCase();
+  return /\b(u1[6-9]|u2[0-3]|under\s?(1[6-9]|2[0-3])|youth|academy|women|ladies|fem(?:en|in)|reserve|reserves|b[\s-]?team)\b/.test(s);
+}
+function inEuropeClubScope(f){
+  const lid = f?.league?.id, c = f?.league?.country;
+  const t = (f?.league?.type || '').toLowerCase();
+  return !isYouthFixture(f) && (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) && t === 'league';
+}
+async function fetchAllEuropeFixturesFast(date){
+  const tryFetch = async (query, tz) => {
+    const out = [];
+    let page = 1, total = 1;
+    do {
+      const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(tz)}`;
+      try {
+        const r = await axios.get(url, AXIOS);
+        const resp = r.data || {};
+        total = resp?.paging?.total || 1;
+        const arr = resp?.response || [];
+        for (const f of arr) if (inEuropeClubScope(f)) out.push(f);
+      } catch (e) { break; }
+      page += 1;
+      if (page <= total) await new Promise(r => setTimeout(r, 120));
+    } while (page <= total);
+    return out;
+  };
 
-let FREE_PICKS_COMP_IDS = new Set();
-try {
-  const cmp = require('./lib/competitions');
-  if (cmp && cmp.FREE_PICKS_COMP_IDS) {
-    FREE_PICKS_COMP_IDS = new Set(
-      Array.from(cmp.FREE_PICKS_COMP_IDS).map(x => {
-        const n = Number(x);
-        return Number.isFinite(n) ? n : x;
-      })
-    );
+  const TZ = [API_TZ, 'Europe/London', 'UTC'];
+  for (const tz of TZ) { const a = await tryFetch(`date=${date}`, tz); if (a.length) return a; }
+  for (const tz of TZ) { const b = await tryFetch(`from=${date}&to=${date}`, tz); if (b.length) return b; }
+  return [];
+}
+
+// ====== DATA DIR / CALIBRATION / CACHE ======================================
+const IS_VERCEL = !!process.env.VERCEL;
+const DATA_DIR  = process.env.DATA_DIR || (IS_VERCEL ? '/tmp/overedge-data' : path.join(__dirname, '..', 'data'));
+const CAL_FILE  = path.join(DATA_DIR, 'calibration.json');
+const DAILY_FILE= path.join(DATA_DIR, 'daily_cache.json');
+
+function defaultCalibration(){
+  return {
+    updatedAt: null, horizonDays: 0,
+    markets: {
+      OU25: { Over:{bins:[],mapping:[]}, Under:{bins:[],mapping:[]} },
+      BTTS: { Yes:{bins:[],mapping:[]},   No:{bins:[],mapping:[]} },
+      ONE_X_TWO: { Home:{bins:[],mapping:[]}, Draw:{bins:[],mapping:[]}, Away:{bins:[],mapping:[]} }
+    },
+    note: 'Identity mapping.'
+  };
+}
+async function ensureDataFiles(){
+  try { fs.mkdirSync(DATA_DIR, { recursive:true }); } catch {}
+  if (!fs.existsSync(CAL_FILE))   await fsp.writeFile(CAL_FILE, JSON.stringify(defaultCalibration(),null,2));
+  if (!fs.existsSync(DAILY_FILE)) await fsp.writeFile(DAILY_FILE, '{}');
+}
+async function loadJSON(f, fb){ try { return JSON.parse(await fsp.readFile(f,'utf-8')); } catch { return fb; } }
+async function saveJSON(f, obj){ await fsp.writeFile(f, JSON.stringify(obj, null, 2)); }
+let CAL = defaultCalibration();
+const dailyPicksCache = new Map();
+async function loadDailyCacheIntoMap(){ const obj = await loadJSON(DAILY_FILE, {}); dailyPicksCache.clear(); for (const [k,v] of Object.entries(obj)) dailyPicksCache.set(k,v); }
+async function persistDailyCache(){
+  const keepDays=14, cutoff = new Date(); cutoff.setDate(cutoff.getDate()-keepDays);
+  const asObj = {};
+  for (const [k,v] of dailyPicksCache.entries()){
+    const keyDate = new Date((k.split('|')[0]||'').slice(0,10));
+    if (!isNaN(keyDate) && keyDate < cutoff) continue;
+    asObj[k] = v;
   }
-} catch (_) {}
-
-const HERO_TIER1_SET = new Set(
-  (process.env.HERO_FIRST_TIER_LEAGUES || '39,78,61,140,135,88,94,144,203,197,218,207,103,113')
-    .split(',').map(n => Number(n.trim())).filter(Boolean)
-);
-
+  await saveJSON(DAILY_FILE, asObj);
+}
+function interp(mapping, x){
+  if (!Array.isArray(mapping) || !mapping.length) return x;
+  if (x <= mapping[0].x) return mapping[0].y;
+  if (x >= mapping[mapping.length-1].x) return mapping[mapping.length-1].y;
+  for (let i=1;i<mapping.length;i++){ const a=mapping[i-1], b=mapping[i]; if (x <= b.x){ const t=(x-a.x)/(b.x-a.x||1); return a.y + t*(b.y-a.y); } }
+  return x;
+}
+function asPct(n){ return Math.max(1, Math.min(99, Math.round(Number(n)||0))); }
+function calibrate(market, side, confRaw){ const m = CAL.markets?.[market]; const map = m?.[side]?.mapping; return asPct(interp(map, confRaw)); }
+// ====== MODEL: team stats + probabilities ===================================
 const statsCache = new Map(); // key raw_{league}_{season}_{team}
 async function fetchTeamStatsRaw(leagueId, season, teamId){
   const key = `raw_${leagueId}_${season}_${teamId}`;
@@ -396,9 +286,8 @@ async function fetchTeamStatsRaw(leagueId, season, teamId){
     const data = r.data?.response || null;
     statsCache.set(key, data);
     return data;
-  } catch (e) { console.error('stats err', leagueId, season, teamId, e.message); return null; }
+  } catch { return null; }
 }
-
 function normalizeStats(resp){
   if (!resp) return null;
   const played = resp.fixtures?.played?.total || 0;
@@ -416,7 +305,6 @@ function normalizeStats(resp){
 
   return { played, avgGF, avgGA, o25pct, cardsAvg };
 }
-
 async function getTeamStatsBlended(leagueId, season, teamId){
   const cur = normalizeStats(await fetchTeamStatsRaw(leagueId, season, teamId));
   if (!cur) {
@@ -437,7 +325,7 @@ async function getTeamStatsBlended(leagueId, season, teamId){
   };
 }
 
-// Poisson / probabilities
+// Poisson-ish model
 const PRIOR_EXP_GOALS  = Number(process.env.PRIOR_EXP_GOALS  || 2.6);
 const PRIOR_HOME_SHARE = Number(process.env.PRIOR_HOME_SHARE || 0.55);
 const PRIOR_MATCHES    = Number(process.env.PRIOR_MATCHES    || 20);
@@ -447,30 +335,18 @@ const LAMBDA_MAX       = Number(process.env.LAMBDA_MAX       || 2.20);
 function _logFact(n){ let s=0; for(let i=1;i<=n;i++) s+=Math.log(i); return s; }
 function poissonP(lambda,k){ return Math.exp(-lambda + k*Math.log(lambda) - _logFact(k)); }
 function probTotalsAtLeast(lambdaH, lambdaA, minGoals=3, maxK=10){
-  let p=0;
-  for(let h=0;h<=maxK;h++){
-    const ph = poissonP(lambdaH,h);
-    for(let a=0;a<=maxK;a++){ if (h+a>=minGoals) p += ph*poissonP(lambdaA,a); }
-  }
+  let p=0; for(let h=0;h<=maxK;h++){ const ph = poissonP(lambdaH,h); for(let a=0;a<=maxK;a++){ if (h+a>=minGoals) p += ph*poissonP(lambdaA,a); } }
   return Math.min(Math.max(p,0),1);
 }
 function probHomeWin(lambdaH, lambdaA, maxK=10){
-  let p=0;
-  for(let h=0;h<=maxK;h++){
-    const ph = poissonP(lambdaH,h);
-    for(let a=0;a<=maxK;a++){ if (h>a) p += ph*poissonP(lambdaA,a); }
-  }
+  let p=0; for(let h=0;h<=maxK;h++){ const ph = poissonP(lambdaH,h); for(let a=0;a<=maxK;a++){ if (h>a) p += ph*poissonP(lambdaA,a); } }
   return Math.min(Math.max(p,0),1);
 }
 function probDraw(lambdaH, lambdaA, maxK=10){
-  let p=0;
-  for(let k=0;k<=maxK;k++){ p += poissonP(lambdaH,k)*poissonP(lambdaA,k); }
-  return Math.min(Math.max(p,0),1);
+  let p=0; for(let k=0;k<=maxK;k++){ p += poissonP(lambdaH,k)*poissonP(lambdaA,k); } return Math.min(Math.max(p,0),1);
 }
-function probBTTS_lambda(lambdaH, lambdaA){
-  const p0h = Math.exp(-lambdaH), p0a = Math.exp(-lambdaA);
-  return Math.min(Math.max(1 - p0h - p0a + p0h*p0a, 0), 1);
-}
+function probBTTS_lambda(lambdaH, lambdaA){ const p0h=Math.exp(-lambdaH), p0a=Math.exp(-lambdaA); return Math.min(Math.max(1 - p0h - p0a + p0h*p0a, 0), 1); }
+
 function estimateLambdasFromTeamStats(h,a){
   const estH = Math.max(((h.avgGF||0)+(a.avgGA||0))/2, 0.05);
   const estA = Math.max(((a.avgGF||0)+(h.avgGA||0))/2, 0.05);
@@ -492,375 +368,207 @@ function estimateLambdasFromTeamStats(h,a){
   };
 }
 
-function asPct(n){ return Math.max(1, Math.min(99, Math.round(Number(n)||0))); }
-
-// OU confidence (recentered)
-function scoreOver25(h, a, odds){
-  const paceTotal = ((h.avgGF + h.avgGA) + (a.avgGF + a.avgGA)) / 2; // expected total pace
-  const hist = (h.o25pct + a.o25pct) / 2; // 0–100
-  let boost = 0;
-  if (typeof odds === 'number'){
-    if (odds >= 1.60 && odds <= 2.20) boost = 6;
-    else if (odds > 2.20 && odds <= 2.60) boost = 3;
-    else if (odds < 1.45 || odds > 3.20)  boost = -6;
-  }
-  let raw = 50;
-  raw += (hist - 50) * 0.50;                 // historical O2.5 tilt
-  raw += (paceTotal - PRIOR_EXP_GOALS) * 20; // pace vs 2.6 baseline
-  raw += boost;
-  return { score: raw, confidence: asPct(raw) };
-}
-function scoreUnder25(h, a, odds){
+// Confidence scoring (no odds)
+function scoreOver25(h, a){
   const paceTotal = ((h.avgGF + h.avgGA) + (a.avgGF + a.avgGA)) / 2;
-  const hist = (h.o25pct + a.o25pct) / 2; // 0–100
-  let boost = 0;
-  if (typeof odds === 'number'){
-    if (odds >= 1.50 && odds <= 2.10) boost = 5;
-    else if (odds > 2.10 && odds <= 2.50) boost = 2;
-    else if (odds < 1.40 || odds > 3.00)  boost = -5;
-  }
+  const hist = (h.o25pct + a.o25pct) / 2;
   let raw = 50;
-  raw += (50 - hist) * 0.50;                 // lower O2.5 history favors Under
-  raw += (PRIOR_EXP_GOALS - paceTotal) * 22; // slower than baseline favors Under
-  raw += boost;
+  raw += (hist - 50) * 0.50;
+  raw += (paceTotal - PRIOR_EXP_GOALS) * 20;
+  return { score: raw, confidence: asPct(raw) };
+}
+function scoreUnder25(h, a){
+  const paceTotal = ((h.avgGF + h.avgGA) + (a.avgGF + a.avgGA)) / 2;
+  const hist = (h.o25pct + a.o25pct) / 2;
+  let raw = 50;
+  raw += (50 - hist) * 0.50;
+  raw += (PRIOR_EXP_GOALS - paceTotal) * 22;
   return { score: raw, confidence: asPct(raw) };
 }
 
-// Fixtures fetch (Europe / UEFA, TZ-aware)
-async function fetchAllEuropeFixturesFast(date){
-  const tryFetch = async (query, tz) => {
-    const out = [];
-    let page = 1, total = 1;
-    do {
-      const url = `https://v3.football.api-sports.io/fixtures?${query}&page=${page}&timezone=${encodeURIComponent(tz)}`;
-      try {
-        const r = await axios.get(url, AXIOS);
-        const resp = r.data || {};
-        total = resp?.paging?.total || 1;
-        const arr = resp?.response || [];
-        for (const f of arr) {
-          const c = f.league?.country;
-          const lid = f.league?.id;
-          if (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid)) out.push(f);
-        }
-      } catch (e) {
-        console.error('fixtures err', { date, query, tz, status: e?.response?.status, detail: e?.response?.data || e.message });
-        break;
-      }
-      page += 1;
-      if (page <= total) await new Promise(r => setTimeout(r, 120));
-    } while (page <= total);
-    return out;
-  };
-
-  const TZ_FALLBACKS = [API_TZ, 'Europe/London', 'UTC'];
-  for (const tz of TZ_FALLBACKS) {
-    const a = await tryFetch(`date=${date}`, tz);
-    if (a.length) return a;
-  }
-  for (const tz of TZ_FALLBACKS) {
-    const b = await tryFetch(`from=${date}&to=${date}`, tz);
-    if (b.length) return b;
-  }
-  console.warn('⚠️ fixtures empty after all queries', { date, tzTried: TZ_FALLBACKS });
-  return [];
-}
-
-function isYouthFixture(f){
-  const s = [f?.teams?.home?.name, f?.teams?.away?.name, f?.league?.name].filter(Boolean).join(' ').toLowerCase();
-  return /\b(u1[6-9]|u2[0-3]|under\s?(1[6-9]|2[0-3])|youth|academy|women|ladies|fem(?:en|in)|reserve|reserves|b[\s-]?team)\b/.test(s);
-}
-function allowedFixture(f){
-  return ALLOWED_SET.has(f?.league?.id) && !isYouthFixture(f);
-}
-function inProScope(f){
-  const lid = f?.league?.id, c = f?.league?.country;
-  return !isYouthFixture(f) && (EURO_COUNTRIES.has(c) || UEFA_IDS.has(lid));
-}
-
-// Data / calibration (Vercel => /tmp)
-const IS_VERCEL = !!process.env.VERCEL;
-const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp/overedge-data' : path.join(__dirname, '..', 'data'));
-const PREDS_FILE = path.join(DATA_DIR, 'preds.json');
-const CAL_FILE   = path.join(DATA_DIR, 'calibration.json');
-const DAILY_FILE = path.join(DATA_DIR, 'daily_cache.json');
-
-function defaultCalibration(){
-  return {
-    updatedAt: null, horizonDays: 0,
-    markets: {
-      OU25: { Over:{bins:[],mapping:[]}, Under:{bins:[],mapping:[]} },
-      BTTS: { Yes:{bins:[],mapping:[]},   No:   {bins:[],mapping:[]} },
-      ONE_X_TWO: { Home:{bins:[],mapping:[]}, Draw:{bins:[],mapping:[]}, Away:{bins:[],mapping:[]} }
-    },
-    note: 'Identity mapping (until enough data).'
-  };
-}
-async function ensureDataFiles(){
-  try { fs.mkdirSync(DATA_DIR, { recursive:true }); } catch {}
-  if (!fs.existsSync(PREDS_FILE)) await fsp.writeFile(PREDS_FILE, '[]');
-  if (!fs.existsSync(CAL_FILE))   await fsp.writeFile(CAL_FILE, JSON.stringify(defaultCalibration(), null, 2));
-  if (!fs.existsSync(DAILY_FILE)) await fsp.writeFile(DAILY_FILE, '{}');
-}
-async function loadJSON(f, fb){ try { return JSON.parse(await fsp.readFile(f,'utf-8')); } catch { return fb; } }
-async function saveJSON(f, obj){ await fsp.writeFile(f, JSON.stringify(obj, null, 2)); }
-
-let CAL = defaultCalibration();
-const dailyPicksCache = new Map();
-async function loadDailyCacheIntoMap(){
-  const obj = await loadJSON(DAILY_FILE, {});
-  dailyPicksCache.clear();
-  for (const [k,v] of Object.entries(obj)) dailyPicksCache.set(k,v);
-}
-async function persistDailyCache(){
-  const keepDays=14, cutoff = new Date(); cutoff.setDate(cutoff.getDate()-keepDays);
-  const asObj = {};
-  for (const [k,v] of dailyPicksCache.entries()){
-    const keyDate = new Date((k.split('|')[0]||'').slice(0,10));
-    if (!isNaN(keyDate) && keyDate < cutoff) continue;
-    asObj[k] = v;
-  }
-  await saveJSON(DAILY_FILE, asObj);
-}
-function interp(mapping, x){
-  if (!Array.isArray(mapping) || !mapping.length) return x;
-  if (x <= mapping[0].x) return mapping[0].y;
-  if (x >= mapping[mapping.length-1].x) return mapping[mapping.length-1].y;
-  for (let i=1;i<mapping.length;i++){
-    const a=mapping[i-1], b=mapping[i];
-    if (x <= b.x){
-      const t = (x-a.x)/(b.x-a.x || 1);
-      return a.y + t*(b.y-a.y);
-    }
-  }
-  return x;
-}
-function calibrate(market, side, confRaw){
-  const m = CAL.markets?.[market];
-  const map = m?.[side]?.mapping;
-  return asPct(interp(map, confRaw));
-}
-
-// ---- Reasoning text for Free Picks ----
+// Friendly reasoning text
 function buildFreeReason(f, h, a, m, side) {
   const home = f.teams?.home?.name || 'Home';
   const away = f.teams?.away?.name || 'Away';
   if (/under/i.test(side)) {
     return [
       `${home} and ${away} trend toward controlled phases without many clean looks at goal.`,
-      `The midfield profiles point to slower progression and fewer high-value chances.`,
-      `Set-piece volatility is limited and the matchup rewards compact shapes over risk.`,
-      `We project around ${m.expGoals.toFixed(2)} goals.`
+      `Midfield profiles suggest slower progression and fewer high-value chances.`,
+      `Set-piece volatility is modest; compact shapes are rewarded over risk.`,
+      `Projection: ~${m.expGoals.toFixed(2)} total goals.`
     ].join(' ');
   } else {
     return [
       `${home} and ${away} both carry attacking intent and can be stretched when pressed.`,
       `Transitions should appear and finishing volume builds as the game opens up.`,
-      `Market pricing doesn't fully reflect the style clash that favors goals.`,
-      `We project around ${m.expGoals.toFixed(2)} goals.`
+      `Market prices often lag a style clash that favors goals in this spot.`,
+      `Projection: ~${m.expGoals.toFixed(2)} total goals.`
     ].join(' ');
   }
 }
-// === FREE PICKS (simple top-2) ==============================================
-const ODDS_MIN = 1.40, ODDS_MAX = 1.90;
-const FREEPICKS_SCAN_CAP = Number(process.env.FREEPICKS_SCAN_CAP || 200);  // safety cap
-const FREEPICKS_ODDS_CANDIDATES = Number(process.env.FREEPICKS_ODDS_CANDS || 30);
 
-function isDomesticLeagueTopTwo(f) {
-  if (!f?.league) return false;
-  if ((f.league.type || '').toLowerCase() !== 'league') return false; // exclude cups
-  if (!EURO_COUNTRIES.has(f.league.country)) return false;
-  if (isYouthFixture(f)) return false;
+// ====== FREE PICKS (model-only top 2) ========================================
+async function pickEuropeTwo({ date, season, minConf, wantDebug=false }){
+  const fixturesFull = await fetchAllEuropeFixturesFast(date);
+  // Cap amount we score to avoid timeouts
+  const fixtures = fixturesFull.slice(0, MAX_FIXTURES_TO_SCORE);
 
-  // Heuristic: include likely 1st/2nd tiers; keeps it simple & broad.
-  const n = (f.league.name || '').toLowerCase();
-  return /\b(1|i|premier|super|elite|liga|ligue|bundes|serie a|first|top|premiership)\b/.test(n) ||
-         /\b(2|ii|segunda|liga 2|liga2|ligue 2|bundesliga 2|serie b|championship|first division b)\b/.test(n);
-}
-
-async function pickTop2Simple({ date, season, minConf = 65 }) {
-  const fixturesAll = await fetchAllEuropeFixturesFast(date);
-  const pool = fixturesAll
-    .filter(isDomesticLeagueTopTwo)
-    .sort((a,b) => new Date(a.fixture?.date || 0) - new Date(b.fixture?.date || 0))
-    .slice(0, FREEPICKS_SCAN_CAP);
-
-  // Step 1: model-only scoring for everyone (no odds yet)
-  const prelim = [];
-  for (const f of pool) {
+  const cand = [];
+  for (const f of fixtures) {
     try {
-      const L = f.league?.id, hId = f.teams?.home?.id, aId = f.teams?.away?.id;
+      const L   = f.league?.id;
+      const hId = f.teams?.home?.id;
+      const aId = f.teams?.away?.id;
       if (!L || !hId || !aId) continue;
+
       const [h, a] = await Promise.all([
         getTeamStatsBlended(L, season, hId),
         getTeamStatsBlended(L, season, aId),
       ]);
       if (!h || !a) continue;
 
-      const m = estimateLambdasFromTeamStats(h, a);
-      const so = scoreOver25(h, a, null);
-      const su = scoreUnder25(h, a, null);
+      const model = estimateLambdasFromTeamStats(h, a);
 
-      const side = (so.confidence >= su.confidence) ? 'Over 2.5' : 'Under 2.5';
-      const confRaw = Math.max(so.confidence, su.confidence);
+      const so = scoreOver25(h, a);
+      const su = scoreUnder25(h, a);
+      let side, confRaw;
+      if (so.confidence >= su.confidence) { side = 'Over 2.5';  confRaw = so.confidence; }
+      else                                 { side = 'Under 2.5'; confRaw = su.confidence; }
+
       if (confRaw < minConf) continue;
+      const confCal = calibrate('OU25', /under/i.test(side) ? 'Under' : 'Over', confRaw);
 
-      prelim.push({ f, h, a, m, side, confRaw });
-    } catch (_) {}
-  }
-
-  // Keep top N to fetch odds
-  prelim.sort((a,b) => b.confRaw - a.confRaw);
-  const topForOdds = prelim.slice(0, FREEPICKS_ODDS_CANDIDATES);
-
-  // Step 2: fetch OU odds only for those and apply 1.40–1.90 screen
-  const screened = [];
-  for (const x of topForOdds) {
-    try {
-      const { over, under } = await fetchOuOddsMedian(x.f.fixture?.id);
-      const price = x.side.startsWith('Over') ? over : under;
-      if (typeof price !== 'number') continue;
-      if (price < ODDS_MIN || price > ODDS_MAX) continue;
-
-      // slight nudge using odds when available
-      const so = scoreOver25(x.h, x.a, over);
-      const su = scoreUnder25(x.h, x.a, under);
-      const confRaw = Math.max(so.confidence, su.confidence);
-      const confCal = calibrate('OU25', /under/i.test(x.side) ? 'Under' : 'Over', confRaw);
-
-      screened.push({
-        f: x.f, h: x.h, a: x.a, m: x.m,
-        side: x.side,
-        odds: price,
+      cand.push({
+        f, h, a, model,
+        side,
         confidenceRaw: asPct(confRaw),
-        confidence: asPct(confCal),
+        confidence:    asPct(confCal)
       });
     } catch (_) {}
   }
 
-  // Fallback: if odds screen killed everything, use model-only top 2 (no odds)
-  const finalList = (screened.length ? screened : prelim)
-    .sort((a,b) => (b.confidence || b.confRaw) - (a.confidence || a.confRaw))
-    .slice(0, 2);
+  const dbg = wantDebug ? {
+    fixturesTotal: fixturesFull.length,
+    fixturesScored: fixtures.length,
+    countriesSample: Array.from(new Set(fixtures.map(x => x.league?.country))).slice(0, 10),
+    leaguesSample: Array.from(new Set(fixtures.map(x => x.league?.name))).slice(0, 12),
+  } : undefined;
 
-  // Shape picks for the UI
-  const picks = finalList.map(x => ({
-    match: `${x.f.teams.home.name} vs ${x.f.teams.away.name}`,
-    league: x.f.league.name,
-    kickoff: x.f.fixture.date,
-    market: 'Over/Under 2.5 Goals',
-    prediction: x.side,
-    odds: (typeof x.odds === 'number') ? x.odds.toFixed(2) : '—',
-    confidence: x.confidence || asPct(x.confRaw),
-    confidenceRaw: x.confidenceRaw || asPct(x.confRaw),
-    reasoning: buildFreeReason(x.f, x.h, x.a, x.m, x.side)
-  }));
-
-  return {
-    poolSize: pool.length,
-    candidates: prelim.length,
-    picks
-  };
+  return { cand, poolSize: fixtures.length, dbg };
 }
 
-app.get('/api/free-picks', async (req, res) => {
-  try {
-    if (!API_KEY) return res.status(500).json({ error: 'missing_api_key' });
+// ====== /api/free-picks ======================================================
+app.get('/api/free-picks', async (req,res)=>{
+  try{
+    if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
+
     const date = req.query.date || todayYMD();
     const season = seasonFromDate(date);
     const minConf = Number(req.query.minConf ?? FREEPICKS_MIN_CONF);
+    const force   = req.query.refresh === '1';
+    const wantDebug = req.query.debug === '1';
 
-    const { poolSize, candidates, picks } = await pickTop2Simple({ date, season, minConf });
+    await ensureDataFiles();
+    CAL = await loadJSON(CAL_FILE, defaultCalibration());
+    if (!force && dailyPicksCache.size === 0) await loadDailyCacheIntoMap();
 
-    res.json({
+    const cacheKey = `${date}|${minConf}`;
+    if (!force && dailyPicksCache.has(cacheKey)) {
+      const cached = { ...(dailyPicksCache.get(cacheKey)), cached:true };
+      if (!wantDebug) return res.json(cached);
+    }
+
+    const { cand, poolSize, dbg } = await pickEuropeTwo({ date, season, minConf, wantDebug });
+
+    const picks = cand
+      .sort((a,b)=> b.confidence - a.confidence)
+      .slice(0,2)
+      .map(x => ({
+        match: `${x.f.teams.home.name} vs ${x.f.teams.away.name}`,
+        league: x.f.league.name,
+        kickoff: x.f.fixture.date,
+        market: 'Over/Under 2.5 Goals',
+        prediction: x.side,
+        odds: '—', // model-only
+        confidence: x.confidence,
+        confidenceRaw: x.confidenceRaw,
+        reasoning: buildFreeReason(x.f, x.h, x.a, x.model, x.side)
+      }));
+
+    const payload = {
       dateRequested: date,
       dateUsed: date,
-      thresholds: { minConf, oddsWindow: [ODDS_MIN, ODDS_MAX] },
-      meta: { poolSize, candidates },
+      thresholds: { minConf },
+      meta: { poolSize, candidates: cand.length, ...(wantDebug ? { debug: dbg } : {}) },
       picks,
-      computedAt: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('free-picks simple error', e.message);
-    res.status(500).json({ error: 'failed_to_load_picks', detail: e?.message || String(e) });
+      computedAt: new Date().toISOString(),
+      cached:false
+    };
+
+    if (!wantDebug) {
+      dailyPicksCache.set(cacheKey, payload);
+      await persistDailyCache();
+    }
+
+    res.json(payload);
+  }catch(e){
+    console.error('free-picks error', e.stack || e.message || e);
+    res.status(500).json({ error:'failed_to_load_picks', detail:e?.message || String(e) });
   }
 });
-
-
-// (scan-leagues endpoint unchanged from previous version; keep if you still use it)
-
-// === PRO BOARD + HERO BET (unchanged) =======================================
-
-const THRESH_OU      = Number(process.env.THRESH_OU      || 0.58);
-const THRESH_BTTS    = Number(process.env.THRESH_BTTS    || 0.57);
-const THRESH_1X2     = Number(process.env.THRESH_1X2     || 0.60);
-const PRIOR_CARDS_AVG= Number(process.env.PRIOR_CARDS_AVG|| 4.6);
-const CARDS_OU_LINE  = Number(process.env.CARDS_OU_LINE  || 4.5);
-const CORNERS_OU_LINE= Number(process.env.CORNERS_OU_LINE|| 9.5);
-const CORNERS_BASE   = Number(process.env.CORNERS_BASE   || 8.5);
-const CORNERS_PACE_K = Number(process.env.CORNERS_PACE_K || 0.60);
+// ====== Pro Board helper =====================================================
 function logistic(p, k=1.2){ return 1/(1+Math.exp(-k*p)); }
 
 function pickFromModelForFixture(f, h, a, m){
   const out=[];
-  const sOver = scoreOver25(h,a,null), sUnder = scoreUnder25(h,a,null);
+  const sOver = scoreOver25(h,a), sUnder = scoreUnder25(h,a);
   let side = 'Over 2.5', raw = sOver.confidence;
   if (sUnder.confidence > sOver.confidence){ side='Under 2.5'; raw = sUnder.confidence; }
   const cal = calibrate('OU25', /under/i.test(side)? 'Under':'Over', raw);
-  if ((cal/100) >= THRESH_OU){
-    out.push({ market:'OU25', selection: side, confidenceRaw: asPct(raw), confidence: asPct(cal),
-      probability: cal/100, reason:`ExpG ${m.expGoals.toFixed(2)} (λH ${m.lambdaHome.toFixed(2)} | λA ${m.lambdaAway.toFixed(2)})` });
-  }
+  out.push({ market:'OU25', selection: side, confidenceRaw: asPct(raw), confidence: asPct(cal), reason:`ExpG ${m.expGoals.toFixed(2)}` });
+
   const pBTTS = m.pBTTS, sideB = (pBTTS>=0.5)?'Yes':'No', cBraw = Math.round(50+Math.abs(pBTTS-0.5)*80);
   const cBcal = calibrate('BTTS', sideB, cBraw);
-  if ((cBcal/100) >= THRESH_BTTS){
-    out.push({ market:'BTTS', selection: sideB, confidenceRaw: asPct(cBraw), confidence: asPct(cBcal),
-      probability: sideB==='Yes'? pBTTS : (1-pBTTS), reason:`BTTS model ${Math.round(pBTTS*100)}%` });
-  }
+  out.push({ market:'BTTS', selection: sideB, confidenceRaw: asPct(cBraw), confidence: asPct(cBcal), reason:`BTTS ${Math.round(pBTTS*100)}%` });
+
   const side1 = (m.pH >= m.pA) ? 'Home':'Away', p1 = side1==='Home'? m.pH : m.pA;
   const c1raw = Math.round(50+Math.abs(p1-0.5)*80), c1cal = calibrate('ONE_X_TWO', side1, c1raw);
-  if ((c1cal/100) >= THRESH_1X2){
-    out.push({ market:'ONE_X_TWO', selection: side1, confidenceRaw: asPct(c1raw), confidence: asPct(c1cal),
-      probability: p1, reason:`1X2 H ${Math.round(m.pH*100)} / D ${Math.round(m.pD*100)} / A ${Math.round(m.pA*100)}` });
-  }
+  out.push({ market:'ONE_X_TWO', selection: side1, confidenceRaw: asPct(c1raw), confidence: asPct(c1cal), reason:`1X2 H ${Math.round(m.pH*100)} / D ${Math.round(m.pD*100)} / A ${Math.round(m.pA*100)}` });
+
+  // simple UI chips for cards / corners
+  const PRIOR_CARDS_AVG= Number(process.env.PRIOR_CARDS_AVG||4.6);
+  const CARDS_OU_LINE  = Number(process.env.CARDS_OU_LINE  || 4.5);
+  const CORNERS_OU_LINE= Number(process.env.CORNERS_OU_LINE|| 9.5);
+  const CORNERS_BASE   = Number(process.env.CORNERS_BASE   || 8.5);
+  const CORNERS_PACE_K = Number(process.env.CORNERS_PACE_K || 0.60);
+
   const cardsAvg = ((h.cardsAvg || PRIOR_CARDS_AVG/2)+(a.cardsAvg || PRIOR_CARDS_AVG/2))/2;
   const pCardsOver = logistic(cardsAvg - CARDS_OU_LINE, 1.4);
   const pace = h.avgGF+h.avgGA + a.avgGF+a.avgGA;
   const cornersEst = CORNERS_BASE + CORNERS_PACE_K * (pace - PRIOR_EXP_GOALS);
   const pCornersOver = logistic(cornersEst - CORNERS_OU_LINE, 1.2);
-  out.push({
-    market:'CARDS',
-    selection: pCardsOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`,
-    confidenceRaw: asPct(50 + Math.abs(pCardsOver-0.5)*90),
-    confidence: asPct(50 + Math.abs(pCardsOver-0.5)*90),
-    reason: `Cards avg ${cardsAvg.toFixed(2)} vs line ${CORNERS_OU_LINE}.`
-  });
-  out.push({
-    market:'CORNERS',
-    selection: pCornersOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`,
-    confidenceRaw: asPct(50 + Math.abs(pCornersOver-0.5)*85),
-    confidence: asPct(50 + Math.abs(pCornersOver-0.5)*85),
-    reason: `Corners pace ${cornersEst.toFixed(2)} vs line ${CORNERS_OU_LINE}.`
-  });
+
+  out.push({ market:'CARDS',   selection: pCardsOver>=0.5?`Over ${CARDS_OU_LINE}`:`Under ${CARDS_OU_LINE}`,   confidence: asPct(50 + Math.abs(pCardsOver-0.5)*90), reason:`Cards avg ${cardsAvg.toFixed(2)} vs ${CARDS_OU_LINE}` });
+  out.push({ market:'CORNERS', selection: pCornersOver>=0.5?`Over ${CORNERS_OU_LINE}`:`Under ${CORNERS_OU_LINE}`, confidence: asPct(50 + Math.abs(pCornersOver-0.5)*85), reason:`Corners pace ${cornersEst.toFixed(2)} vs ${CORNERS_OU_LINE}` });
+
   return out;
 }
 
+// ====== /api/pro-board (model-only) =========================================
 app.get('/api/pro-board', requireAuth, requirePro, async (req,res)=>{
   try {
     if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
+
     const date = req.query.date || todayYMD();
     const season = seasonFromDate(date);
-    const fixtures = (await fetchAllEuropeFixturesFast(date)).filter(f => inProScope(f) && allowedFixture(f));
+    const fixtures = (await fetchAllEuropeFixturesFast(date)).slice(0, MAX_FIXTURES_TO_SCORE);
 
     const items=[];
     for (const f of fixtures){
       try{
         const L=f.league?.id, hId=f.teams?.home?.id, aId=f.teams?.away?.id;
         if (!L||!hId||!aId) continue;
-        const [h,a] = await Promise.all([
-          getTeamStatsBlended(L, season, hId),
-          getTeamStatsBlended(L, season, aId)
-        ]);
+        const [h,a] = await Promise.all([ getTeamStatsBlended(L, season, hId), getTeamStatsBlended(L, season, aId) ]);
         if (!h||!a) continue;
         const m = estimateLambdasFromTeamStats(h,a);
 
@@ -872,9 +580,6 @@ app.get('/api/pro-board', requireAuth, requirePro, async (req,res)=>{
           let market = p.market, pick = p.selection, reason = p.reason || '';
           if (market==='OU25')      market='Goals Over/Under';
           if (market==='ONE_X_TWO'){ market='1X2'; pick = (pick==='Home'?'1':'2'); }
-          if (market==='BTTS')      market='BTTS';
-          if (market==='CARDS')     market='Cards Over/Under';
-          if (market==='CORNERS')   market='Corners Over/Under';
           return { market, pick, confidence: p.confidence, reason };
         });
 
@@ -891,7 +596,7 @@ app.get('/api/pro-board', requireAuth, requirePro, async (req,res)=>{
             pOver25: m.pO25, pBTTS: m.pBTTS, pHome: m.pH, pDraw: m.pD, pAway: m.pA, n: m.n
           }
         });
-      }catch(e){ console.log('pro row', f?.fixture?.id, e.message); }
+      }catch(_){ /* skip */ }
     }
 
     items.sort((a,b)=>{
@@ -908,144 +613,50 @@ app.get('/api/pro-board', requireAuth, requirePro, async (req,res)=>{
   }
 });
 
-// Median OU odds fetcher (used for Hero Bet)
-async function fetchOuOddsMedian(fixtureId){
-  try{
-    const r = await axios.get(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, AXIOS);
-    const rows = r.data?.response || [];
-    const overArr=[], underArr=[];
-    for (const row of rows){
-      for (const bm of (row.bookmakers||[])){
-        for (const bet of (bm.bets||[])){
-          const name = (bet?.name||'').toLowerCase();
-          if (!/over\/under|total|totals|goals over\/under/.test(name)) continue;
-          for (const v of (bet.values||[])){
-            const sel = (v?.value||v?.label||'').toLowerCase();
-            const o = Number(v?.odd);
-            if (!isFinite(o)) continue;
-            if (/\bover\s*2\.5\b/.test(sel))   overArr.push(o);
-            if (/\bunder\s*2\.5\b/.test(sel)) underArr.push(o);
-          }
-        }
-      }
-    }
-    const med = arr => arr.sort((a,b)=>a-b)[Math.floor(arr.length/2)];
-    return {
-      over:  overArr.length  ? Math.round(med(overArr)*100)/100  : null,
-      under: underArr.length ? Math.round(med(underArr)*100)/100 : null
-    };
-  }catch{ return { over:null, under:null }; }
-}
-
-async function selectHero(date){
-  const season   = seasonFromDate(date);
-  // Use the same Pro Board pool
-  const fixtures = (await fetchAllEuropeFixturesFast(date)).filter(f => inProScope(f) && allowedFixture(f));
-
-  let best=null;
-  for (const f of fixtures){
-    try{
-      const L=f.league?.id, hId=f.teams?.home?.id, aId=f.teams?.away?.id;
-      if (!L||!hId||!aId) continue;
-
-      const [h,a] = await Promise.all([
-        getTeamStatsBlended(L, season, hId),
-        getTeamStatsBlended(L, season, aId)
-      ]);
-      if (!h||!a) continue;
-
-      const m = estimateLambdasFromTeamStats(h,a);
-
-      // OU only + odds window
-      const { over, under } = await fetchOuOddsMedian(f.fixture?.id);
-      const sOver  = scoreOver25(h,a,over);
-      const sUnder = scoreUnder25(h,a,under);
-      const side   = (sOver.confidence >= sUnder.confidence) ? 'Over 2.5' : 'Under 2.5';
-      const price  = side.startsWith('Over') ? over : under;
-
-      if (typeof price !== 'number') continue;
-      if (price < HERO_MIN_ODDS || price > HERO_MAX_ODDS) continue;
-
-      const confRaw = Math.max(sOver.confidence, sUnder.confidence);
-      const confCal = calibrate('OU25', /under/i.test(side)? 'Under':'Over', confRaw);
-
-      const hero = {
-        match: `${f.teams.home.name} vs ${f.teams.away.name}`,
-        league: f.league.name,
-        kickoff: f.fixture.date,
-        market: 'Over/Under 2.5 Goals',
-        prediction: side,
-        odds: price,
-        confidence: asPct(confCal),
-        confidenceRaw: asPct(confRaw),
-        reasoning: `ExpG ${m.expGoals.toFixed(2)} (λH ${m.lambdaHome.toFixed(2)} | λA ${m.lambdaAway.toFixed(2)})`
-      };
-      if (!best || hero.confidence > best.confidence) best = hero;
-    }catch(e){ console.log('hero err', f?.fixture?.id, e.message); }
-  }
-  return best;
-}
-
-app.get('/api/pro-pick', requireAuth, requirePro, async (req,res)=>{
-  if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
-  const date = req.query.date || todayYMD();
-  const hero = await selectHero(date);
-  if (!hero) return res.status(404).json({ error:'no_hero_pick', date });
-  res.json(hero);
-});
-
+// ====== /api/hero-bet (model-only, OU window not enforced) ===================
 app.get('/api/hero-bet', requireAuth, requirePro, async (req,res)=>{
-  if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
-  const date = req.query.date || todayYMD();
-  const hero = await selectHero(date);
-  if (!hero) return res.status(404).json({ error:'no_hero_pick', date });
-  res.json({ dateUsed: date, hero, computedAt: new Date().toISOString() });
-});
+  try{
+    if (!API_KEY) return res.status(500).json({ error:'missing_api_key' });
+    const date = req.query.date || todayYMD();
+    const season = seasonFromDate(date);
+    const fixtures = (await fetchAllEuropeFixturesFast(date)).slice(0, MAX_FIXTURES_TO_SCORE);
 
-// === SUBSCRIPTION STATUS =====================================================
-app.get('/api/subscription/status', requireAuth, async (req, res) => {
-  res.set('Cache-Control', 'no-store, private, max-age=0');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
-  res.set('Vary', 'Authorization');
-  try {
-    const st = await getProStatus(req.user.uid);
-    res.json({
-      active: st.active,
-      proUntil: st.proUntil ? st.proUntil.toISOString() : null,
-      uid: req.user.uid,
-      email: req.user.email || null,
-      source: st.source
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'sub_check_failed', detail: e?.message || String(e) });
+    let best=null;
+    for (const f of fixtures){
+      try{
+        const L=f.league?.id, hId=f.teams?.home?.id, aId=f.teams?.away?.id;
+        if (!L||!hId||!aId) continue;
+        const [h,a] = await Promise.all([ getTeamStatsBlended(L, season, hId), getTeamStatsBlended(L, season, aId) ]);
+        if (!h||!a) continue;
+        const m = estimateLambdasFromTeamStats(h,a);
+        const so = scoreOver25(h,a), su = scoreUnder25(h,a);
+        const side = (so.confidence >= su.confidence) ? 'Over 2.5' : 'Under 2.5';
+        const confRaw = Math.max(so.confidence, su.confidence);
+        const confCal = calibrate('OU25', /under/i.test(side)? 'Under':'Over', confRaw);
+
+        const hero = {
+          match: `${f.teams.home.name} vs ${f.teams.away.name}`,
+          league: f.league.name,
+          kickoff: f.fixture.date,
+          market: 'Over/Under 2.5 Goals',
+          prediction: side,
+          odds: '—',
+          confidence: asPct(confCal),
+          confidenceRaw: asPct(confRaw),
+          reasoning: `ExpG ${m.expGoals.toFixed(2)} (λH ${m.lambdaHome.toFixed(2)} | λA ${m.lambdaAway.toFixed(2)})`
+        };
+        if (!best || hero.confidence > best.confidence) best = hero;
+      }catch(_){}
+    }
+    if (!best) return res.status(404).json({ error:'no_hero_pick', date });
+    res.json({ dateUsed: date, hero: best, computedAt: new Date().toISOString() });
+  }catch(e){
+    console.error('hero-bet error', e.message);
+    res.status(500).json({ error:'failed_to_load_hero_bet', detail:e.message });
   }
 });
 
-// === STRIPE CHECKOUT (optional) ==============================================
-app.post('/api/stripe/create-checkout-session', requireAuth, async (req, res) => {
-  try {
-    if (!stripe) return res.status(501).json({ error: 'stripe_not_configured' });
-    const { priceId, successUrl, cancelUrl, mode='subscription' } = req.body || {};
-    if (!priceId || !successUrl || !cancelUrl) return res.status(400).json({ error: 'missing_params' });
-
-    const session = await stripe.checkout.sessions.create({
-      mode,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      customer_email: req.user?.email || undefined,
-      metadata: { firebaseUID: req.user?.uid || '' },
-      subscription_data: { metadata: { firebaseUID: req.user?.uid || '' } }
-    });
-
-    res.json({ url: session.url });
-  } catch (e) {
-    res.status(500).json({ error: 'stripe_error', detail: e.message });
-  }
-});
-
-// === STATIC (local dev) ======================================================
+// ====== STATIC (local dev) ===================================================
 if (require.main === module) {
   const STATIC_DIR = path.join(__dirname, '..', 'overedge-web');
   app.use(express.static(STATIC_DIR));
@@ -1053,10 +664,9 @@ if (require.main === module) {
   app.get(/^(?!\/api\/).+/, (_req,res)=> res.sendFile(path.join(STATIC_DIR, 'index.html')));
 }
 
-// Export for Vercel serverless handler
+// ====== EXPORT / START =======================================================
 module.exports = app;
 
-// Local run
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   (async () => { try { await ensureDataFiles(); CAL = await loadJSON(CAL_FILE, defaultCalibration()); await loadDailyCacheIntoMap(); } catch {} })();
