@@ -2,19 +2,18 @@
   "version": 2,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/",           "destination": "/public/home.html" },
-    { "source": "/free-picks", "destination": "/public/free-picks.html" },
-    { "source": "/pro",        "destination": "/public/pro.html" },
-    { "source": "/pricing",    "destination": "/public/pricing.html" },
-    { "source": "/account",    "destination": "/public/account.html" },
-    { "source": "/faq",        "destination": "/public/FAQ.html" }
+    { "source": "/",            "destination": "/home.html" },
+    { "source": "/free-picks",  "destination": "/free-picks.html" },
+    { "source": "/pricing",     "destination": "/pricing.html" },
+    { "source": "/pro",         "destination": "/pro.html" },
+    { "source": "/faq",         "destination": "/FAQ.html" },
+    { "source": "/account",     "destination": "/account.html" },
+    { "source": "/api/:match*", "destination": "/api/:match*" }
   ],
-  "headers": [
+  "crons": [
     {
-      "source": "/public/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
+      "path": "/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75&refresh=1",
+      "schedule": "0 6 * * *"
     }
   ]
 }
