@@ -1,58 +1,98 @@
-// public/app.js (ES module)
-const FB_APP_URL  = "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-const FB_AUTH_URL = "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// -----------------------------
+// OverEdge front-end bootstrap
+// -----------------------------
 
 let CFG = null;
-let app = null;
+let fbApp = null;
 let auth = null;
 let user = null;
 
+// ----- Load public config (for Firebase keys etc.)
 async function loadConfig() {
   const r = await fetch('/api/public-config', { cache: 'no-store' });
-  if (!r.ok) throw new Error('Failed to load /api/public-config');
+  if (!r.ok) throw new Error('Missing /api/public-config');
   CFG = await r.json();
 }
 
+// ----- Firebase (modular via CDN)
 async function initFirebase() {
-  const { initializeApp } = await import(FB_APP_URL);
+  const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
   const {
-    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
-  } = await import(FB_AUTH_URL);
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged
+  } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
 
-  app  = initializeApp(CFG.firebase);
-  auth = getAuth(app);
+  fbApp = initializeApp(CFG.firebase);
+  auth = getAuth(fbApp);
+
   const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
 
-  // expose simple helpers
-  window.signIn = async () => { await signInWithPopup(auth, provider); };
-  window.signOutAll = async () => { await signOut(auth); };
+  // Expose sign in / sign out to the window for buttons
+  window.signIn = async () => {
+    await signInWithPopup(auth, provider);
+  };
+  window.signOutAll = async () => {
+    await signOut(auth);
+  };
 
   onAuthStateChanged(auth, (u) => {
     user = u || null;
-
-    const elUser = document.querySelector('#nav-user');
-    const elAuth = document.querySelector('#nav-auth');
-
-    if (elUser) elUser.textContent = user?.email || 'Account';
-    if (elAuth) {
-      elAuth.innerHTML = user
-        ? `<button class="btn" type="button" onclick="signOutAll()">Sign out</button>`
-        : `<button class="btn" type="button" onclick="signIn()">Sign in with Google</button>`;
-    }
-
+    updateHeader();
     document.dispatchEvent(new CustomEvent('authchange', { detail: { user } }));
   });
 }
 
-(async function boot() {
+// ----- Header UI (top-right Account + buttons)
+function updateHeader() {
+  const elUser = document.querySelector('#nav-user');
+  const elAuth = document.querySelector('#nav-auth');
+  if (!elUser || !elAuth) return;
+
+  if (user) {
+    const label = user.email || 'Account';
+    elUser.innerHTML = `<a href="/account.html">${label}</a>`;
+    elAuth.innerHTML = `<button class="btn" onclick="signOutAll()">Sign out</button>`;
+  } else {
+    elUser.innerHTML = `<a href="/account.html">Account</a>`;
+    elAuth.innerHTML = `<button class="btn" onclick="signIn()">Sign in with Google</button>`;
+  }
+}
+
+// ----- Public helpers (available to all pages)
+window.$user = () => user;
+
+window.$api = async (path, opts = {}) => {
+  const r = await fetch(path, opts);
+  return r.json();
+};
+
+window.$authedFetch = async (path, opts = {}) => {
+  const u = window.$user?.();
+  if (!u) throw Object.assign(new Error('not_signed_in'), { status: 401 });
+  const token = await u.getIdToken();
+  const r = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` }
+  });
+  if (!r.ok) {
+    const err = new Error(`HTTP ${r.status}`);
+    err.status = r.status;
+    try { err.body = await r.json(); } catch {}
+    throw err;
+  }
+  return r.json();
+};
+
+// ----- Boot
+(async () => {
   try {
     await loadConfig();
     await initFirebase();
   } catch (e) {
-    console.error('boot error', e);
+    console.error('Boot error:', e);
   }
 })();
-
-// light helpers for pages
-window.$api  = async (path) => (await fetch(path, { cache: 'no-store' })).json();
-window.$user = () => user;
