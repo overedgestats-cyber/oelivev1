@@ -4,10 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>OverEdge — Data beats gut</title>
-  <meta name="description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
-  <meta property="og:title" content="OverEdge — Data beats gut"/>
-  <meta property="og:description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
-  <meta property="og:type" content="website"/>
+  <meta name="description" content="Smart football picks powered by stats. Free picks + Pro board."/>
   <link rel="stylesheet" href="/style.css"/>
 
   <!-- Google tag (gtag.js) -->
@@ -30,32 +27,22 @@
         <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
+      <!-- Global auth controls -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
     </nav>
   </header>
 
   <main>
     <section class="hero">
-      <h1>Data beats gut.</h1>
-      <p>Daily football picks powered by real stats. Two free picks every day, plus the Pro Board and a Hero Bet for value hunters.</p>
-      <p>
-        <a class="btn" href="/free-picks">See Today’s Free Picks</a>
-        <a class="btn secondary" href="/pricing">Go Pro</a>
+      <h1>OverEdge — smart football picks</h1>
+      <p class="muted">Daily free picks. Pro board with filters and a Hero Bet aiming for odds ≥ 2.00.</p>
+      <p style="margin-top:1rem">
+        <a class="btn" href="/free-picks">See Free Picks</a>
+        <a class="btn secondary" href="/pricing">Get Pro</a>
       </p>
-    </section>
-
-    <section class="section">
-      <h2>Today’s Free Picks (preview)</h2>
-      <div id="home-free-picks"></div>
-      <p><a class="btn small" href="/free-picks">View full details →</a></p>
-    </section>
-
-    <section class="section">
-      <h3>Why OverEdge?</h3>
-      <ul>
-        <li>Transparent reasoning (recent-form stats, not hype)</li>
-        <li>Clear confidence % on every pick</li>
-        <li>Fallback leagues when Europe’s top flights are quiet</li>
-      </ul>
     </section>
   </main>
 
@@ -64,36 +51,9 @@
   </footer>
 
   <script>
-    // Year
     document.getElementById('y').textContent = new Date().getFullYear();
-
-    // Preview two picks
-    async function loadPreview() {
-      const el = document.getElementById('home-free-picks');
-      el.innerHTML = 'Loading…';
-      try {
-        const res = await fetch('/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75');
-        const data = await res.json();
-        if (!data.picks || data.picks.length === 0) {
-          el.innerHTML = '<p>No confident picks available yet today.</p>';
-          return;
-        }
-        el.innerHTML = data.picks.map(p => `
-          <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-            <div style="font-weight:600">${p.league}</div>
-            <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
-            <div style="margin:.5rem 0">
-              <span style="font-weight:600">${p.market}</span>
-              <span style="margin-left:.5rem">(${p.confidencePct}% confidence)</span>
-              ${p.odds ? `<span style="margin-left:1rem">Odds: ${p.odds}</span>` : ``}
-            </div>
-          </div>
-        `).join('');
-      } catch (e) {
-        el.innerHTML = '<p>Could not load picks.</p>';
-      }
-    }
-    document.addEventListener('DOMContentLoaded', loadPreview);
   </script>
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
 </body>
 </html>

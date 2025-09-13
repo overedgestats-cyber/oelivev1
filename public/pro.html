@@ -27,6 +27,13 @@
         <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
+
+      <!-- 🔽 Added: global auth controls in the navbar -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
+      <!-- 🔼 End added -->
     </nav>
   </header>
 
@@ -139,5 +146,9 @@
       });
     })();
   </script>
+
+  <!-- 🔽 Added: shared navbar auth module (powers the Sign In/Out button globally) -->
+  <script type="module" src="/auth.js"></script>
+  <!-- 🔼 End added -->
 </body>
 </html>
