@@ -1,66 +1,91 @@
-<!doctype html><html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/web/app.css"><title>OverEdge – Free Picks</title>
-</head><body>
-  <!-- inside <body> near the top -->
-<nav>
-  <a href="/home.html">Home</a>
-  <a href="/free-picks.html">Free Picks</a>
-  <a href="/pro.html">Pro</a>
-  <a href="/pricing.html">Pricing</a>
-  <a href="/about.html">About</a>
-  <a href="/faq.html">FAQ</a>
-</nav>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverEdge – Free Picks</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="/home.html">OverEdge</a>
+      <a class="active" href="/free-picks.html">Free Picks</a>
+      <a href="/pro.html">Pro</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <span class="spacer"></span>
+      <span id="nav-user">Account</span>
+      <span id="nav-auth"></span>
+    </nav>
+  </header>
 
+  <main class="container">
+    <h1>Free Picks</h1>
 
-<!-- at end of body, before </body> -->
-<script type="module" src="/app.js"></script>
+    <div class="toolbar">
+      <label>
+        Date:
+        <input id="date" type="date" />
+      </label>
+      <button id="btn-refresh" class="btn">Recompute</button>
+    </div>
 
-<nav>
-  <div class="row">
-    <a href="/web/home.html"><strong>OverEdge</strong></a>
-    <a href="/web/free-picks.html">Free Picks</a>
-    <a href="/web/pro.html">Pro</a>
-    <a href="/web/pricing.html">Pricing</a>
-    <a href="/web/about.html">About</a>
-    <a href="/web/faq.html">FAQ</a>
-  </div>
-  <div class="row">
-    <span id="nav-user" class="small muted">Account</span>
-    <span id="nav-auth"></span>
-  </div>
-</nav>
+    <div id="status" class="muted">Loading…</div>
+    <div id="picks" class="grid"></div>
+  </main>
 
-<div class="container">
-  <h2>Free Picks</h2>
-  <div id="picks"></div>
-  <div id="empty" class="small muted hidden">No picks yet. Try later.</div>
-</div>
+  <script type="module" src="/app.js"></script>
+  <script>
+    const elDate   = document.querySelector('#date');
+    const elPicks  = document.querySelector('#picks');
+    const elStatus = document.querySelector('#status');
+    const elBtnRef = document.querySelector('#btn-refresh');
 
-<script type="module" src="/web/app.js"></script>
-<script type="module">
-async function load(){
-  const r = await $api('/api/free-picks');
-  const list = r?.picks||[];
-  const mount = document.querySelector('#picks');
-  const empty = document.querySelector('#empty');
-  if(!list.length){ empty.classList.remove('hidden'); return; }
-  list.forEach(p=>{
-    const el=document.createElement('div'); el.className='card';
-    el.innerHTML=`
-      <div class="row" style="justify-content:space-between">
-        <div><strong>${p.match}</strong> <span class="badge">${p.league}</span></div>
-        <div class="small muted">${new Date(p.kickoff).toLocaleString()}</div>
-      </div>
-      <div class="row">
-        <div><strong>${p.prediction}</strong> · ${p.market}</div>
-        <div class="badge">Conf ${p.confidence}%</div>
-      </div>
-      <p class="small">${p.reasoning}</p>
-    `;
-    mount.appendChild(el);
-  });
-}
-load();
-</script>
-</body></html>
+    // default date = today (UTC slice)
+    const today = new Date().toISOString().slice(0,10);
+    elDate.value = today;
+
+    async function load({ refresh=false } = {}) {
+      elStatus.textContent = 'Loading…';
+      elPicks.innerHTML = '';
+
+      const qs = new URLSearchParams({ date: elDate.value, minConf: '65' });
+      if (refresh) qs.set('refresh', '1');
+      try {
+        const r = await fetch(`/api/free-picks?${qs.toString()}`);
+        const data = await r.json();
+        render(data);
+      } catch (e) {
+        elStatus.textContent = 'Could not load picks.';
+      }
+    }
+
+    function render(data) {
+      const picks = data?.picks || [];
+      if (!picks.length) {
+        elStatus.textContent = 'No picks yet. Try later.';
+        return;
+      }
+      elStatus.textContent = '';
+      for (const p of picks) {
+        const card = document.createElement('article');
+        card.className = 'card';
+        card.innerHTML = `
+          <h3>${p.match}</h3>
+          <p class="muted">${new Date(p.kickoff).toLocaleString()} · ${p.league}</p>
+          <p><strong>${p.market}:</strong> ${p.prediction}</p>
+          <p><strong>Confidence:</strong> ${p.confidence}%</p>
+          <p>${p.reasoning}</p>
+        `;
+        elPicks.appendChild(card);
+      }
+    }
+
+    elDate.addEventListener('change', () => load());
+    elBtnRef.addEventListener('click', () => load({ refresh:true }));
+    load();
+  </script>
+</body>
+</html>

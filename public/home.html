@@ -1,44 +1,53 @@
-<!doctype html><html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/web/app.css"><title>OverEdge – Home</title>
-</head><body>
-  <!-- inside <body> near the top -->
-<nav>
-  <a href="/home.html">Home</a>
-  <a href="/free-picks.html">Free Picks</a>
-  <a href="/pro.html">Pro</a>
-  <a href="/pricing.html">Pricing</a>
-  <a href="/about.html">About</a>
-  <a href="/faq.html">FAQ</a>
-</nav>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverEdge – Home</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="/home.html">OverEdge</a>
+      <a href="/free-picks.html">Free Picks</a>
+      <a href="/pro.html">Pro</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <span class="spacer"></span>
+      <span id="nav-user">Account</span>
+      <span id="nav-auth"></span>
+    </nav>
+  </header>
 
+  <main class="container">
+    <h1>Data beats gut.</h1>
+    <p class="lead">
+      Two daily free picks (OU 2.5) across European club football. Pro adds the full board and a risky
+      <strong>Hero</strong> pick from top competitions.
+    </p>
 
-<!-- at end of body, before </body> -->
-<script type="module" src="/app.js"></script>
+    <section class="grid">
+      <article class="card">
+        <h2>Today’s Free Picks</h2>
+        <p>Best two OU2.5 angles for today across Europe’s 1st &amp; 2nd divisions (cups included when relevant).</p>
+        <a class="btn" href="/free-picks.html">See free picks</a>
+      </article>
 
-<!-- nav --> <?/* paste the common nav manually here if not using includes */?>
-<nav>
-  <div class="row">
-    <a href="/web/home.html"><strong>OverEdge</strong></a>
-    <a href="/web/free-picks.html">Free Picks</a>
-    <a href="/web/pro.html">Pro</a>
-    <a href="/web/pricing.html">Pricing</a>
-    <a href="/web/about.html">About</a>
-    <a href="/web/faq.html">FAQ</a>
-  </div>
-  <div class="row">
-    <span id="nav-user" class="small muted">Account</span>
-    <span id="nav-auth"></span>
-  </div>
-</nav>
+      <article class="card">
+        <h2>Go Pro</h2>
+        <p>Full board by league with model picks &amp; reasons, plus a Hero bet of the day from top competitions.</p>
+        <a class="btn" href="/pricing.html">View pricing</a>
+      </article>
 
-<div class="container">
-  <div class="card">
-    <h2>Data beats gut.</h2>
-    <p>Two daily free picks (OU 2.5) across European club football. Pro adds the full board + a risky Hero pick from top competitions.</p>
-    <p class="small">Referral program: share with friends—soon you’ll earn free months for each active subscriber you bring.</p>
-  </div>
-</div>
+      <article class="card">
+        <h2>Referral</h2>
+        <p>Invite friends — earn free time for each active subscriber you bring. (Coming soon)</p>
+      </article>
+    </section>
+  </main>
 
-<script type="module" src="/web/app.js"></script>
-</body></html>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

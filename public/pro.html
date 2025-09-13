@@ -1,89 +1,163 @@
-<!doctype html><html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/web/app.css"><title>OverEdge – Pro</title>
-</head><body>
-  <!-- inside <body> near the top -->
-<nav>
-  <a href="/home.html">Home</a>
-  <a href="/free-picks.html">Free Picks</a>
-  <a href="/pro.html">Pro</a>
-  <a href="/pricing.html">Pricing</a>
-  <a href="/about.html">About</a>
-  <a href="/faq.html">FAQ</a>
-</nav>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverEdge – Pro</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="/home.html">OverEdge</a>
+      <a href="/free-picks.html">Free Picks</a>
+      <a class="active" href="/pro.html">Pro</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <span class="spacer"></span>
+      <span id="nav-user">Account</span>
+      <span id="nav-auth"></span>
+    </nav>
+  </header>
 
+  <main class="container">
+    <h1>Pro Board &amp; Hero</h1>
 
-<!-- at end of body, before </body> -->
-<script type="module" src="/app.js"></script>
+    <div class="toolbar">
+      <label>Date: <input id="date" type="date" /></label>
+      <button id="btn-reload" class="btn">Reload</button>
+    </div>
 
-<nav>
-  <div class="row">
-    <a href="/web/home.html"><strong>OverEdge</strong></a>
-    <a href="/web/free-picks.html">Free Picks</a>
-    <a href="/web/pro.html">Pro</a>
-    <a href="/web/pricing.html">Pricing</a>
-    <a href="/web/about.html">About</a>
-    <a href="/web/faq.html">FAQ</a>
-  </div>
-  <div class="row">
-    <span id="nav-user" class="small muted">Account</span>
-    <span id="nav-auth"></span>
-  </div>
-</nav>
+    <div id="gate" class="card warn" style="display:none;">
+      <h3>Login required</h3>
+      <p>Sign in with Google and make sure you have an active subscription.</p>
+      <div class="actions">
+        <button class="btn" id="btn-signin">Sign in</button>
+        <a class="btn" href="/pricing.html">View Pricing</a>
+      </div>
+    </div>
 
-<div class="container">
-  <div id="gate" class="card">
-    <h3>Pro requires sign-in</h3>
-    <p class="small">Sign in with Google (top-right) to view today’s board and the Hero bet.</p>
-  </div>
+    <section id="hero" class="card" style="display:none;"></section>
 
-  <div id="hero" class="card hidden"></div>
-  <h3 id="boardTitle" class="hidden">Pro Board (Top comps)</h3>
-  <div id="board" class="grid two"></div>
-</div>
+    <section id="board">
+      <h2>Board</h2>
+      <div id="board-status" class="muted">Loading…</div>
+      <div id="board-list"></div>
+    </section>
+  </main>
 
-<script type="module" src="/web/app.js"></script>
-<script type="module">
-function show(el){el.classList.remove('hidden')} function hide(el){el.classList.add('hidden')}
+  <script type="module" src="/app.js"></script>
+  <script>
+    const elDate   = document.querySelector('#date');
+    const elReload = document.querySelector('#btn-reload');
+    const elGate   = document.querySelector('#gate');
+    const elHero   = document.querySelector('#hero');
+    const elBoardS = document.querySelector('#board-status');
+    const elBoardL = document.querySelector('#board-list');
+    const elSignIn = document.querySelector('#btn-signin');
 
-async function loadPro(){
-  const u = $user(); if(!u){ return; }
-  // (Subscription gating can be added later; for now logged-in = access)
-  hide(document.querySelector('#gate'));
+    const today = new Date().toISOString().slice(0,10);
+    elDate.value = today;
 
-  // Hero
-  try{
-    const h = await $api('/api/hero-bet');
-    const el=document.querySelector('#hero'); show(el);
-    el.innerHTML = `<h3>Hero Bet of the Day</h3>
-      <div><strong>${h.hero.match}</strong> <span class="badge">${h.hero.league}</span></div>
-      <div class="row"><div><strong>${h.hero.prediction}</strong> · ${h.hero.market}</div>
-      <div class="badge">Conf ${h.hero.confidence}%</div></div>
-      <p class="small">${h.hero.reasoning}</p>`;
-  }catch{}
+    elSignIn.addEventListener('click', async () => window.signIn && window.signIn());
 
-  // Board
-  try{
-    const b = await $api('/api/pro-board');
-    const mount=document.querySelector('#board'); show(document.querySelector('#boardTitle'));
-    b.items.forEach(x=>{
-      const el=document.createElement('div'); el.className='card';
-      el.innerHTML = `
-        <div class="row" style="justify-content:space-between">
-          <div><strong>${x.home}</strong> vs <strong>${x.away}</strong> <span class="badge">${x.league}</span></div>
-          <div class="small muted">${new Date(x.kickoff).toLocaleString()}</div>
+    function showGate(show) {
+      elGate.style.display = show ? '' : 'none';
+      elHero.style.display = show ? 'none' : '';
+    }
+
+    async function authedFetch(path) {
+      const u = window.$user?.();
+      if (!u) { throw Object.assign(new Error('not_signed_in'), { status:401 }); }
+      const token = await u.getIdToken();
+      const r = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) {
+        const err = new Error(`HTTP ${r.status}`);
+        err.status = r.status;
+        try { err.body = await r.json(); } catch {}
+        throw err;
+      }
+      return r.json();
+    }
+
+    async function loadHero() {
+      elHero.style.display = 'none';
+      try {
+        const data = await authedFetch(`/api/hero-bet?date=${elDate.value}`);
+        const h = data?.hero;
+        if (!h) { elHero.innerHTML = ''; return; }
+        elHero.style.display = '';
+        elHero.innerHTML = `
+          <h2>Hero Bet of the Day</h2>
+          <p class="muted">${new Date(h.kickoff).toLocaleString()} · ${h.league}</p>
+          <p><strong>${h.match}</strong></p>
+          <p><strong>${h.market}:</strong> ${h.prediction} · <strong>Confidence:</strong> ${h.confidence}%</p>
+          <p>${h.reasoning}</p>
+        `;
+      } catch (e) {
+        if (e.status === 401) showGate(true);
+      }
+    }
+
+    function rowHTML(it) {
+      const top = (it.topBets && it.topBets[0]) || null;
+      const when = new Date(it.kickoff).toLocaleString();
+      const pick = top ? `${top.market}: ${top.pick} (${top.confidence}%)` : '—';
+      const reason = top?.reason || '';
+      return `
+        <div class="row">
+          <div class="col when">${when}</div>
+          <div class="col league">${it.league?.name || it.competition || ''}</div>
+          <div class="col match"><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
+          <div class="col pick">${pick}</div>
+          <div class="col reason muted">${reason}</div>
         </div>
-        <div><strong>Best pick:</strong> ${x.best.market} — <strong>${x.best.pick}</strong> <span class="badge">Conf ${x.best.confidence}%</span></div>
-        <details class="small"><summary>All markets</summary>
-          <ul>${x.all.map(m=>`<li>${m.market}: <strong>${m.pick}</strong> (${m.confidence}%) · ${m.reason}</li>`).join('')}</ul>
-        </details>
       `;
-      mount.appendChild(el);
-    });
-  }catch(e){}
-}
+    }
 
-document.addEventListener('authchange', loadPro);
-if ($user()) loadPro();
-</script>
-</body></html>
+    async function loadBoard() {
+      elBoardS.textContent = 'Loading…';
+      elBoardL.innerHTML = '';
+      try {
+        const data = await authedFetch(`/api/pro-board?date=${elDate.value}`);
+        const items = data?.items || [];
+        if (!items.length) {
+          elBoardS.textContent = 'No fixtures for this date.';
+          return;
+        }
+        elBoardS.textContent = '';
+        // simple headers
+        elBoardL.innerHTML = `
+          <div class="row head">
+            <div class="col when">Kickoff</div>
+            <div class="col league">League</div>
+            <div class="col match">Match</div>
+            <div class="col pick">Model Pick</div>
+            <div class="col reason">Why</div>
+          </div>
+          ${items.map(rowHTML).join('')}
+        `;
+      } catch (e) {
+        if (e.status === 401) {
+          showGate(true);
+          elBoardS.textContent = 'Sign in and subscribe to view the Pro board.';
+        } else {
+          elBoardS.textContent = 'Could not load board.';
+        }
+      }
+    }
+
+    async function loadAll() {
+      showGate(false);
+      await Promise.allSettled([loadHero(), loadBoard()]);
+    }
+
+    document.addEventListener('authchange', () => loadAll());
+    elReload.addEventListener('click', () => loadAll());
+    elDate.addEventListener('change', () => loadAll());
+    // initial
+    loadAll();
+  </script>
+</body>
+</html>

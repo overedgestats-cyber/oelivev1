@@ -1,37 +1,39 @@
-<!doctype html><html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/web/app.css"><title>OverEdge – FAQ</title>
-</head><body>
-  <!-- inside <body> near the top -->
-<nav>
-  <a href="/home.html">Home</a>
-  <a href="/free-picks.html">Free Picks</a>
-  <a href="/pro.html">Pro</a>
-  <a href="/pricing.html">Pricing</a>
-  <a href="/about.html">About</a>
-  <a href="/faq.html">FAQ</a>
-</nav>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverEdge – About</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="/home.html">OverEdge</a>
+      <a href="/free-picks.html">Free Picks</a>
+      <a href="/pro.html">Pro</a>
+      <a href="/pricing.html">Pricing</a>
+      <a class="active" href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <span class="spacer"></span>
+      <span id="nav-user">Account</span>
+      <span id="nav-auth"></span>
+    </nav>
+  </header>
 
+  <main class="container">
+    <h1>About OverEdge</h1>
+    <p>
+      We model European club football using team production profiles (goals for/against, tempo, shot
+      environments) blended with priors, then map raw edges to calibrated confidence for common markets.
+    </p>
+    <p>
+      The free page surfaces two OU 2.5 opportunities each day. Pro unlocks the full board with concise
+      explanations and a higher-variance Hero pick from top competitions.
+    </p>
+    <p class="muted">Questions or feedback? Email <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>.</p>
+  </main>
 
-<!-- at end of body, before </body> -->
-<script type="module" src="/app.js"></script>
-
-<nav>
-  <div class="row">
-    <a href="/web/home.html"><strong>OverEdge</strong></a>
-    <a href="/web/free-picks.html">Free Picks</a>
-    <a href="/web/pro.html">Pro</a>
-    <a href="/web/pricing.html">Pricing</a>
-    <a href="/web/about.html">About</a>
-    <a href="/web/faq.html">FAQ</a>
-  </div>
-  <div class="row">
-    <span id="nav-user" class="small muted">Account</span>
-    <span id="nav-auth"></span>
-  </div>
-</nav>
-<div class="container">
-  <div class="card"><h2>FAQ</h2><p class="small">Work in progress.</p></div>
-</div>
-<script type="module" src="/web/app.js"></script>
-</body></html>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

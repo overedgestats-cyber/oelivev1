@@ -1,43 +1,73 @@
-<!doctype html><html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/web/app.css"><title>OverEdge – Pricing</title>
-</head><body>
-  <!-- inside <body> near the top -->
-<nav>
-  <a href="/home.html">Home</a>
-  <a href="/free-picks.html">Free Picks</a>
-  <a href="/pro.html">Pro</a>
-  <a href="/pricing.html">Pricing</a>
-  <a href="/about.html">About</a>
-  <a href="/faq.html">FAQ</a>
-</nav>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverEdge – Pricing</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="/home.html">OverEdge</a>
+      <a href="/free-picks.html">Free Picks</a>
+      <a href="/pro.html">Pro</a>
+      <a class="active" href="/pricing.html">Pricing</a>
+      <a href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <span class="spacer"></span>
+      <span id="nav-user">Account</span>
+      <span id="nav-auth"></span>
+    </nav>
+  </header>
 
+  <main class="container">
+    <h1>Pricing</h1>
+    <p>Choose a plan. You’ll need to sign in with Google before subscribing.</p>
 
-<!-- at end of body, before </body> -->
-<script type="module" src="/app.js"></script>
+    <section class="grid">
+      <article class="card">
+        <h2>Starter</h2>
+        <p>Weekly access to Pro.</p>
+        <button class="btn" data-link="https://buy.stripe.com/bJe28s9DGabedyv5108k800">Subscribe</button>
+      </article>
 
-<nav>
-  <div class="row">
-    <a href="/web/home.html"><strong>OverEdge</strong></a>
-    <a href="/web/free-picks.html">Free Picks</a>
-    <a href="/web/pro.html">Pro</a>
-    <a href="/web/pricing.html">Pricing</a>
-    <a href="/web/about.html">About</a>
-    <a href="/web/faq.html">FAQ</a>
-  </div>
-  <div class="row">
-    <span id="nav-user" class="small muted">Account</span>
-    <span id="nav-auth"></span>
-  </div>
-</nav>
+      <article class="card">
+        <h2>Monthly</h2>
+        <p>6 months.</p>
+        <button class="btn" data-link="https://buy.stripe.com/5kQ4gA6rudnqcur5108k801">Subscribe</button>
+      </article>
 
-<div class="container grid two">
-  <!-- Replace hrefs with your Stripe Checkout URLs -->
-  <div class="card"><h3>Starter</h3><p class="small">Monthly access to Pro.</p><a class="btn primary" href="https://checkout.stripe.com/pay/YOUR_LINK_1">Subscribe</a></div>
-  <div class="card"><h3>Season</h3><p class="small">6 months.</p><a class="btn primary" href="https://checkout.stripe.com/pay/YOUR_LINK_2">Subscribe</a></div>
-  <div class="card"><h3>Annual</h3><p class="small">Best value.</p><a class="btn primary" href="https://checkout.stripe.com/pay/YOUR_LINK_3">Subscribe</a></div>
-  <div class="card"><h3>VIP</h3><p class="small">Priority support.</p><a class="btn primary" href="https://checkout.stripe.com/pay/YOUR_LINK_4">Subscribe</a></div>
-</div>
+      <article class="card">
+        <h2>Quaterly</h2>
+        <p>Best value.</p>
+        <button class="btn" data-link="https://buy.stripe.com/8x24gAeY0erucurgJI8k802">Subscribe</button>
+      </article>
 
-<script type="module" src="/web/app.js"></script>
-</body></html>
+      <article class="card">
+        <h2>Yearly</h2>
+        <p>Priority support.</p>
+        <button class="btn" data-link="https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803">Subscribe</button>
+      </article>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+  <script>
+    // Require sign-in before going to Stripe checkout
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-link]');
+      if (!btn) return;
+      e.preventDefault();
+      const u = window.$user?.();
+      if (!u) {
+        // triggers Google sign-in from app.js
+        if (window.signIn) await window.signIn();
+      }
+      // navigate after sign-in (or immediately if already signed in)
+      const link = btn.getAttribute('data-link');
+      if (link) location.href = link;
+    });
+  </script>
+</body>
+</html>
