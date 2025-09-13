@@ -57,10 +57,10 @@
     const elBoardL = document.querySelector('#board-list');
     const elSignIn = document.querySelector('#btn-signin');
 
-    const today = new Date().toISOString().slice(0,10);
+    const today = new Date().toISOString().slice(0, 10);
     elDate.value = today;
 
-    elSignIn.addEventListener('click', async () => window.signIn && window.signIn());
+    elSignIn.addEventListener('click', async () => { if (window.signIn) window.signIn(); });
 
     function showGate(show) {
       elGate.style.display = show ? '' : 'none';
@@ -68,8 +68,12 @@
     }
 
     async function authedFetch(path) {
-      const u = window.$user?.();
-      if (!u) { throw Object.assign(new Error('not_signed_in'), { status:401 }); }
+      const u = window.$user && window.$user();
+      if (!u) {
+        const err = new Error('not_signed_in');
+        err.status = 401;
+        throw err;
+      }
       const token = await u.getIdToken();
       const r = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) {
@@ -81,34 +85,38 @@
       return r.json();
     }
 
+    // ---------- HERO ----------
     async function loadHero() {
       elHero.style.display = 'none';
       try {
         const data = await authedFetch(`/api/hero-bet?date=${elDate.value}`);
-        const h = data?.hero;
+        const h = data && data.hero;
         if (!h) { elHero.innerHTML = ''; return; }
         elHero.style.display = '';
+        const when = h.kickoff ? new Date(h.kickoff).toLocaleString() : '';
+        const match = `${h.home} vs ${h.away}`;
         elHero.innerHTML = `
           <h2>Hero Bet of the Day</h2>
-          <p class="muted">${new Date(h.kickoff).toLocaleString()} · ${h.league}</p>
-          <p><strong>${h.match}</strong></p>
-          <p><strong>${h.market}:</strong> ${h.prediction} · <strong>Confidence:</strong> ${h.confidence}%</p>
-          <p>${h.reasoning}</p>
+          <p class="muted">${when} · ${h.league || ''}</p>
+          <p><strong>${match}</strong></p>
+          <p><strong>${h.market}:</strong> ${h.pick} · <strong>Confidence:</strong> ${h.confidence}%</p>
+          <p>${h.reasoning || ''}</p>
         `;
       } catch (e) {
         if (e.status === 401) showGate(true);
       }
     }
 
+    // ---------- BOARD ----------
     function rowHTML(it) {
       const top = (it.topBets && it.topBets[0]) || null;
-      const when = new Date(it.kickoff).toLocaleString();
+      const when = it.kickoff ? new Date(it.kickoff).toLocaleString() : '';
       const pick = top ? `${top.market}: ${top.pick} (${top.confidence}%)` : '—';
-      const reason = top?.reason || '';
+      const reason = (top && top.reason) ? top.reason : '';
       return `
         <div class="row">
           <div class="col when">${when}</div>
-          <div class="col league">${it.league?.name || it.competition || ''}</div>
+          <div class="col league">${(it.league && it.league.name) || it.competition || ''}</div>
           <div class="col match"><strong>${it.home}</strong> vs <strong>${it.away}</strong></div>
           <div class="col pick">${pick}</div>
           <div class="col reason muted">${reason}</div>
@@ -116,18 +124,53 @@
       `;
     }
 
+    // Map /api/pro-board (grouped) -> flat items for this UI
+    function buildItemsFromProBoard(resp) {
+      const groups = Array.isArray(resp && resp.data) ? resp.data : [];
+      const items = [];
+      for (const g of groups) {
+        const leagueName = g.league || '';
+        const fixtures = Array.isArray(g.fixtures) ? g.fixtures : [];
+        for (const fx of fixtures) {
+          const bestList = (fx && fx.markets && Array.isArray(fx.markets.best)) ? fx.markets.best.filter(Boolean) : [];
+          const reasonByMarket = {
+            'OU 2.5':  fx && fx.markets && fx.markets.ou25 ? fx.markets.ou25.reason : '',
+            'BTTS':    fx && fx.markets && fx.markets.btts ? fx.markets.btts.reason : '',
+            '1X2':     fx && fx.markets && fx.markets.oneX2 ? fx.markets.oneX2.reason : '',
+            'Cards':   fx && fx.markets && fx.markets.cards ? fx.markets.cards.reason : '',
+            'Corners': fx && fx.markets && fx.markets.corners ? fx.markets.corners.reason : '',
+          };
+          const topBets = bestList.map(b => ({
+            market: b.market,
+            pick: b.pick,
+            confidence: b.confidence,
+            reason: reasonByMarket[b.market] || ''
+          })).sort((a, b) => b.confidence - a.confidence);
+
+          items.push({
+            kickoff: fx.kickoff,
+            league: { name: leagueName },
+            home: fx.home ? fx.home.name : '',
+            away: fx.away ? fx.away.name : '',
+            topBets
+          });
+        }
+      }
+      items.sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+      return items;
+    }
+
     async function loadBoard() {
       elBoardS.textContent = 'Loading…';
       elBoardL.innerHTML = '';
       try {
-        const data = await authedFetch(`/api/pro-board?date=${elDate.value}`);
-        const items = data?.items || [];
+        const data = await authedFetch(`/api/pro-board?date=${elDate.value}&includeSecondary=1&strictOnly=1&minGames=8`);
+        const items = buildItemsFromProBoard(data);
         if (!items.length) {
           elBoardS.textContent = 'No fixtures for this date.';
           return;
         }
         elBoardS.textContent = '';
-        // simple headers
         elBoardL.innerHTML = `
           <div class="row head">
             <div class="col when">Kickoff</div>
@@ -156,7 +199,6 @@
     document.addEventListener('authchange', () => loadAll());
     elReload.addEventListener('click', () => loadAll());
     elDate.addEventListener('change', () => loadAll());
-    // initial
     loadAll();
   </script>
 </body>
