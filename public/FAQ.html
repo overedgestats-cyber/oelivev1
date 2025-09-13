@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>FAQ · OverEdge</title>
-  <meta name="description" content="Answers about OverEdge picks, accuracy, pricing, and access."/>
+  <meta name="description" content="Answers about OverEdge, Pro access, accuracy, and guarantees."/>
   <link rel="stylesheet" href="/style.css"/>
 
   <!-- Google tag (gtag.js) -->
@@ -24,7 +24,7 @@
         <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
         <a href="/pricing">Pricing</a>
-        <a href="/FAQ" aria-current="page">FAQ</a>
+        <a href="/faq" aria-current="page">FAQ</a>
         <a href="/account">Account</a>
       </div>
     </nav>
@@ -34,34 +34,56 @@
     <section class="section">
       <h1>FAQ</h1>
 
+      <!-- Q1 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-        <summary><strong>How do you make Free Picks?</strong></summary>
-        <p>We analyze recent official matches (typically the last 10–15 per team) to estimate Over/Under probabilities. We show the two most confident Over/Under 2.5 selections each day.</p>
+        <summary><strong>Who are we and what do we do?</strong></summary>
+        <p><strong>OverEdge</strong> is a small football + data team. We turn recent-form stats into simple, explained picks.</p>
+        <ul>
+          <li>Daily: 2 free Over/Under 2.5 Goals picks with confidence % and reasoning.</li>
+          <li>Pro: a deeper board across Top-5 European leagues + UEFA/FIFA fixtures with multiple markets.</li>
+          <li>Everything is driven by recent-form metrics (last 5/10/15), goals for/against, and team trends.</li>
+        </ul>
       </details>
 
+      <!-- Q2 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-        <summary><strong>What if there are no top-league matches today?</strong></summary>
-        <p>We first search Top-5 European leagues and UEFA competitions. If we can’t find two confident picks, we label alternatives from reliable fallback leagues (e.g., Eredivisie, Portugal, Belgium, MLS).</p>
+        <summary><strong>What is the Pro Board and the Hero Pick of the Day?</strong></summary>
+        <p><strong>Pro Board</strong> shows today’s fixtures from Top-5 leagues (England, Spain, Italy, Germany, France), their second tiers, cups, and UEFA/FIFA—grouped by competition—with:</p>
+        <ul>
+          <li>Markets: Over/Under 2.5, BTTS, 1X2 (Corners &amp; Cards coming soon).</li>
+          <li>Confidence % and short reasoning based on the last 5/10/15 games.</li>
+          <li>Filters so you can scan quickly for value.</li>
+        </ul>
+        <p><strong>Hero Pick of the Day</strong> is a single higher-odds value shot (target odds ≈ 2.00) chosen from the same scope when the data fits our confidence band. If there’s no solid candidate, we’ll say so.</p>
       </details>
 
-      <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-        <summary><strong>What’s the Hero Bet of the Day?</strong></summary>
-        <p>A single value pick (odds ≥ 2.00) selected from Over/Under, BTTS, Corners, Cards, or 1X2 based on volatile but favorable stats.</p>
-      </details>
-
-      <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-        <summary><strong>How accurate are the picks?</strong></summary>
-        <p>Accuracy varies by day and season. We display confidence % and reasoning for every pick so you can judge the call. We’ll add a “Last 30 days” tracker to show transparency over time.</p>
-      </details>
-
+      <!-- Q3 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
         <summary><strong>How do I get Pro access?</strong></summary>
-        <p>Choose a plan on the <a href="/pricing">Pricing</a> page. After checkout, your account unlocks the Pro Board and Hero Bet.</p>
+        <ol>
+          <li>Go to <a href="/account">Account</a> and sign in with Google.</li>
+          <li>Open <a href="/pricing">Pricing</a> and choose Weekly, Monthly, Quarterly, or Yearly.</li>
+          <li>Complete checkout via Stripe. Return to <a href="/account">Account</a> and click <em>Refresh status</em> if needed.</li>
+        </ol>
+        <p>You can cancel anytime from your Stripe customer portal.</p>
       </details>
 
+      <!-- Q4 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-        <summary><strong>Can I cancel anytime?</strong></summary>
-        <p>Yes. You can manage or cancel your subscription at any time.</p>
+        <summary><strong>How accurate are the picks?</strong></summary>
+        <p>Accuracy varies by slate and season—football is volatile. We show a <strong>confidence %</strong> for every suggestion so you can judge risk.</p>
+        <ul>
+          <li>Free picks come from fixtures with stronger recent-form signals (O/U 2.5).</li>
+          <li>Hero Pick aims for odds ≈ 2.00 and will have more variance by design.</li>
+        </ul>
+        <p>We’ll surface rolling performance tracking as the dataset grows. Use our numbers as one input—not the only one.</p>
+      </details>
+
+      <!-- Q5 -->
+      <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
+        <summary><strong>Is the win guaranteed?</strong></summary>
+        <p>No—there are <strong>no guarantees</strong>. Our content is data-driven analysis, not financial advice. Please bet responsibly, only what you can afford to lose, and follow local laws (18+ or legal age).</p>
+        <p>Questions? <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a></p>
       </details>
     </section>
   </main>
@@ -81,16 +103,16 @@
     document.getElementById('y').textContent = new Date().getFullYear();
   </script>
   <script>
-    /* Referral capture: store ?ref=CODE for 30 days */
-    (function () {
-      try {
-        const u = new URL(location.href);
-        const ref = u.searchParams.get('ref');
-        if (ref) {
-          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
-        }
-      } catch {}
-    })();
+  /* Referral capture: store ?ref=CODE for 30 days */
+  (function () {
+    try {
+      const u = new URL(location.href);
+      const ref = u.searchParams.get('ref');
+      if (ref) {
+        document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+      }
+    } catch {}
+  })();
   </script>
 </body>
 </html>
