@@ -15,6 +15,22 @@
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
+
+  <!-- Savings / per-week styling -->
+  <style>
+    .save-pill{
+      display:inline-block;
+      padding:.2rem .55rem;
+      border:1px solid #bbf7d0;      /* green-200 */
+      background:#ecfdf5;            /* emerald-50 */
+      color:#065f46;                 /* emerald-900 */
+      border-radius:999px;
+      font-weight:700;
+      font-size:.8rem;
+      margin-right:.4rem;
+    }
+    .perweek{ font-size:.9rem; opacity:.75; margin:.25rem 0 .25rem; }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -64,6 +80,7 @@
         <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
           <h3>Weekly</h3>
           <div class="price">€6.99</div>
+          <div class="perweek">≈ €<span id="pw-weekly"></span>/week</div>
           <ul>
             <li>Hero Bet of the Day</li>
             <li>Full Pro Board</li>
@@ -75,6 +92,10 @@
         <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
           <h3>Monthly</h3>
           <div class="price">€17.99</div>
+          <div class="perweek">
+            <span class="save-pill" id="save-monthly"></span>
+            ≈ €<span id="pw-monthly"></span>/week
+          </div>
           <ul>
             <li>Everything in Weekly</li>
             <li>Best value for starters</li>
@@ -85,6 +106,10 @@
         <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
           <h3>Quarterly</h3>
           <div class="price">€44.99</div>
+          <div class="perweek">
+            <span class="save-pill" id="save-quarterly"></span>
+            ≈ €<span id="pw-quarterly"></span>/week
+          </div>
           <ul>
             <li>Everything in Monthly</li>
             <li>Save more per month</li>
@@ -95,6 +120,10 @@
         <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
           <h3>Yearly</h3>
           <div class="price">€146.99</div>
+          <div class="perweek">
+            <span class="save-pill" id="save-yearly"></span>
+            ≈ €<span id="pw-yearly"></span>/week
+          </div>
           <ul>
             <li>Everything in Quarterly</li>
             <li>Best long-term value</li>
@@ -180,6 +209,41 @@
         });
       });
     })();
+  </script>
+
+  <!-- Savings & per-week calculator -->
+  <script>
+    // Baseline prices
+    const PRICES = {
+      weekly:    6.99,
+      monthly:   17.99,
+      quarterly: 44.99,
+      yearly:    146.99
+    };
+    // Weeks assumed for fair comparison vs weekly
+    const WEEKS = { weekly: 1, monthly: 4, quarterly: 13, yearly: 52 };
+
+    const fmt = n => n.toFixed(2);
+    const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+    // Effective cost per week
+    setTxt('pw-weekly',    fmt(PRICES.weekly / WEEKS.weekly));
+    setTxt('pw-monthly',   fmt(PRICES.monthly / WEEKS.monthly));
+    setTxt('pw-quarterly', fmt(PRICES.quarterly / WEEKS.quarterly));
+    setTxt('pw-yearly',    fmt(PRICES.yearly / WEEKS.yearly));
+
+    // Savings vs paying weekly for same period
+    function savePct(planKey){
+      const baseline = PRICES.weekly * WEEKS[planKey];
+      const actual   = PRICES[planKey];
+      const pct = Math.round((1 - actual / baseline) * 100);
+      return Math.max(0, pct);
+    }
+
+    // Fill savings badges
+    const sMonthly   = savePct('monthly');   if (document.getElementById('save-monthly'))   setTxt('save-monthly',   `Save ${sMonthly}%`);
+    const sQuarterly = savePct('quarterly'); if (document.getElementById('save-quarterly')) setTxt('save-quarterly', `Save ${sQuarterly}%`);
+    const sYearly    = savePct('yearly');    if (document.getElementById('save-yearly'))    setTxt('save-yearly',    `Save ${sYearly}%`);
   </script>
 
   <script>
