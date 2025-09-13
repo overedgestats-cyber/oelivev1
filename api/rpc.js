@@ -22,29 +22,11 @@ async function apiGet(path, params = {}) {
   const url = `${API_BASE}${path}?${qs(params)}`;
   const resp = await fetch(url, {
     headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY || "" },
-    // API-Football requires server-side calls; do NOT expose your key client-side.
     cache: "no-store",
   });
   if (!resp.ok) throw new Error(`API ${path} ${resp.status}`);
   const data = await resp.json();
   return data.response || [];
-}
-
-const TOP5_COUNTRIES = ["England", "Spain", "Italy", "Germany", "France"];
-const UEFA_NAMES = ["UEFA", "Champions League", "Europa League", "Conference League"];
-const FALLBACK_COUNTRIES = ["Netherlands", "Portugal", "Belgium", "USA"]; // MLS in USA
-
-function isTop5OrUEFA(league) {
-  const name = (league?.name || "").toLowerCase();
-  const country = league?.country || "";
-  const uefa =
-    UEFA_NAMES.some((k) => name.includes(k.toLowerCase())) ||
-    country === "World" ||
-    country === "Europe";
-  return TOP5_COUNTRIES.includes(country) || uefa;
-}
-function isFallback(league) {
-  return FALLBACK_COUNTRIES.includes(league?.country || "");
 }
 
 function clockFromISO(iso) {
@@ -58,12 +40,7 @@ function clockFromISO(iso) {
 
 async function teamLastN(teamId, n = 12) {
   const rows = await apiGet("/fixtures", { team: teamId, last: n });
-  let gp = 0,
-    goalsFor = 0,
-    goalsAg = 0,
-    over25 = 0,
-    under25 = 0,
-    btts = 0;
+  let gp = 0, goalsFor = 0, goalsAg = 0, over25 = 0, under25 = 0, btts = 0;
 
   for (const r of rows) {
     const gh = r?.goals?.home ?? 0;
@@ -97,18 +74,12 @@ async function teamLastN(teamId, n = 12) {
 
 function reasoningOU(h, a, market) {
   if (market === "Over 2.5") {
-    return `High-scoring trends: Home O2.5 ${pct(h.over25Rate)}%, Away O2.5 ${pct(a.over25Rate)}%. Avg GF (H) ${h.avgFor.toFixed(
-      2
-    )} vs (A) ${a.avgFor.toFixed(2)}.`;
+    return `High-scoring trends: Home O2.5 ${pct(h.over25Rate)}%, Away O2.5 ${pct(a.over25Rate)}%. Avg GF (H) ${h.avgFor.toFixed(2)} vs (A) ${a.avgFor.toFixed(2)}.`;
   }
-  return `Low-scoring trends: Home U2.5 ${pct(h.under25Rate)}%, Away U2.5 ${pct(a.under25Rate)}%. Avg GA (H) ${h.avgAg.toFixed(
-    2
-  )} vs (A) ${a.avgAg.toFixed(2)}.`;
+  return `Low-scoring trends: Home U2.5 ${pct(h.under25Rate)}%, Away U2.5 ${pct(a.under25Rate)}%. Avg GA (H) ${h.avgAg.toFixed(2)} vs (A) ${a.avgAg.toFixed(2)}.`;
 }
 function reasoningBTTS(h, a) {
-  return `BTTS form: Home ${pct(h.bttsRate)}% & Away ${pct(a.bttsRate)}%. Attack outputs (GF): H ${h.avgFor.toFixed(
-    2
-  )} / A ${a.avgFor.toFixed(2)}.`;
+  return `BTTS form: Home ${pct(h.bttsRate)}% & Away ${pct(a.bttsRate)}%. Attack outputs (GF): H ${h.avgFor.toFixed(2)} / A ${a.avgFor.toFixed(2)}.`;
 }
 
 // Odds helper — tries to extract OU 2.5, BTTS, and 1X2 odds if available
@@ -116,20 +87,13 @@ async function getOddsMap(fixtureId) {
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
     const out = {
-      over25: null,
-      under25: null,
-      bttsYes: null,
-      bttsNo: null,
-      homeWin: null,
-      draw: null,
-      awayWin: null,
-      bookmaker: null,
+      over25: null, under25: null, bttsYes: null, bttsNo: null,
+      homeWin: null, draw: null, awayWin: null, bookmaker: null,
     };
     const bms = rows?.[0]?.bookmakers || [];
     for (const b of bms) {
       for (const bet of b?.bets || []) {
         const name = (bet?.name || "").toLowerCase();
-        // Over/Under lines
         if (name.includes("over/under") || name.includes("goals over/under")) {
           for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
@@ -138,7 +102,6 @@ async function getOddsMap(fixtureId) {
           }
           if (!out.bookmaker) out.bookmaker = b.name;
         }
-        // BTTS
         if (name.includes("both teams to score")) {
           for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
@@ -147,7 +110,6 @@ async function getOddsMap(fixtureId) {
           }
           if (!out.bookmaker) out.bookmaker = b.name;
         }
-        // 1X2
         if (name.includes("match winner") || name.includes("1x2")) {
           for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
@@ -165,23 +127,68 @@ async function getOddsMap(fixtureId) {
   }
 }
 
-// ---------- Youth filters (exclude by default in Free Picks) ----------
-const YOUTH_REGEXES = [
-  /\bu-?\s?(14|15|16|17|18|19|20|21|22|23)\b/i, // U14..U23, U-19, etc.
-  /\bu\d{2}\b/i,                                // U19, U21 (without dash)
-  /\byouth\b/i,
-  /\bprimavera\b/i,
-  /\bjunioren\b/i,
-  /\bsub-?2[01]\b/i,                            // Sub-20, Sub-21
-  /\bacademy\b/i
+// ---------- European coverage (1st/2nd tiers + national cups + UEFA) ----------
+const EURO_COUNTRIES = [
+  "England","Scotland","Wales","Northern Ireland","Ireland",
+  "Spain","Italy","Germany","France","Portugal","Netherlands","Belgium",
+  "Turkey","Greece","Austria","Switzerland","Denmark","Norway","Sweden",
+  "Poland","Czech Republic","Slovakia","Slovenia","Croatia","Serbia",
+  "Romania","Bulgaria","Hungary","Bosnia and Herzegovina","North Macedonia",
+  "Albania","Kosovo","Montenegro","Moldova","Ukraine","Belarus",
+  "Finland","Iceland","Estonia","Latvia","Lithuania",
+  "Luxembourg","Malta","Cyprus","Georgia","Armenia","Azerbaijan",
+  "Faroe Islands","Andorra","San Marino","Gibraltar"
 ];
-const isYouthString = (s = "") => YOUTH_REGEXES.some(rx => rx.test(String(s)));
-const isYouthFixture = (fx = {}) => {
-  const ln   = fx.league?.name || fx.league?.league || fx.competition?.name || "";
-  const home = fx.teams?.home?.name || fx.home?.name || fx.homeTeam || "";
-  const away = fx.teams?.away?.name || fx.away?.name || fx.awayTeam || "";
-  return isYouthString(ln) || isYouthString(home) || isYouthString(away);
-};
+const CUP_TOKENS = [
+  "cup","pokal","beker","taça","taca","kup","kupa","cupa","coppa",
+  "copa","karik","knvb","dfb","scottish cup"
+];
+const DENY_TIER_TOKENS = [
+  "oberliga","regionalliga","3. liga","iii liga","liga 3","third division",
+  "liga 4","fourth","fifth","amateur","county","ykkönen","2. divisjon avd",
+  "reserve","reserves"," ii"," b team"," b-team"," b-team"
+];
+const TIER1_PATTERNS = [
+  /premier/i, /super\s?lig(?![ae])/i, /super\s?league(?!\s?2)/i,
+  /bundesliga(?!.*2)/i, /la\s?liga(?!\s?2)/i, /serie\s?a/i, /ligue\s?1/i,
+  /eredivisie/i, /ekstraklasa/i, /allsvenskan/i, /eliteserien/i,
+  /superliga(?!\s?2)/i, /pro\s?league/i, /hnl/i
+];
+const TIER2_PATTERNS = [
+  /championship/i, /2\.\s?bundesliga/i, /bundesliga\s?2/i, /la\s?liga\s?2/i,
+  /segunda/i, /segund/i, /serie\s?b/i, /ligue\s?2/i, /eerste\s?divisie/i,
+  /liga\s?portugal\s?2/i, /challenger\s?pro\s?league/i, /challenge\s?league/i,
+  /1\.\s?lig/i, /2\.\s?liga/i, /superettan/i, /obos/i, /i\s?liga(?!\s?2)/i,
+  /prva\s?liga/i, /super\s?league\s?2/i
+];
+function isEuroCountry(c = "") { return EURO_COUNTRIES.includes(c); }
+function hasToken(name = "", tokens = []) {
+  const s = (name || "").toLowerCase();
+  return tokens.some(t => s.includes(t));
+}
+function matchAny(rxList, name = "") { return rxList.some(rx => rx.test(name || "")); }
+function isCup(league = {}) {
+  const type = (league?.type || "").toLowerCase();
+  const name = league?.name || "";
+  return type === "cup" || hasToken(name, CUP_TOKENS);
+}
+function isUEFAComp(league = {}) {
+  const country = league?.country || "";
+  const name = (league?.name || "").toLowerCase();
+  return country === "World" || country === "Europe" || hasToken(name, ["uefa","champions","europa","conference"]);
+}
+function isEuropeanTier12OrCup(league = {}) {
+  const country = league?.country || "";
+  const name = league?.name || "";
+
+  if (hasToken(name, DENY_TIER_TOKENS)) return false;
+  if (isUEFAComp(league)) return true;
+  if (!isEuroCountry(country)) return false;
+  if (isCup(league)) return true;
+  if (matchAny(TIER1_PATTERNS, name)) return true;
+  if (matchAny(TIER2_PATTERNS, name)) return true;
+  return false;
+}
 
 // ---------- Free Picks (2x OU 2.5) ----------
 async function scoreFixtureForOU25(fx) {
@@ -195,18 +202,12 @@ async function scoreFixtureForOU25(fx) {
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
 
   let market, conf;
-  if (overP >= underP) {
-    market = "Over 2.5";
-    conf = overP;
-  } else {
-    market = "Under 2.5";
-    conf = underP;
-  }
+  if (overP >= underP) { market = "Over 2.5"; conf = overP; }
+  else { market = "Under 2.5"; conf = underP; }
 
   const time = clockFromISO(fx?.fixture?.date);
   const leagueName = fx?.league?.name || "";
   const leagueCountry = fx?.league?.country || "";
-
   const odds = await getOddsMap(fx?.fixture?.id);
 
   return {
@@ -224,48 +225,40 @@ async function scoreFixtureForOU25(fx) {
   };
 }
 
-async function pickFreePicks({ date, tz, minConf = 75, allowYouth = false }) {
+// ---- in-memory daily cache for Free Picks (stable all day) ----
+const FREEPICKS_CACHE = new Map(); // key -> { payload, exp }
+
+function cacheKey(date, tz, minConf) {
+  return `fp|${date}|${tz}|${minConf}`;
+}
+function getCached(key) {
+  const e = FREEPICKS_CACHE.get(key);
+  if (e && e.exp > Date.now()) return e.payload;
+  if (e) FREEPICKS_CACHE.delete(key);
+  return null;
+}
+function putCached(key, payload) {
+  const ttlMs = 22 * 60 * 60 * 1000; // ~22h (stable all day)
+  FREEPICKS_CACHE.set(key, { payload, exp: Date.now() + ttlMs });
+}
+
+async function pickFreePicks({ date, tz, minConf = 75 }) {
+  // Filter to European 1st/2nd tiers + national cups + UEFA
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league));
 
-  // Exclude youth leagues/teams unless explicitly allowed
-  if (!allowYouth) {
-    fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+  // Evaluate up to 50 fixtures, collect all that meet threshold
+  const out = [];
+  for (const fx of fixtures.slice(0, 50)) {
+    try {
+      const s = await scoreFixtureForOU25(fx);
+      if (s && s.confidencePct >= minConf) out.push(s);
+    } catch {}
   }
 
-  const primary = fixtures.filter((fx) => isTop5OrUEFA(fx.league));
-  const fallback = fixtures.filter((fx) => isFallback(fx.league));
-
-  async function evaluate(list, limit = 20) {
-    const out = [];
-    for (const fx of list.slice(0, limit)) {
-      try {
-        const scored = await scoreFixtureForOU25(fx);
-        if (scored && scored.confidencePct >= minConf) out.push(scored);
-        if (out.length >= 2) break;
-      } catch {}
-    }
-    return out;
-  }
-
-  let picks = await evaluate(primary);
-  let fallbackUsed = false;
-
-  if (picks.length < 2) {
-    const need = 2 - picks.length;
-    const extra = await evaluate(fallback, 20);
-    fallbackUsed = extra.length > 0;
-    picks = picks.concat(extra.slice(0, need));
-  }
-
-  if (fallbackUsed) {
-    picks = picks.map((p) => {
-      if (!isTop5OrUEFA({ country: p.country, name: p.league })) {
-        return { ...p, league: `⚠️ Alternative Pick (Fallback League) — ${p.league}` };
-      }
-      return p;
-    });
-  }
-
+  // Deterministic selection: sort by confidence desc, then fixtureId asc
+  out.sort((a, b) => (b.confidencePct - a.confidencePct) || ((a.fixtureId || 0) - (b.fixtureId || 0)));
+  const picks = out.slice(0, 2);
   return { date, timezone: tz, picks };
 }
 
@@ -286,48 +279,35 @@ async function scoreHeroCandidates(fx) {
 
   const candidates = [];
 
-  // OU 2.5 signals
   const overP = home.over25Rate * 0.5 + away.over25Rate * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
   const overOdds = odds?.over25 ?? null;
   const underOdds = odds?.under25 ?? null;
 
-  // target ~65–75% confidence and odds >= 2.0 (guide band, not strict)
   function withinBand(p) { return p >= 0.62 && p <= 0.80; }
 
   if (overOdds && overOdds >= 2.0 && withinBand(overP)) {
     candidates.push({
-      market: "Over 2.5",
-      selection: "Over 2.5",
-      conf: overP,
-      odds: overOdds,
+      market: "Over 2.5", selection: "Over 2.5", conf: overP, odds: overOdds,
       reasoning: reasoningOU(home, away, "Over 2.5"),
     });
   }
   if (underOdds && underOdds >= 2.0 && withinBand(underP)) {
     candidates.push({
-      market: "Under 2.5",
-      selection: "Under 2.5",
-      conf: underP,
-      odds: underOdds,
+      market: "Under 2.5", selection: "Under 2.5", conf: underP, odds: underOdds,
       reasoning: reasoningOU(home, away, "Under 2.5"),
     });
   }
 
-  // BTTS: Yes
   const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
   const bttsYesOdds = odds?.bttsYes ?? null;
   if (bttsYesOdds && bttsYesOdds >= 2.0 && withinBand(bttsP)) {
     candidates.push({
-      market: "BTTS",
-      selection: "BTTS: Yes",
-      conf: bttsP,
-      odds: bttsYesOdds,
+      market: "BTTS", selection: "BTTS: Yes", conf: bttsP, odds: bttsYesOdds,
       reasoning: reasoningBTTS(home, away),
     });
   }
 
-  // Shape candidates with display details
   return candidates.map((c) => ({
     fixtureId: fx?.fixture?.id,
     league: leagueName,
@@ -346,34 +326,17 @@ async function scoreHeroCandidates(fx) {
 
 async function pickHeroBet({ date, tz }) {
   const fixtures = await apiGet("/fixtures", { date, timezone: tz });
-  const primary = fixtures.filter((fx) => isTop5OrUEFA(fx.league));
-  const fallback = fixtures.filter((fx) => isFallback(fx.league));
-
-  async function evaluate(list, limit = 25) {
-    let all = [];
-    for (const fx of list.slice(0, limit)) {
-      try {
-        const cands = await scoreHeroCandidates(fx);
-        all = all.concat(cands);
-      } catch {}
-    }
-    return all;
+  const primary = fixtures.filter((fx) => isEuropeanTier12OrCup(fx.league));
+  let candidates = [];
+  for (const fx of primary.slice(0, 50)) {
+    try { candidates = candidates.concat(await scoreHeroCandidates(fx)); }
+    catch {}
   }
-
-  // Try primary, then fallback
-  let candidates = await evaluate(primary);
-  if (candidates.length === 0) {
-    candidates = await evaluate(fallback);
-  }
-
-  // Pick best by valueScore; if none, return soft "coming soon"
   if (candidates.length === 0) {
     return { heroBet: null, note: "No qualifying value pick (odds≥2 & conf in band) found yet." };
   }
-
   candidates.sort((a, b) => b.valueScore - a.valueScore);
-  const best = candidates[0];
-  return { heroBet: best };
+  return { heroBet: candidates[0] };
 }
 
 // ---------- Stripe verify by email ----------
@@ -381,7 +344,6 @@ async function verifyStripeByEmail(email) {
   const key = process.env.STRIPE_SECRET || "";
   if (!key) throw new Error("Missing STRIPE_SECRET");
 
-  // Find customer by email
   const custResp = await fetch(`https://api.stripe.com/v1/customers?${qs({ email, limit: 3 })}`, {
     headers: { Authorization: `Bearer ${key}` },
     cache: "no-store",
@@ -389,13 +351,9 @@ async function verifyStripeByEmail(email) {
   if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
   const custData = await custResp.json();
   const customers = custData?.data || [];
-  if (customers.length === 0) {
-    return { pro: false, plan: null, status: "none" };
-  }
+  if (customers.length === 0) return { pro: false, plan: null, status: "none" };
 
-  // Check subscriptions for any matching customer, prefer most recent active/trialing
   let best = null;
-
   for (const c of customers) {
     const subResp = await fetch(
       `https://api.stripe.com/v1/subscriptions?${qs({ customer: c.id, status: "all", limit: 10 })}`,
@@ -409,11 +367,9 @@ async function verifyStripeByEmail(email) {
   }
 
   if (!best) return { pro: false, plan: null, status: "none" };
-
   const activeStatuses = new Set(["active", "trialing"]);
   const isPro = activeStatuses.has(best.status);
 
-  // Derive a human plan label
   const item = best.items?.data?.[0];
   const price = item?.price || {};
   const nickname = price.nickname || null;
@@ -422,8 +378,7 @@ async function verifyStripeByEmail(email) {
   const currency = price.currency ? price.currency.toUpperCase() : null;
 
   const plan =
-    nickname ||
-    (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
+    nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
 
   return { pro: isPro, plan, status: best.status };
 }
@@ -456,9 +411,17 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const minConf = Number(req.query.minConf || 75);
-      const allowYouth = req.query.allowYouth === "1" || req.query.allowYouth === "true";
+      const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
 
-      const payload = await pickFreePicks({ date, tz, minConf, allowYouth });
+      // daily cache: first result sticks for the day (unless refresh=1)
+      const key = cacheKey(date, tz, minConf);
+      if (!refresh) {
+        const cached = getCached(key);
+        if (cached) return res.status(200).json(cached);
+      }
+
+      const payload = await pickFreePicks({ date, tz, minConf });
+      putCached(key, payload);
       return res.status(200).json(payload);
     }
 
@@ -468,7 +431,6 @@ export default async function handler(req, res) {
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
-
       const payload = await pickHeroBet({ date, tz });
       return res.status(200).json(payload);
     }
