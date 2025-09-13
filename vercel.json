@@ -1,14 +1,20 @@
 {
   "version": 2,
+  "cleanUrls": true,
   "rewrites": [
-    { "source": "/",             "destination": "/public/home.html" },
-    { "source": "/free-picks",   "destination": "/public/free-picks.html" },
-    { "source": "/pro",          "destination": "/public/pro.html" },
-    { "source": "/pricing",      "destination": "/public/pricing.html" },
-    { "source": "/account",      "destination": "/public/account.html" },
-    { "source": "/faq",          "destination": "/public/FAQ.html" }
+    { "source": "/",           "destination": "/public/home.html" },
+    { "source": "/free-picks", "destination": "/public/free-picks.html" },
+    { "source": "/pro",        "destination": "/public/pro.html" },
+    { "source": "/pricing",    "destination": "/public/pricing.html" },
+    { "source": "/account",    "destination": "/public/account.html" },
+    { "source": "/faq",        "destination": "/public/FAQ.html" }
   ],
-  "routes": [
-    { "src": "/public/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" } }
+  "headers": [
+    {
+      "source": "/public/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
   ]
 }
