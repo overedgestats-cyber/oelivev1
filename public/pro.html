@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Pro Board · OverEdge</title>
-  <meta name="description" content="Hero Bet of the Day and full stats board with markets."/>
+  <meta name="description" content="Hero Bet of the Day and full stats board for deeper picks."/>
   <link rel="stylesheet" href="/style.css"/>
 
   <!-- Google tag (gtag.js) -->
@@ -78,6 +78,13 @@
 
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+    <div class="contact">
+      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
+    </div>
   </footer>
 
   <!-- Firebase + gating + rendering -->
@@ -114,7 +121,6 @@
       if (currentUser) {
         navAuth.textContent = "Sign Out";
         navAuth.onclick = async () => { try { await signOut(auth); } catch {} };
-        // show local plan badge if we have it
         try {
           const cache = JSON.parse(localStorage.getItem("oe.user") || "null");
           if (cache?.pro) { navPlan.textContent = cache.plan ? cache.plan : "Pro"; navPlan.classList.add("badge-pro"); navPlan.style.display="inline-block"; }
@@ -148,10 +154,7 @@
     async function gateAndLoad(){
       if (!currentUser) return showLocked();
       const sub = await verifySub(currentUser.email);
-      // cache a tiny badge snapshot
-      try {
-        localStorage.setItem("oe.user", JSON.stringify({ email: currentUser.email, uid: currentUser.uid, pro: !!sub.pro, plan: sub.plan || null }));
-      } catch {}
+      try { localStorage.setItem("oe.user", JSON.stringify({ email: currentUser.email, uid: currentUser.uid, pro: !!sub.pro, plan: sub.plan || null })); } catch {}
       if (!sub.pro) return showLocked();
       showPro();
       loadHero();
@@ -254,7 +257,6 @@
             <div id="box-${fix.fixtureId}" class="mt-2">${marketDetail(fix, 'best')}</div>
           `;
 
-          // attach behavior
           setTimeout(() => {
             const sel = row.querySelector(`#${selectId}`);
             const box = row.querySelector(`#box-${fix.fixtureId}`);

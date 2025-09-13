@@ -24,16 +24,9 @@
         <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
         <a href="/pricing" aria-current="page">Pricing</a>
-        <a href="/FAQ">FAQ</a>
+        <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
-
-      <!-- 🔽 Added: global auth controls in the navbar -->
-      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-        <span id="nav-plan" class="badge" style="display:none"></span>
-        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
-      </div>
-      <!-- 🔼 End added -->
     </nav>
   </header>
 
@@ -98,6 +91,13 @@
 
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+    <div class="contact">
+      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
+    </div>
   </footer>
 
   <!-- Firebase auth gate for checkout -->
@@ -149,9 +149,5 @@
       });
     })();
   </script>
-
-  <!-- 🔽 Added: shared navbar auth module (powers the Sign In/Out button globally) -->
-  <script type="module" src="/auth.js"></script>
-  <!-- 🔼 End added -->
 </body>
 </html>
