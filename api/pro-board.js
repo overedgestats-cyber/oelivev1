@@ -46,7 +46,9 @@ function probTotalsAtLeast(lambdaH, lambdaA, minGoals = 3) {
 module.exports = async (req, res) => {
   try {
     const date = (req.query.date || todayYMD()).slice(0, 10);
-    const season = new Date(date).getUTCFullYear();
+    const season = new Date(date).getMonth() + 1 >= 7
+  ? new Date(date).getFullYear()
+  : new Date(date).getFullYear() - 1;
 
     const fixtures = [];
     for (const lid of LEAGUE_IDS) {
