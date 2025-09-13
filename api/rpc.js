@@ -165,6 +165,24 @@ async function getOddsMap(fixtureId) {
   }
 }
 
+// ---------- Youth filters (exclude by default in Free Picks) ----------
+const YOUTH_REGEXES = [
+  /\bu-?\s?(14|15|16|17|18|19|20|21|22|23)\b/i, // U14..U23, U-19, etc.
+  /\bu\d{2}\b/i,                                // U19, U21 (without dash)
+  /\byouth\b/i,
+  /\bprimavera\b/i,
+  /\bjunioren\b/i,
+  /\bsub-?2[01]\b/i,                            // Sub-20, Sub-21
+  /\bacademy\b/i
+];
+const isYouthString = (s = "") => YOUTH_REGEXES.some(rx => rx.test(String(s)));
+const isYouthFixture = (fx = {}) => {
+  const ln   = fx.league?.name || fx.league?.league || fx.competition?.name || "";
+  const home = fx.teams?.home?.name || fx.home?.name || fx.homeTeam || "";
+  const away = fx.teams?.away?.name || fx.away?.name || fx.awayTeam || "";
+  return isYouthString(ln) || isYouthString(home) || isYouthString(away);
+};
+
 // ---------- Free Picks (2x OU 2.5) ----------
 async function scoreFixtureForOU25(fx) {
   const homeId = fx?.teams?.home?.id;
@@ -206,8 +224,13 @@ async function scoreFixtureForOU25(fx) {
   };
 }
 
-async function pickFreePicks({ date, tz, minConf = 75 }) {
-  const fixtures = await apiGet("/fixtures", { date, timezone: tz });
+async function pickFreePicks({ date, tz, minConf = 75, allowYouth = false }) {
+  let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+
+  // Exclude youth leagues/teams unless explicitly allowed
+  if (!allowYouth) {
+    fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+  }
 
   const primary = fixtures.filter((fx) => isTop5OrUEFA(fx.league));
   const fallback = fixtures.filter((fx) => isFallback(fx.league));
@@ -433,8 +456,9 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const minConf = Number(req.query.minConf || 75);
+      const allowYouth = req.query.allowYouth === "1" || req.query.allowYouth === "true";
 
-      const payload = await pickFreePicks({ date, tz, minConf });
+      const payload = await pickFreePicks({ date, tz, minConf, allowYouth });
       return res.status(200).json(payload);
     }
 

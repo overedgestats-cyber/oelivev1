@@ -30,6 +30,11 @@
         <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
+      <!-- Added: global auth controls -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
     </nav>
   </header>
 
@@ -95,5 +100,8 @@
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
   </script>
+
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
 </body>
 </html>
