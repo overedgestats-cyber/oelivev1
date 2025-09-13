@@ -19,6 +19,21 @@ function seasonFromDate(date) {
 function toPct(n) {
   return Math.round(Math.max(1, Math.min(99, n * 100)));
 }
+// Public config for frontend (Firebase, Stripe, etc.)
+app.get("/api/public-config", (req, res) => {
+  res.json({
+    firebase: {
+      apiKey: process.env.FB_API_KEY || "",
+      authDomain: process.env.FB_AUTH_DOMAIN || "",
+      projectId: process.env.FB_PROJECT_ID || "",
+      appId: process.env.FB_APP_ID || "",
+      measurementId: process.env.FB_MEASUREMENT_ID || ""
+    },
+    stripe: {
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || ""
+    }
+  });
+});
 
 // --- Basic team stats from last 15 matches ---
 async function getTeamStats(teamId) {
