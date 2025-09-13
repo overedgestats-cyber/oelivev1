@@ -190,6 +190,24 @@ function isEuropeanTier12OrCup(league = {}) {
   return false;
 }
 
+// ---------- HARD youth exclusion (Free Picks only) ----------
+const YOUTH_REGEXES = [
+  /\bu-?\s?(14|15|16|17|18|19|20|21|22|23)\b/i,    // U19, U-19, U 19
+  /\bu(?:14|15|16|17|18|19|20|21|22|23)\b/i,       // U19 compact
+  /\byouth\b/i,
+  /\bprimavera\b/i,
+  /\bjunioren\b/i,
+  /\bsub-?\s?(20|21)\b/i,                          // Sub-20 / Sub 21
+  /\bacademy\b/i
+];
+function isYouthFixture(fx = {}) {
+  const ln = fx.league?.name || "";
+  const h  = fx.teams?.home?.name || "";
+  const a  = fx.teams?.away?.name || "";
+  const hit = (s) => YOUTH_REGEXES.some(rx => rx.test(String(s)));
+  return hit(ln) || hit(h) || hit(a);
+}
+
 // ---------- Free Picks (2x OU 2.5) ----------
 async function scoreFixtureForOU25(fx) {
   const homeId = fx?.teams?.home?.id;
@@ -243,11 +261,16 @@ function putCached(key, payload) {
 }
 
 async function pickFreePicks({ date, tz, minConf = 75 }) {
-  // Filter to European 1st/2nd tiers + national cups + UEFA
+  // 1) fetch all fixtures for today in tz
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+
+  // 2) hard-exclude youth fixtures
+  fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+
+  // 3) keep only European 1st/2nd tiers + national cups + UEFA
   fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league));
 
-  // Evaluate up to 50 fixtures, collect all that meet threshold
+  // 4) score up to 50 fixtures; collect those meeting threshold
   const out = [];
   for (const fx of fixtures.slice(0, 50)) {
     try {
@@ -256,7 +279,7 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
     } catch {}
   }
 
-  // Deterministic selection: sort by confidence desc, then fixtureId asc
+  // 5) deterministic: confidence desc, then fixtureId asc
   out.sort((a, b) => (b.confidencePct - a.confidencePct) || ((a.fixtureId || 0) - (b.fixtureId || 0)));
   const picks = out.slice(0, 2);
   return { date, timezone: tz, picks };
@@ -280,7 +303,7 @@ async function scoreHeroCandidates(fx) {
   const candidates = [];
 
   const overP = home.over25Rate * 0.5 + away.over25Rate * 0.5;
-  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
+  const underP = home.under25Rate * 0.5 + away.over25Rate * 0.5;
   const overOdds = odds?.over25 ?? null;
   const underOdds = odds?.under25 ?? null;
 
@@ -325,10 +348,12 @@ async function scoreHeroCandidates(fx) {
 }
 
 async function pickHeroBet({ date, tz }) {
-  const fixtures = await apiGet("/fixtures", { date, timezone: tz });
-  const primary = fixtures.filter((fx) => isEuropeanTier12OrCup(fx.league));
+  // (Optional) also exclude youth for Hero Bet — add the same filter if you want
+  let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league));
+
   let candidates = [];
-  for (const fx of primary.slice(0, 50)) {
+  for (const fx of fixtures.slice(0, 50)) {
     try { candidates = candidates.concat(await scoreHeroCandidates(fx)); }
     catch {}
   }
