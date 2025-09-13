@@ -1,7 +1,7 @@
-export default async function handler(_req, res) {
+module.exports = (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.json({
     ok: true,
-    hasKey: !!process.env.API_FOOTBALL_KEY,
-    tz: process.env.API_FOOTBALL_TZ || 'Europe/London'
+    ts: new Date().toISOString()
   });
-}
+};

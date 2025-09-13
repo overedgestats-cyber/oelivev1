@@ -1,60 +1,58 @@
-// public/app.js  (NO <script> tag here)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// public/app.js (ES module)
+const FB_APP_URL  = "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+const FB_AUTH_URL = "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-let CFG = null, app = null, auth = null, user = null;
+let CFG = null;
+let app = null;
+let auth = null;
+let user = null;
 
-// Load public config from your backend
 async function loadConfig() {
-  const r = await fetch("/api/public-config", { cache: "no-store" });
-  if (!r.ok) throw new Error("Missing /api/public-config");
-  CFG = await r.json();   // must contain { firebase: { ... } }
+  const r = await fetch('/api/public-config', { cache: 'no-store' });
+  if (!r.ok) throw new Error('Failed to load /api/public-config');
+  CFG = await r.json();
 }
 
-// Init Firebase
-function initFirebase() {
-  app = initializeApp(CFG.firebase);
+async function initFirebase() {
+  const { initializeApp } = await import(FB_APP_URL);
+  const {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  } = await import(FB_AUTH_URL);
+
+  app  = initializeApp(CFG.firebase);
   auth = getAuth(app);
   const provider = new GoogleAuthProvider();
 
-  // expose helpers for buttons in the DOM
-  window.signIn = () => signInWithPopup(auth, provider);
-  window.signOutAll = () => signOut(auth);
+  // expose simple helpers
+  window.signIn = async () => { await signInWithPopup(auth, provider); };
+  window.signOutAll = async () => { await signOut(auth); };
 
   onAuthStateChanged(auth, (u) => {
     user = u || null;
 
-    const elUser = document.querySelector("#nav-user");
-    const elAuth = document.querySelector("#nav-auth");
+    const elUser = document.querySelector('#nav-user');
+    const elAuth = document.querySelector('#nav-auth');
 
-    if (elUser) elUser.textContent = user?.email || "Account";
+    if (elUser) elUser.textContent = user?.email || 'Account';
     if (elAuth) {
       elAuth.innerHTML = user
         ? `<button class="btn" type="button" onclick="signOutAll()">Sign out</button>`
         : `<button class="btn" type="button" onclick="signIn()">Sign in with Google</button>`;
     }
 
-    document.dispatchEvent(new CustomEvent("authchange", { detail: { user } }));
+    document.dispatchEvent(new CustomEvent('authchange', { detail: { user } }));
   });
 }
 
-// Boot
-async function boot() {
+(async function boot() {
   try {
     await loadConfig();
-    initFirebase();
+    await initFirebase();
   } catch (e) {
-    console.error("Boot failed:", e);
+    console.error('boot error', e);
   }
-}
-boot();
+})();
 
-// Small helpers available to pages
-window.$api = async (path) => (await fetch(path, { cache: "no-store" })).json();
+// light helpers for pages
+window.$api  = async (path) => (await fetch(path, { cache: 'no-store' })).json();
 window.$user = () => user;
