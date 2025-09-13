@@ -1,7 +1,7 @@
 // api/free-picks.js
 // Free Picks — Top-2 OU2.5 across European club football (1st/2nd + national cups + UCL/UEL/UECL)
 // Uses last-15 official matches per team, Poisson-ish model for OU2.5,
-// robust fixture discovery (date -> from/to -> league-by-league fallback).
+// robust fixture discovery (date -> league whitelist -> fallback leagues -> from/to -> dynamic league scan).
 
 const axios = require('axios');
 
@@ -13,7 +13,7 @@ const REQUEST_TIMEOUT_MS     = Number(process.env.REQUEST_TIMEOUT_MS     || 1000
 const MAX_FIXTURE_PAGES      = Number(process.env.MAX_FIXTURE_PAGES      || 3);
 const MAX_FIXTURES_TO_SCORE  = Number(process.env.MAX_FIXTURES_TO_SCORE  || 140);
 const DEFAULT_MIN_CONF       = Number(process.env.FREEPICKS_MIN_CONF     || 60);
-const MAX_LEAGUES_FALLBACK   = Number(process.env.MAX_LEAGUES_FALLBACK   || 60);   // cap league-by-league scan
+const MAX_LEAGUES_FALLBACK   = Number(process.env.MAX_LEAGUES_FALLBACK   || 60);   // cap dynamic league scan
 
 if (!API_KEY) console.error('⚠️ Missing API_FOOTBALL_KEY');
 
@@ -28,6 +28,27 @@ function seasonFromDate(dateStr){
   const y = d.getUTCFullYear(), m = d.getUTCMonth() + 1;
   return (m >= 7) ? y : y - 1;
 }
+
+// ---------- Explicit league whitelists (API-Football IDs) ----------
+const PRIMARY_LEAGUE_IDS = [
+  // Top 5
+  39,   // England Premier League
+  140,  // Spain La Liga
+  135,  // Italy Serie A
+  78,   // Germany Bundesliga
+  61,   // France Ligue 1
+  // UEFA
+  2,    // UEFA Champions League
+  3,    // UEFA Europa League
+  848   // UEFA Europa Conference League
+];
+
+const FALLBACK_LEAGUE_IDS = [
+  88,   // Netherlands Eredivisie
+  94,   // Portugal Primeira Liga
+  144,  // Belgium Pro League
+  253   // USA MLS (last resort)
+];
 
 // Countries considered “Europe” here (club football), plus “Europe/World” to include UCL/UEL/UECL
 const EURO_COUNTRIES = new Set([
@@ -66,9 +87,34 @@ function isInEuropeClubScope(f){
   return inGeo && inType;
 }
 
-// ===== Robust fixture discovery ==============================================
+// ===== Fixture discovery with league IDs first ===============================
 
-// Try date / from-to with 3 TZs, then fallback to league-by-league scan for Europe
+async function fetchFixturesByLeagueList(date, season, leagueIds, debugRows, tag='whitelist'){
+  const keep = (arr) => (arr || []).filter(isInEuropeClubScope);
+  const TZS = [API_TZ, 'Europe/London', 'UTC'];
+  const out = [];
+
+  for (const lid of leagueIds) {
+    for (const tz of TZS) {
+      // API-Football requires one league per request
+      const url = `https://v3.football.api-sports.io/fixtures?league=${lid}&season=${season}&date=${date}&timezone=${encodeURIComponent(tz)}`;
+      try {
+        const r = await axios.get(url, AXIOS);
+        const d = r.data || {};
+        const results = typeof d.results === 'number' ? d.results : (d.response?.length || 0);
+        debugRows.push({ stage:`${tag}-league`, leagueId: lid, url, status: r.status, results, errors: d?.errors || null });
+        out.push(...keep(d.response));
+      } catch (e) {
+        debugRows.push({ stage:`${tag}-league`, leagueId: lid, url, status: e?.response?.status || 0, errors: e?.response?.data?.errors || e?.message || 'error' });
+      }
+      if (out.length >= MAX_FIXTURES_TO_SCORE) break;
+    }
+    if (out.length >= MAX_FIXTURES_TO_SCORE) break;
+  }
+  return out;
+}
+
+// Try date / from-to with 3 TZs, then dynamic league-by-league scan for Europe
 async function fetchFixturesRobust(date, season, debugRows){
   const keep = (arr) => (arr || []).filter(isInEuropeClubScope);
   const TZS = [API_TZ, 'Europe/London', 'UTC'];
@@ -107,7 +153,7 @@ async function fetchFixturesRobust(date, season, debugRows){
     if (arr.length) return arr;
   }
 
-  // C) League-by-league fallback (heavier): enumerate current European leagues (1st/2nd + national cups + UCL/UEL/UECL), then query fixtures for each league.
+  // C) Dynamic League-by-league fallback (heavier): enumerate current European leagues (1st/2nd + national cups + UCL/UEL/UECL)
   let leagues = [];
   try {
     // Pull all current leagues, then filter to Europe scope
@@ -138,7 +184,7 @@ async function fetchFixturesRobust(date, season, debugRows){
         const d = r.data || {};
         const results = typeof d.results === 'number' ? d.results : (d.response?.length || 0);
         debugRows.push({ stage:'league-scan', url, status: r.status, results, errors: d?.errors || null });
-        byLeague.push(...keep(d.response));
+        byLeague.push(...(d.response || []).filter(isInEuropeClubScope));
       } catch (e) {
         debugRows.push({ stage:'league-scan', url, status: e?.response?.status || 0, errors: e?.response?.data?.errors || e?.message || 'error' });
       }
@@ -253,9 +299,17 @@ module.exports = async (req, res) => {
     const debug   = req.query.debug  === '1';
 
     const debugRows = [];
-    // Discover fixtures robustly
-    const fixturesRaw = await fetchFixturesRobust(date, season, debugRows);
-    const fixtures = fixturesRaw.slice(0, MAX_FIXTURES_TO_SCORE);
+
+    // ---- 1) Primary whitelist scan (Top-5 + UEFA) ----
+    let fixturesRaw = await fetchFixturesByLeagueList(date, season, PRIMARY_LEAGUE_IDS, debugRows, 'primary');
+
+    // ---- 2) If not enough candidates later, we may need more fixtures:
+    // We'll *append* fallback leagues *only if* the scored pool ends < 2.
+    // For now, just keep fixturesRaw as-is; we might add more after scoring.
+    let usedLeagueSets = { primary: [...PRIMARY_LEAGUE_IDS], fallback: [] };
+
+    // We only score up to MAX_FIXTURES_TO_SCORE to control cost/time.
+    let fixtures = fixturesRaw.slice(0, MAX_FIXTURES_TO_SCORE);
 
     const picksRaw = [];
     for (const f of fixtures) {
@@ -288,6 +342,7 @@ module.exports = async (req, res) => {
           prediction: side,
           confidence: conf,
           meta: {
+            leagueId: lid,
             pOver25: toPct(100 * pOver),
             expGoals: Number(expGoals.toFixed(2)),
             last15: { homeGames: hForm.games, awayGames: aForm.games }
@@ -298,11 +353,116 @@ module.exports = async (req, res) => {
     }
 
     // sort & take top2; enforce 'strict' if requested
-    let pool = [...picksRaw].sort((a,b)=> b.confidence - a.confidence);
-    if (strict) pool = pool.filter(x => x.confidence >= minConf);
-    let picks = pool.slice(0,2);
-    if (!strict && picks.length < 2 && picksRaw.length) {
-      picks = [...picksRaw].sort((a,b)=> b.confidence - a.confidence).slice(0,2);
+    const finalize = (poolArr) => {
+      let pool = [...poolArr].sort((a,b)=> b.confidence - a.confidence);
+      if (strict) pool = pool.filter(x => x.confidence >= minConf);
+      let picks = pool.slice(0,2);
+      if (!strict && picks.length < 2 && poolArr.length) {
+        picks = [...poolArr].sort((a,b)=> b.confidence - a.confidence).slice(0,2);
+      }
+      return picks;
+    };
+
+    let picks = finalize(picksRaw);
+
+    // ---- 3) If still < 2 picks, extend with FALLBACK leagues then, as last resort, robust scan ----
+    if (picks.length < 2) {
+      // Add more fixtures from fallback leagues
+      const fallbackFixtures = await fetchFixturesByLeagueList(date, season, FALLBACK_LEAGUE_IDS, debugRows, 'fallback');
+      usedLeagueSets.fallback = [...FALLBACK_LEAGUE_IDS];
+
+      const moreFixtures = fallbackFixtures.slice(0, Math.max(0, MAX_FIXTURES_TO_SCORE - fixtures.length));
+      fixtures = fixtures.concat(moreFixtures);
+
+      // Score only the newly added fixtures to avoid rework
+      for (const f of moreFixtures) {
+        try {
+          const lid = f.league?.id;
+          const hId = f.teams?.home?.id;
+          const aId = f.teams?.away?.id;
+          if (!lid || !hId || !aId) continue;
+
+          const [lastH, lastA] = await Promise.all([
+            getTeamLastOfficialMatches(hId, 15),
+            getTeamLastOfficialMatches(aId, 15)
+          ]);
+          const hForm = computeTeamForm(lastH, hId);
+          const aForm = computeTeamForm(lastA, aId);
+          if ((hForm.games + aForm.games) < 8) continue;
+
+          const { lambdaHome, lambdaAway, expGoals } = estimateLambdasFromForm(hForm, aForm);
+          const pOver  = probTotalsAtLeast(lambdaHome, lambdaAway, 3);
+          const pUnder = 1 - pOver;
+          const side   = (pOver >= pUnder) ? 'Over 2.5' : 'Under 2.5';
+          const conf   = toPct(100 * Math.max(pOver, pUnder));
+
+          picksRaw.push({
+            match: `${f.teams.home.name} vs ${f.teams.away.name}`,
+            league: f.league?.name || '',
+            kickoff: f.fixture?.date,
+            market: 'Over/Under 2.5 Goals',
+            prediction: side,
+            confidence: conf,
+            meta: {
+              leagueId: lid,
+              pOver25: toPct(100 * pOver),
+              expGoals: Number(expGoals.toFixed(2)),
+              last15: { homeGames: hForm.games, awayGames: aForm.games }
+            },
+            reasoning: reason(f, expGoals, hForm, aForm)
+          });
+        } catch (_) {}
+      }
+
+      picks = finalize(picksRaw);
+
+      // Last resort: if still nothing, fall back to your original robust discovery
+      if (picks.length < 2) {
+        const robustFixtures = await fetchFixturesRobust(date, season, debugRows);
+        const add = robustFixtures.slice(0, Math.max(0, MAX_FIXTURES_TO_SCORE - fixtures.length));
+        fixtures = fixtures.concat(add);
+
+        for (const f of add) {
+          try {
+            const lid = f.league?.id;
+            const hId = f.teams?.home?.id;
+            const aId = f.teams?.away?.id;
+            if (!lid || !hId || !aId) continue;
+
+            const [lastH, lastA] = await Promise.all([
+              getTeamLastOfficialMatches(hId, 15),
+              getTeamLastOfficialMatches(aId, 15)
+            ]);
+            const hForm = computeTeamForm(lastH, hId);
+            const aForm = computeTeamForm(lastA, aId);
+            if ((hForm.games + aForm.games) < 8) continue;
+
+            const { lambdaHome, lambdaAway, expGoals } = estimateLambdasFromForm(hForm, aForm);
+            const pOver  = probTotalsAtLeast(lambdaHome, lambdaAway, 3);
+            const pUnder = 1 - pOver;
+            const side   = (pOver >= pUnder) ? 'Over 2.5' : 'Under 2.5';
+            const conf   = toPct(100 * Math.max(pOver, pUnder));
+
+            picksRaw.push({
+              match: `${f.teams.home.name} vs ${f.teams.away.name}`,
+              league: f.league?.name || '',
+              kickoff: f.fixture?.date,
+              market: 'Over/Under 2.5 Goals',
+              prediction: side,
+              confidence: conf,
+              meta: {
+                leagueId: lid,
+                pOver25: toPct(100 * pOver),
+                expGoals: Number(expGoals.toFixed(2)),
+                last15: { homeGames: hForm.games, awayGames: aForm.games }
+              },
+              reasoning: reason(f, expGoals, hForm, aForm)
+            });
+          } catch (_) {}
+        }
+
+        picks = finalize(picksRaw);
+      }
     }
 
     const payload = {
@@ -310,9 +470,9 @@ module.exports = async (req, res) => {
       dateUsed: date,
       thresholds: { minConf, strict },
       meta: {
-        rawFixtures: fixturesRaw.length,
-        fixturesScored: fixtures.length,
+        rawFixtures: fixtures.length,
         candidates: picksRaw.length,
+        leagueSetsUsed: usedLeagueSets,
         ...(debug ? { debugLog: debugRows } : {})
       },
       picks,
