@@ -1,91 +1,77 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OverEdge – Free Picks</title>
-  <link rel="stylesheet" href="/app.css" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Free Picks · OverEdge</title>
+  <meta name="description" content="Two free football picks every day with confidence and reasoning."/>
+  <link rel="stylesheet" href="/style.css"/>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-88C4MQ3EF8');
+  </script>
 </head>
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="brand" href="/home.html">OverEdge</a>
-      <a class="active" href="/free-picks.html">Free Picks</a>
-      <a href="/pro.html">Pro</a>
-      <a href="/pricing.html">Pricing</a>
-      <a href="/about.html">About</a>
-      <a href="/faq.html">FAQ</a>
-      <span class="spacer"></span>
-      <span id="nav-user">Account</span>
-      <span id="nav-auth"></span>
+      <a class="logo" href="/">OverEdge</a>
+      <div class="links">
+        <a href="/free-picks" aria-current="page">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/faq">FAQ</a>
+        <a href="/account">Account</a>
+      </div>
     </nav>
   </header>
 
-  <main class="container">
-    <h1>Free Picks</h1>
-
-    <div class="toolbar">
-      <label>
-        Date:
-        <input id="date" type="date" />
-      </label>
-      <button id="btn-refresh" class="btn">Recompute</button>
-    </div>
-
-    <div id="status" class="muted">Loading…</div>
-    <div id="picks" class="grid"></div>
+  <main>
+    <section class="section">
+      <h1>Today’s Free Picks</h1>
+      <p class="muted">Updated daily. We show the two most confident Over/Under 2.5 selections based on recent form.</p>
+      <div id="free-picks"></div>
+    </section>
   </main>
 
-  <script type="module" src="/app.js"></script>
+  <footer class="site-footer">
+    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+  </footer>
+
   <script>
-    const elDate   = document.querySelector('#date');
-    const elPicks  = document.querySelector('#picks');
-    const elStatus = document.querySelector('#status');
-    const elBtnRef = document.querySelector('#btn-refresh');
+    document.getElementById('y').textContent = new Date().getFullYear();
 
-    // default date = today (UTC slice)
-    const today = new Date().toISOString().slice(0,10);
-    elDate.value = today;
-
-    async function load({ refresh=false } = {}) {
-      elStatus.textContent = 'Loading…';
-      elPicks.innerHTML = '';
-
-      const qs = new URLSearchParams({ date: elDate.value, minConf: '65' });
-      if (refresh) qs.set('refresh', '1');
+    async function renderFreePicks() {
+      const el = document.getElementById('free-picks');
+      el.innerHTML = 'Loading…';
       try {
-        const r = await fetch(`/api/free-picks?${qs.toString()}`);
-        const data = await r.json();
-        render(data);
+        const res = await fetch('/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75');
+        const data = await res.json();
+        if (!data.picks || data.picks.length === 0) {
+          el.innerHTML = '<p>No confident picks available today.</p>';
+          return;
+        }
+        el.innerHTML = data.picks.map(p => `
+          <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
+            <div style="font-weight:600">${p.league}</div>
+            <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
+            <div style="margin:.5rem 0">
+              <span style="font-weight:600">${p.market}</span>
+              <span style="margin-left:.5rem">(${p.confidencePct}% confidence)</span>
+              ${p.odds ? `<span style="margin-left:1rem">Odds: ${p.odds}</span>` : ``}
+            </div>
+            <div style="font-size:.95rem">${p.reasoning}</div>
+          </div>
+        `).join('');
       } catch (e) {
-        elStatus.textContent = 'Could not load picks.';
+        el.innerHTML = '<p>Could not load picks.</p>';
       }
     }
-
-    function render(data) {
-      const picks = data?.picks || [];
-      if (!picks.length) {
-        elStatus.textContent = 'No picks yet. Try later.';
-        return;
-      }
-      elStatus.textContent = '';
-      for (const p of picks) {
-        const card = document.createElement('article');
-        card.className = 'card';
-        card.innerHTML = `
-          <h3>${p.match}</h3>
-          <p class="muted">${new Date(p.kickoff).toLocaleString()} · ${p.league}</p>
-          <p><strong>${p.market}:</strong> ${p.prediction}</p>
-          <p><strong>Confidence:</strong> ${p.confidence}%</p>
-          <p>${p.reasoning}</p>
-        `;
-        elPicks.appendChild(card);
-      }
-    }
-
-    elDate.addEventListener('change', () => load());
-    elBtnRef.addEventListener('click', () => load({ refresh:true }));
-    load();
+    document.addEventListener('DOMContentLoaded', renderFreePicks);
   </script>
 </body>
 </html>

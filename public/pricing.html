@@ -1,73 +1,146 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OverEdge – Pricing</title>
-  <link rel="stylesheet" href="/app.css" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pricing · OverEdge</title>
+  <meta name="description" content="Choose a plan: Weekly, Monthly, Quarterly, or Yearly."/>
+  <link rel="stylesheet" href="/style.css"/>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-88C4MQ3EF8');
+  </script>
 </head>
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="brand" href="/home.html">OverEdge</a>
-      <a href="/free-picks.html">Free Picks</a>
-      <a href="/pro.html">Pro</a>
-      <a class="active" href="/pricing.html">Pricing</a>
-      <a href="/about.html">About</a>
-      <a href="/faq.html">FAQ</a>
-      <span class="spacer"></span>
-      <span id="nav-user">Account</span>
-      <span id="nav-auth"></span>
+      <a class="logo" href="/">OverEdge</a>
+      <div class="links">
+        <a href="/free-picks">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing" aria-current="page">Pricing</a>
+        <a href="/faq">FAQ</a>
+        <a href="/account">Account</a>
+      </div>
     </nav>
   </header>
 
-  <main class="container">
-    <h1>Pricing</h1>
-    <p>Choose a plan. You’ll need to sign in with Google before subscribing.</p>
+  <main>
+    <section class="section">
+      <h1>Pricing</h1>
+      <p class="muted">You must be <strong>signed in with Google</strong> before subscribing.</p>
 
-    <section class="grid">
-      <article class="card">
-        <h2>Weekly</h2>
-        <p>Weekly access to Pro.</p>
-        <button class="btn" data-link="https://buy.stripe.com/bJe28s9DGabedyv5108k800">Subscribe</button>
-      </article>
+      <div class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+        <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <h3>Weekly</h3>
+          <div class="price">€6.99</div>
+          <ul>
+            <li>Hero Bet of the Day</li>
+            <li>Full Pro Board</li>
+            <li>Daily updates</li>
+          </ul>
+          <p><a class="btn" href="#" data-plan="weekly">Subscribe</a></p>
+        </div>
 
-      <article class="card">
-        <h2>Monthly</h2>
-        <p>6 months.</p>
-        <button class="btn" data-link="https://buy.stripe.com/5kQ4gA6rudnqcur5108k801">Subscribe</button>
-      </article>
+        <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <h3>Monthly</h3>
+          <div class="price">€17.99</div>
+          <ul>
+            <li>Everything in Weekly</li>
+            <li>Best value for starters</li>
+          </ul>
+          <p><a class="btn" href="#" data-plan="monthly">Subscribe</a></p>
+        </div>
 
-      <article class="card">
-        <h2>Quaterly</h2>
-        <p>Best value.</p>
-        <button class="btn" data-link="https://buy.stripe.com/8x24gAeY0erucurgJI8k802">Subscribe</button>
-      </article>
+        <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <h3>Quarterly</h3>
+          <div class="price">€44.99</div>
+          <ul>
+            <li>Everything in Monthly</li>
+            <li>Save more per month</li>
+          </ul>
+          <p><a class="btn" href="#" data-plan="quarterly">Subscribe</a></p>
+        </div>
 
-      <article class="card">
-        <h2>Yearly</h2>
-        <p>Priority support.</p>
-        <button class="btn" data-link="https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803">Subscribe</button>
-      </article>
+        <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <h3>Yearly</h3>
+          <div class="price">€146.99</div>
+          <ul>
+            <li>Everything in Quarterly</li>
+            <li>Best long-term value</li>
+          </ul>
+          <p><a class="btn" href="#" data-plan="yearly">Subscribe</a></p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;padding:1rem;border:1px solid #eee;border-radius:12px">
+        <h3>What you get</h3>
+        <ul>
+          <li>Daily Hero Bet (odds ≥ 2.00)</li>
+          <li>Pro Board with filters (5/10/15)</li>
+          <li>Reasoning for picks & confidence %</li>
+        </ul>
+      </div>
     </section>
   </main>
 
-  <script type="module" src="/app.js"></script>
-  <script>
-    // Require sign-in before going to Stripe checkout
-    document.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button[data-link]');
-      if (!btn) return;
-      e.preventDefault();
-      const u = window.$user?.();
-      if (!u) {
-        // triggers Google sign-in from app.js
-        if (window.signIn) await window.signIn();
+  <footer class="site-footer">
+    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+  </footer>
+
+  <!-- Firebase auth gate for checkout -->
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+
+    document.getElementById('y').textContent = new Date().getFullYear();
+
+    // Your Stripe payment links
+    const STRIPE_LINKS = {
+      weekly:    "https://buy.stripe.com/bJe28s9DGabedyv5108k800",
+      monthly:   "https://buy.stripe.com/5kQ4gA6rudnqcur5108k801",
+      quarterly: "https://buy.stripe.com/8x24gAeY0erucurgJI8k802",
+      yearly:    "https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803"
+    };
+
+    let auth = null;
+    let currentUser = null;
+
+    async function initFirebase() {
+      const cfg = await fetch('/api/rpc?action=public-config').then(r => r.json()).then(d => d.firebase || {});
+      if (!getApps().length) initializeApp(cfg);
+      auth = getAuth();
+      onAuthStateChanged(auth, (u) => { currentUser = u || null; });
+    }
+
+    function requireSignedIn() {
+      if (!currentUser) {
+        alert('Please sign in with Google first.');
+        window.location.href = '/account';
+        return false;
       }
-      // navigate after sign-in (or immediately if already signed in)
-      const link = btn.getAttribute('data-link');
-      if (link) location.href = link;
-    });
+      return true;
+    }
+
+    (async () => {
+      await initFirebase();
+
+      document.querySelectorAll('[data-plan]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (!requireSignedIn()) return;
+          const plan = btn.getAttribute('data-plan');
+          const url  = STRIPE_LINKS[plan];
+          if (!url) return alert(`Payment link for "${plan}" is not set.`);
+          window.location.href = url;
+        });
+      });
+    })();
   </script>
 </body>
 </html>

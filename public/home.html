@@ -1,65 +1,99 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>OverEdge · Home</title>
-  <link rel="stylesheet" href="/app.css?v=3" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OverEdge — Data beats gut</title>
+  <meta name="description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
+  <meta property="og:title" content="OverEdge — Data beats gut"/>
+  <meta property="og:description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
+  <meta property="og:type" content="website"/>
+  <link rel="stylesheet" href="/style.css"/>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-88C4MQ3EF8');
+  </script>
 </head>
 <body>
-  <!-- Top nav -->
   <header class="site-header">
     <nav class="nav">
-      <a class="brand" href="/home.html">OverEdge</a>
-
+      <a class="logo" href="/">OverEdge</a>
       <div class="links">
-        <a href="/free-picks.html">Free Picks</a>
-        <a href="/pro.html">Pro</a>
-        <a href="/pricing.html">Pricing</a>
-        <a href="/about.html">About</a>
-        <a href="/faq.html">FAQ</a>
+        <a href="/free-picks">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/faq">FAQ</a>
+        <a href="/account">Account</a>
       </div>
-
-      <div class="spacer"></div>
-
-      <div id="nav-user" class="nav-user">Account</div>
-      <div id="nav-auth" class="nav-auth"></div>
     </nav>
   </header>
 
-  <main class="wrap">
-    <h1>Data beats gut.</h1>
-
-    <section>
+  <main>
+    <section class="hero">
+      <h1>Data beats gut.</h1>
+      <p>Daily football picks powered by real stats. Two free picks every day, plus the Pro Board and a Hero Bet for value hunters.</p>
       <p>
-        Two daily free picks (OU 2.5) across European club football.
-        Pro adds the full board and a risky <strong>Hero</strong> pick from top competitions.
+        <a class="btn" href="/free-picks">See Today’s Free Picks</a>
+        <a class="btn secondary" href="/pricing">Go Pro</a>
       </p>
     </section>
 
-    <section>
-      <h2>Today’s Free Picks</h2>
-      <p>Best two OU2.5 angles for today across Europe’s 1st & 2nd divisions (cups included when relevant).</p>
-      <p><a class="btn" href="/free-picks.html">See free picks</a></p>
+    <section class="section">
+      <h2>Today’s Free Picks (preview)</h2>
+      <div id="home-free-picks"></div>
+      <p><a class="btn small" href="/free-picks">View full details →</a></p>
     </section>
 
-    <section>
-      <h2>Go Pro</h2>
-      <p>Full board by league with model picks & reasons, plus a Hero bet of the day from top competitions.</p>
-      <p><a class="btn" href="/pricing.html">View pricing</a></p>
-    </section>
-
-    <section>
-      <h2>Referral</h2>
-      <p>Invite friends — earn free time for each active subscriber you bring. (Coming soon)</p>
+    <section class="section">
+      <h3>Why OverEdge?</h3>
+      <ul>
+        <li>Transparent reasoning (recent-form stats, not hype)</li>
+        <li>Clear confidence % on every pick</li>
+        <li>Fallback leagues when Europe’s top flights are quiet</li>
+      </ul>
     </section>
   </main>
 
   <footer class="site-footer">
-    <small>© OverEdge</small>
+    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
   </footer>
 
-  <!-- Load the bootstrap (auth/nav helpers) -->
-  <script type="module" src="/app.js?v=3"></script>
+  <script>
+    // Year
+    document.getElementById('y').textContent = new Date().getFullYear();
+
+    // Preview two picks
+    async function loadPreview() {
+      const el = document.getElementById('home-free-picks');
+      el.innerHTML = 'Loading…';
+      try {
+        const res = await fetch('/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75');
+        const data = await res.json();
+        if (!data.picks || data.picks.length === 0) {
+          el.innerHTML = '<p>No confident picks available yet today.</p>';
+          return;
+        }
+        el.innerHTML = data.picks.map(p => `
+          <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
+            <div style="font-weight:600">${p.league}</div>
+            <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
+            <div style="margin:.5rem 0">
+              <span style="font-weight:600">${p.market}</span>
+              <span style="margin-left:.5rem">(${p.confidencePct}% confidence)</span>
+              ${p.odds ? `<span style="margin-left:1rem">Odds: ${p.odds}</span>` : ``}
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<p>Could not load picks.</p>';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', loadPreview);
+  </script>
 </body>
 </html>
