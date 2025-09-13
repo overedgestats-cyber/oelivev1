@@ -2,9 +2,6 @@
 // One endpoint, multiple actions via ?action=...
 // Actions: health, public-config, free-picks, pro-pick, verify-sub
 
-// If you ever need to force Node runtime on Vercel (recommended for Stripe):
-export const config = { runtime: "nodejs20.x" };
-
 const API_BASE = "https://v3.football.api-sports.io";
 
 // ---------- Helpers ----------
