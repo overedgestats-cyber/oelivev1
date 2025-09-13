@@ -35,7 +35,32 @@
       <h1>Pricing</h1>
       <p class="muted">You must be <strong>signed in with Google</strong> before subscribing.</p>
 
-      <div class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      <!-- Free vs Pro comparison -->
+      <div class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin:.5rem 0 1rem">
+        <!-- Free -->
+        <div class="card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <h3>Free</h3>
+          <ul>
+            <li>Two daily Over/Under 2.5 Goals picks</li>
+          </ul>
+        </div>
+
+        <!-- Pro -->
+        <div class="card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <h3>Pro</h3>
+          <ul>
+            <li>Two daily Over/Under 2.5 Goals picks</li>
+            <li>Pro Board access (Top 5 European leagues + UEFA/FIFA fixtures)</li>
+            <li>Hero Bet: one value pick per day (target odds ≈ 2.00)</li>
+            <li>More markets: U/O Goals, U/O Corners, U/O Cards, 1X2, BTTS (Yes/No)</li>
+            <li>Bonuses & referral rewards</li>
+          </ul>
+          <p><a class="btn small" href="#plans">Go Pro</a></p>
+        </div>
+      </div>
+
+      <!-- Plans -->
+      <div id="plans" class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
         <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
           <h3>Weekly</h3>
           <div class="price">€6.99</div>
@@ -77,15 +102,6 @@
           <p><a class="btn" href="#" data-plan="yearly">Subscribe</a></p>
         </div>
       </div>
-
-      <div class="card" style="margin-top:1rem;padding:1rem;border:1px solid #eee;border-radius:12px">
-        <h3>What you get</h3>
-        <ul>
-          <li>Daily Hero Bet (odds ≥ 2.00)</li>
-          <li>Pro Board with filters (5/10/15)</li>
-          <li>Reasoning for picks & confidence %</li>
-        </ul>
-      </div>
     </section>
   </main>
 
@@ -100,27 +116,20 @@
     </div>
   </footer>
 
-  <!-- Firebase + referral-aware checkout -->
+  <!-- Firebase auth gate for checkout -->
   <script type="module">
     import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
-    // Footer year
     document.getElementById('y').textContent = new Date().getFullYear();
 
-    // Stripe links (live or test)
+    // Your Stripe payment links
     const STRIPE_LINKS = {
       weekly:    "https://buy.stripe.com/bJe28s9DGabedyv5108k800",
       monthly:   "https://buy.stripe.com/5kQ4gA6rudnqcur5108k801",
       quarterly: "https://buy.stripe.com/8x24gAeY0erucurgJI8k802",
       yearly:    "https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803"
     };
-
-    // Helpers
-    function getCookie(name){
-      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
-      return m ? decodeURIComponent(m[1]) : null;
-    }
 
     let auth = null;
     let currentUser = null;
@@ -132,6 +141,11 @@
       onAuthStateChanged(auth, (u) => { currentUser = u || null; });
     }
 
+    function getCookie(name){
+      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
     function requireSignedIn() {
       if (!currentUser) {
         alert('Please sign in with Google first.');
@@ -141,7 +155,6 @@
       return true;
     }
 
-    // Main
     (async () => {
       await initFirebase();
 
@@ -154,7 +167,7 @@
           const url  = STRIPE_LINKS[plan];
           if (!url) { alert(`Payment link for "${plan}" is not set.`); return; }
 
-          // Attach referral, if any
+          // If a referral is present, attach it to this friend before checkout
           try {
             const ref = getCookie('oe_ref');
             if (ref && currentUser?.email) {
@@ -169,19 +182,17 @@
     })();
   </script>
 
-  <!-- Referral capture: store ?ref=CODE for 30 days -->
   <script>
-    (function () {
-      try {
-        const u = new URL(location.href);
-        const ref = u.searchParams.get('ref');
-        if (ref) {
-          document.cookie = 'oe_ref=' + encodeURIComponent(ref) +
-            '; Max-Age=' + (30*24*3600) +
-            '; Path=/; SameSite=Lax';
-        }
-      } catch {}
-    })();
+  /* Referral capture: store ?ref=CODE for 30 days */
+  (function () {
+    try {
+      const u = new URL(location.href);
+      const ref = u.searchParams.get('ref');
+      if (ref) {
+        document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+      }
+    } catch {}
+  })();
   </script>
 </body>
 </html>
