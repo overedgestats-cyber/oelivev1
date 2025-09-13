@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverEdge – Account</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="brand" href="/home.html">OverEdge</a>
+      <a href="/free-picks.html">Free Picks</a>
+      <a href="/pro.html">Pro</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <span class="spacer"></span>
+      <span id="nav-user">Account</span>
+      <span id="nav-auth"></span>
+    </nav>
+  </header>
+
+  <main class="container">
+    <h1>Account</h1>
+
+    <!-- Signed-out notice -->
+    <section id="gate" class="card warn" style="display:none;">
+      <h3>You’re not signed in</h3>
+      <p>Sign in with Google to view your account.</p>
+      <button class="btn" id="btn-signin">Sign in with Google</button>
+    </section>
+
+    <!-- Profile -->
+    <section id="profile" class="card" style="display:none;">
+      <div style="display:flex; gap:16px; align-items:center;">
+        <img id="u-photo" src="" alt="" style="width:56px;height:56px;border-radius:50%;border:1px solid var(--border);object-fit:cover;"/>
+        <div>
+          <div id="u-email" style="font-weight:700;"></div>
+          <div id="u-uid" class="muted" style="font-size:.9rem;"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <button class="btn" onclick="signOutAll()">Sign out</button>
+      </div>
+    </section>
+
+    <!-- Pro status -->
+    <section id="pro" class="card" style="display:none;">
+      <h3>Pro Access</h3>
+      <div id="pro-status" class="muted">Checking…</div>
+      <div style="margin-top:12px;">
+        <a class="btn primary" href="/pricing.html">Manage / Subscribe</a>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+  <script>
+    const elGate = document.querySelector('#gate');
+    const elSign = document.querySelector('#btn-signin');
+    const elProf = document.querySelector('#profile');
+    const elPhoto= document.querySelector('#u-photo');
+    const elEmail= document.querySelector('#u-email');
+    const elUid  = document.querySelector('#u-uid');
+    const elPro  = document.querySelector('#pro');
+    const elProS = document.querySelector('#pro-status');
+
+    elSign.addEventListener('click', () => window.signIn && window.signIn());
+
+    function showSignedOut(){
+      elGate.style.display = '';
+      elProf.style.display = 'none';
+      elPro.style.display  = 'none';
+    }
+    function showSignedIn(u){
+      elGate.style.display = 'none';
+      elProf.style.display = '';
+      elPro.style.display  = '';
+
+      elPhoto.src = u.photoURL || 'https://avatars.githubusercontent.com/u/9919?s=200&v=4';
+      elEmail.textContent = u.email || '(no email)';
+      elUid.textContent   = u.uid || '';
+    }
+
+    async function checkProStatus(){
+      // Lightweight “am I allowed?” probe:
+      try {
+        const today = new Date().toISOString().slice(0,10);
+        await window.$authedFetch(`/api/pro-board?date=${today}`);
+        elProS.innerHTML = `<span style="color:var(--accent);font-weight:700;">Active</span> — You have access to Pro features.`;
+      } catch (e) {
+        if (e.status === 401) {
+          elProS.innerHTML = `<span style="color:var(--danger);font-weight:700;">Not active</span> — Sign in & subscribe to unlock Pro.`;
+        } else {
+          elProS.textContent = 'Could not verify subscription status.';
+        }
+      }
+    }
+
+    function onAuthChange(){
+      const u = window.$user?.();
+      if (!u) { showSignedOut(); return; }
+      showSignedIn(u);
+      checkProStatus();
+    }
+
+    document.addEventListener('authchange', onAuthChange);
+    // initial
+    onAuthChange();
+  </script>
+</body>
+</html>
