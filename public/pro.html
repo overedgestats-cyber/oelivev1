@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Pro Board · OverEdge</title>
-  <meta name="description" content="Hero Bet of the Day and full stats board for deeper picks."/>
+  <meta name="description" content="Hero Bet of the Day and full stats board with markets."/>
   <link rel="stylesheet" href="/style.css"/>
 
   <!-- Google tag (gtag.js) -->
@@ -15,6 +15,19 @@
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
+
+  <style>
+    .grid-2 { display:grid; grid-template-columns:1fr auto; gap:.75rem; align-items:center; }
+    .muted-sm { opacity:.7; font-size:.9rem; }
+    .pill { font-size:.75rem; padding:.1rem .5rem; border:1px solid #e5e7eb; border-radius:999px; }
+    .row { padding:.75rem 1rem; border:1px solid #eee; border-radius:12px; margin:.5rem 0; }
+    .marketbox { background:#fafafa; padding:.5rem .75rem; border-radius:10px; margin-top:.5rem; border:1px dashed #e5e7eb;}
+    select.market { padding:.4rem .6rem; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+    .group { margin:1.25rem 0; }
+    .group > h3 { margin:.5rem 0; }
+    .hero-card { padding:1rem; border:1px solid #eee; border-radius:12px; }
+    .badge-pro { background:#eef6ff; border:1px solid #cfe4ff; color:#1d4ed8; }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -24,16 +37,13 @@
         <a href="/free-picks">Free Picks</a>
         <a href="/pro" aria-current="page">Pro</a>
         <a href="/pricing">Pricing</a>
-        <a href="/FAQ">FAQ</a>
+        <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
-
-      <!-- 🔽 Added: global auth controls in the navbar -->
       <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-        <span id="nav-plan" class="badge" style="display:none"></span>
+        <span id="nav-plan" class="badge pill" style="display:none"></span>
         <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
       </div>
-      <!-- 🔼 End added -->
     </nav>
   </header>
 
@@ -55,18 +65,13 @@
 
       <section class="section">
         <h2>Hero Bet of the Day</h2>
-        <div id="hero-bet" class="card" style="padding:1rem;border:1px solid #eee;border-radius:12px">Loading…</div>
-        <p class="muted" style="margin-top:.5rem">If you see “coming soon”, the endpoint isn’t live yet.</p>
+        <div id="hero" class="hero-card">Loading…</div>
+        <p class="muted" style="margin-top:.5rem">Top-5 (and UEFA/FIFA) scope; U/19 etc. are excluded.</p>
       </section>
 
       <section class="section">
-        <h3>Pro Features</h3>
-        <ul>
-          <li>Full team stat filters (last 5/10/15)</li>
-          <li>Over/Under, BTTS, Corners, Cards, Shots, Goals</li>
-          <li>Strict FT markets for odds</li>
-          <li>Reasoning & confidence % on suggestions</li>
-        </ul>
+        <h2>Pro Board</h2>
+        <div id="board">Loading…</div>
       </section>
     </section>
   </main>
@@ -75,80 +80,213 @@
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
   </footer>
 
-  <!-- Firebase + gating -->
+  <!-- Firebase + gating + rendering -->
   <script type="module">
     import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
     document.getElementById('y').textContent = new Date().getFullYear();
 
     const locked = document.getElementById('locked');
     const proContent = document.getElementById('proContent');
-    const heroEl = document.getElementById('hero-bet');
+    const heroEl = document.getElementById('hero');
+    const boardEl = document.getElementById('board');
+
+    const navAuth = document.getElementById('nav-auth');
+    const navPlan = document.getElementById('nav-plan');
 
     let auth = null;
+    let currentUser = null;
+
+    function tzGuess(){
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
+      catch { return "Europe/Sofia"; }
+    }
 
     async function initFirebase() {
       const cfg = await fetch('/api/rpc?action=public-config').then(r => r.json()).then(d => d.firebase || {});
       if (!getApps().length) initializeApp(cfg);
       auth = getAuth();
-      return auth;
+      onAuthStateChanged(auth, u => { currentUser = u || null; updateNav(); if (u) gateAndLoad(); else showLocked(); });
     }
 
-    async function verifyStripe(email) {
-      try {
-        const res = await fetch(`/api/rpc?action=verify-sub&email=${encodeURIComponent(email)}`);
-        if (!res.ok) throw new Error('verify failed');
-        return await res.json(); // { pro, plan, status }
-      } catch {
-        return { pro: false, plan: null, status: 'unknown' };
+    function updateNav(){
+      if (currentUser) {
+        navAuth.textContent = "Sign Out";
+        navAuth.onclick = async () => { try { await signOut(auth); } catch {} };
+        // show local plan badge if we have it
+        try {
+          const cache = JSON.parse(localStorage.getItem("oe.user") || "null");
+          if (cache?.pro) { navPlan.textContent = cache.plan ? cache.plan : "Pro"; navPlan.classList.add("badge-pro"); navPlan.style.display="inline-block"; }
+          else { navPlan.textContent = "Free"; navPlan.classList.remove("badge-pro"); navPlan.style.display="inline-block"; }
+        } catch { navPlan.style.display="none"; }
+      } else {
+        navAuth.textContent = "Sign In";
+        navAuth.onclick = async () => {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          try { await signInWithPopup(auth, provider); } catch { alert("Google sign-in failed."); }
+        };
+        navPlan.style.display="none";
       }
     }
 
-    async function loadHeroBet() {
+    function showLocked(){
+      locked.style.display = 'block';
+      proContent.style.display = 'none';
+    }
+    function showPro(){
+      locked.style.display = 'none';
+      proContent.style.display = 'block';
+    }
+
+    async function verifySub(email){
+      const res = await fetch(`/api/rpc?action=verify-sub&email=${encodeURIComponent(email)}`);
+      return res.ok ? res.json() : { pro:false, plan:null, status:"unknown" };
+    }
+
+    async function gateAndLoad(){
+      if (!currentUser) return showLocked();
+      const sub = await verifySub(currentUser.email);
+      // cache a tiny badge snapshot
       try {
-        const res = await fetch('/api/rpc?action=pro-pick');
-        if (!res.ok) { heroEl.innerHTML = '<p>Coming soon. (API endpoint not enabled yet.)</p>'; return; }
-        const data = await res.json();
-        if (!data || !data.heroBet) { heroEl.innerHTML = '<p>No Hero Bet available right now.</p>'; return; }
-        const p = data.heroBet;
-        heroEl.innerHTML = `
-          <div style="font-weight:600">${p.league || ''}</div>
-          <div style="opacity:.7">${p.matchTime || ''} — ${p.selection || ''}</div>
-          <div style="margin:.5rem 0">
-            <span>Odds: ${p.odds ?? '-'}</span>
-            <span style="margin-left:1rem">Confidence: ${p.confidencePct ?? '-'}%</span>
+        localStorage.setItem("oe.user", JSON.stringify({ email: currentUser.email, uid: currentUser.uid, pro: !!sub.pro, plan: sub.plan || null }));
+      } catch {}
+      if (!sub.pro) return showLocked();
+      showPro();
+      loadHero();
+      loadBoard();
+    }
+
+    function heroCard(h){
+      if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
+      const p = h.heroBet;
+      return `
+        <div class="grid-2">
+          <div>
+            <div style="font-weight:600">${p.league}</div>
+            <div class="muted-sm">${p.matchTime} — ${p.home} vs ${p.away}</div>
           </div>
-          <div style="font-size:.95rem">${p.reasoning || ''}</div>
-        `;
+          <div class="muted-sm">Odds: ${p.odds ?? "-"} &nbsp; · &nbsp; Confidence: ${p.confidencePct}%</div>
+        </div>
+        <div style="margin-top:.5rem">${p.reasoning || ""}</div>
+      `;
+    }
+
+    async function loadHero(){
+      try {
+        heroEl.innerHTML = "Loading…";
+        const res = await fetch(`/api/rpc?action=pro-pick&tz=${encodeURIComponent(tzGuess())}`);
+        const data = await res.json();
+        heroEl.innerHTML = heroCard(data);
       } catch {
-        heroEl.innerHTML = '<p>Could not load Hero Bet.</p>';
+        heroEl.innerHTML = "<p>Could not load hero bet.</p>";
       }
     }
 
-    (async () => {
-      await initFirebase();
-      onAuthStateChanged(auth, async (user) => {
-        if (!user) {
-          locked.style.display = 'block';
-          proContent.style.display = 'none';
-          return;
+    // ----- Pro Board -----
+    function marketDetail(fix, which){
+      const m = fix.markets;
+      if (which === 'best') {
+        const b = fix.best;
+        if (!b) return `<div class="marketbox">No best suggestion.</div>`;
+        if (b.market === 'ou25') {
+          return `<div class="marketbox"><strong>${m.ou25.recommendation}</strong> · ${m.ou25.confidencePct}% ${m.ou25.odds ? `· Odds: ${m.ou25.odds}` : ""}<br/><span class="muted-sm">${m.ou25.reasoning}</span></div>`;
+        } else if (b.market === 'btts') {
+          return `<div class="marketbox"><strong>${m.btts.recommendation}</strong> · ${m.btts.confidencePct}% ${m.btts.odds ? `· Odds: ${m.btts.odds}` : ""}<br/><span class="muted-sm">${m.btts.reasoning}</span></div>`;
+        } else {
+          return `<div class="marketbox"><strong>${m.onex2.recommendation ?? "1X2"}</strong> · ${m.onex2.confidencePct ?? "-"}%<br/><span class="muted-sm">${m.onex2.reasoning || ""}</span></div>`;
         }
-        const sub = await verifyStripe(user.email);
-        if (!sub.pro) {
-          locked.style.display = 'block';
-          proContent.style.display = 'none';
-          return;
-        }
-        locked.style.display = 'none';
-        proContent.style.display = 'block';
-        loadHeroBet();
-      });
-    })();
-  </script>
+      }
+      if (which === 'ou25') {
+        return `<div class="marketbox"><strong>${m.ou25.recommendation}</strong> · ${m.ou25.confidencePct}% ${m.ou25.odds ? `· Odds: ${m.ou25.odds}` : ""}<br/><span class="muted-sm">${m.ou25.reasoning}</span></div>`;
+      }
+      if (which === 'btts') {
+        return `<div class="marketbox"><strong>${m.btts.recommendation}</strong> · ${m.btts.confidencePct}% ${m.btts.odds ? `· Odds: ${m.btts.odds}` : ""}<br/><span class="muted-sm">${m.btts.reasoning}</span></div>`;
+      }
+      if (which === 'onex2') {
+        const o = m.onex2.odds || {};
+        const oddsTxt = (o.home || o.draw || o.away) ? `· Odds H/D/A: ${o.home ?? "-"} / ${o.draw ?? "-"} / ${o.away ?? "-"}` : "";
+        return `<div class="marketbox"><strong>${m.onex2.recommendation ?? "1X2"}</strong> · ${m.onex2.confidencePct ?? "-"}% ${oddsTxt}<br/><span class="muted-sm">${m.onex2.reasoning || ""}</span></div>`;
+      }
+      if (which === 'cards' || which === 'corners') {
+        return `<div class="marketbox">Coming soon.</div>`;
+      }
+      return `<div class="marketbox">Select a market.</div>`;
+    }
 
-  <!-- 🔽 Added: shared navbar auth module (powers the Sign In/Out button globally) -->
-  <script type="module" src="/auth.js"></script>
-  <!-- 🔼 End added -->
+    function renderBoard(data){
+      if (!data || !data.groups || Object.keys(data.groups).length === 0) {
+        boardEl.innerHTML = "<p>No matches found in scope today.</p>";
+        return;
+      }
+      const groups = data.groups;
+      const frag = document.createDocumentFragment();
+
+      Object.keys(groups).sort().forEach(comp => {
+        const wrap = document.createElement('div');
+        wrap.className = 'group';
+        wrap.innerHTML = `<h3>${comp}</h3>`;
+        const list = document.createElement('div');
+
+        groups[comp].forEach(fix => {
+          const row = document.createElement('div');
+          row.className = 'row';
+
+          const selectId = `sel-${fix.fixtureId}`;
+          row.innerHTML = `
+            <div class="grid-2">
+              <div>
+                <div style="font-weight:600">${fix.home} vs ${fix.away}</div>
+                <div class="muted-sm">${fix.matchTime}</div>
+              </div>
+              <div>
+                <select class="market" id="${selectId}">
+                  <option value="best">Best suggestion</option>
+                  <option value="ou25">Over/Under 2.5</option>
+                  <option value="btts">BTTS</option>
+                  <option value="onex2">1X2</option>
+                  <option value="cards" disabled>Cards (soon)</option>
+                  <option value="corners" disabled>Corners (soon)</option>
+                </select>
+              </div>
+            </div>
+            <div id="box-${fix.fixtureId}" class="mt-2">${marketDetail(fix, 'best')}</div>
+          `;
+
+          // attach behavior
+          setTimeout(() => {
+            const sel = row.querySelector(`#${selectId}`);
+            const box = row.querySelector(`#box-${fix.fixtureId}`);
+            sel.addEventListener('change', () => {
+              box.innerHTML = marketDetail(fix, sel.value);
+            });
+          }, 0);
+
+          list.appendChild(row);
+        });
+
+        wrap.appendChild(list);
+        frag.appendChild(wrap);
+      });
+
+      boardEl.innerHTML = "";
+      boardEl.appendChild(frag);
+    }
+
+    async function loadBoard(){
+      try {
+        boardEl.innerHTML = "Loading…";
+        const res = await fetch(`/api/rpc?action=pro-board&tz=${encodeURIComponent(tzGuess())}`);
+        const data = await res.json();
+        renderBoard(data);
+      } catch {
+        boardEl.innerHTML = "<p>Could not load Pro Board.</p>";
+      }
+    }
+
+    // boot
+    initFirebase();
+  </script>
 </body>
 </html>
