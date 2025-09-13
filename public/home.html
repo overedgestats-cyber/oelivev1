@@ -2,52 +2,64 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OverEdge – Home</title>
-  <link rel="stylesheet" href="/app.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OverEdge · Home</title>
+  <link rel="stylesheet" href="/app.css?v=3" />
 </head>
 <body>
+  <!-- Top nav -->
   <header class="site-header">
     <nav class="nav">
       <a class="brand" href="/home.html">OverEdge</a>
-      <a href="/free-picks.html">Free Picks</a>
-      <a href="/pro.html">Pro</a>
-      <a href="/pricing.html">Pricing</a>
-      <a href="/about.html">About</a>
-      <a href="/faq.html">FAQ</a>
-      <span class="spacer"></span>
-      <span id="nav-user">Account</span>
-      <span id="nav-auth"></span>
+
+      <div class="links">
+        <a href="/free-picks.html">Free Picks</a>
+        <a href="/pro.html">Pro</a>
+        <a href="/pricing.html">Pricing</a>
+        <a href="/about.html">About</a>
+        <a href="/faq.html">FAQ</a>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div id="nav-user" class="nav-user">Account</div>
+      <div id="nav-auth" class="nav-auth"></div>
     </nav>
   </header>
 
-  <main class="container">
+  <main class="wrap">
     <h1>Data beats gut.</h1>
-    <p class="lead">
-      Two daily free picks (OU 2.5) across European club football. Pro adds the full board and a risky
-      <strong>Hero</strong> pick from top competitions.
-    </p>
 
-    <section class="grid">
-      <article class="card">
-        <h2>Today’s Free Picks</h2>
-        <p>Best two OU2.5 angles for today across Europe’s 1st &amp; 2nd divisions (cups included when relevant).</p>
-        <a class="btn" href="/free-picks.html">See free picks</a>
-      </article>
+    <section>
+      <p>
+        Two daily free picks (OU 2.5) across European club football.
+        Pro adds the full board and a risky <strong>Hero</strong> pick from top competitions.
+      </p>
+    </section>
 
-      <article class="card">
-        <h2>Go Pro</h2>
-        <p>Full board by league with model picks &amp; reasons, plus a Hero bet of the day from top competitions.</p>
-        <a class="btn" href="/pricing.html">View pricing</a>
-      </article>
+    <section>
+      <h2>Today’s Free Picks</h2>
+      <p>Best two OU2.5 angles for today across Europe’s 1st & 2nd divisions (cups included when relevant).</p>
+      <p><a class="btn" href="/free-picks.html">See free picks</a></p>
+    </section>
 
-      <article class="card">
-        <h2>Referral</h2>
-        <p>Invite friends — earn free time for each active subscriber you bring. (Coming soon)</p>
-      </article>
+    <section>
+      <h2>Go Pro</h2>
+      <p>Full board by league with model picks & reasons, plus a Hero bet of the day from top competitions.</p>
+      <p><a class="btn" href="/pricing.html">View pricing</a></p>
+    </section>
+
+    <section>
+      <h2>Referral</h2>
+      <p>Invite friends — earn free time for each active subscriber you bring. (Coming soon)</p>
     </section>
   </main>
 
-  <script type="module" src="/app.js"></script>
+  <footer class="site-footer">
+    <small>© OverEdge</small>
+  </footer>
+
+  <!-- Load the bootstrap (auth/nav helpers) -->
+  <script type="module" src="/app.js?v=3"></script>
 </body>
 </html>
