@@ -1,96 +1,94 @@
 // api/pro-board.js
-// Simplified Pro Board: hardcoded league IDs, flat response
-
 const axios = require("axios");
 const API_KEY = process.env.API_FOOTBALL_KEY || "";
 const AXIOS = { headers: { "x-apisports-key": API_KEY } };
 
-if (!API_KEY) console.error("⚠️ Missing API_FOOTBALL_KEY");
+const LEAGUE_ID = 39; // EPL only for now
 
-// --- Hardcoded leagues we care about ---
-const LEAGUE_IDS = [
-  39, 40,        // England EPL + Championship
-  135, 136,      // Italy Serie A + B
-  78, 79,        // Germany Bundesliga + 2
-  140, 141,      // Spain La Liga 1 + 2
-  61, 62,        // France Ligue 1 + 2
-  2, 3, 848,     // UCL, UEL, UECL
-  1, 4, 5, 6     // FIFA World Cup, UEFA Supercup, AFCON, Asian Cup
-];
-
-// --- Utils ---
 function todayYMD() {
   return new Date().toISOString().slice(0, 10);
 }
+function seasonFromDate(date) {
+  const d = new Date(date);
+  return d.getMonth() + 1 >= 7 ? d.getFullYear() : d.getFullYear() - 1;
+}
 function toPct(n) {
-  return Math.max(1, Math.min(99, Math.round(n * 100)));
+  return Math.round(n * 100);
 }
 
-// Simple Poisson for OU2.5
-function poissonP(lambda, k) {
-  let logFact = 0;
-  for (let i = 1; i <= k; i++) logFact += Math.log(i);
-  return Math.exp(-lambda + k * Math.log(lambda) - logFact);
-}
-function probTotalsAtLeast(lambdaH, lambdaA, minGoals = 3) {
-  let p = 0;
-  for (let h = 0; h <= 10; h++) {
-    const ph = poissonP(lambdaH, h);
-    for (let a = 0; a <= 10; a++) {
-      if (h + a >= minGoals) p += ph * poissonP(lambdaA, a);
-    }
+// --- quick stats from last 15 games
+async function getTeamStats(teamId) {
+  const url = `https://v3.football.api-sports.io/fixtures?team=${teamId}&last=15`;
+  const r = await axios.get(url, AXIOS);
+  const games = r.data.response || [];
+
+  let gf = 0, ga = 0, over25 = 0, btts = 0, cards = 0, corners = 0, played = 0;
+  for (const g of games) {
+    const hs = g.goals?.home ?? g.score?.fulltime?.home;
+    const as = g.goals?.away ?? g.score?.fulltime?.away;
+    if (g.fixture?.status?.short !== "FT") continue;
+
+    const isHome = g.teams?.home?.id === teamId;
+    const goalsFor = isHome ? hs : as;
+    const goalsAgainst = isHome ? as : hs;
+
+    gf += goalsFor; ga += goalsAgainst;
+    if (hs + as >= 3) over25++;
+    if (hs > 0 && as > 0) btts++;
+    cards += (g.statistics?.[0]?.cards?.yellow || 0) + (g.statistics?.[0]?.cards?.red || 0);
+    corners += g.statistics?.[0]?.corners || 0;
+    played++;
   }
-  return Math.min(Math.max(p, 0), 1);
+
+  return {
+    played,
+    avgGF: played ? gf / played : 0,
+    avgGA: played ? ga / played : 0,
+    ou25: played ? over25 / played : 0,
+    btts: played ? btts / played : 0,
+    cards: played ? cards / played : 0,
+    corners: played ? corners / played : 0,
+  };
 }
 
-// --- Main handler ---
 module.exports = async (req, res) => {
   try {
+    if (!API_KEY) return res.status(500).json({ error: "missing_api_key" });
+
     const date = (req.query.date || todayYMD()).slice(0, 10);
+    const season = seasonFromDate(date);
 
-    // Correct season logic: July = start of new season
-    const d = new Date(date);
-    const season = d.getMonth() + 1 >= 7 ? d.getFullYear() : d.getFullYear() - 1;
-
-    const fixtures = [];
-    for (const lid of LEAGUE_IDS) {
-      const url = `https://v3.football.api-sports.io/fixtures?league=${lid}&season=${season}&date=${date}`;
-      try {
-        const r = await axios.get(url, AXIOS);
-        fixtures.push(...(r.data.response || []));
-      } catch (e) {
-        console.error("Fixture fetch error:", lid, e.message);
-      }
-    }
+    // get EPL fixtures
+    const url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE_ID}&season=${season}&date=${date}`;
+    const r = await axios.get(url, AXIOS);
+    const fixtures = r.data.response || [];
 
     const items = [];
     for (const f of fixtures) {
-      const home = f.teams?.home?.name;
-      const away = f.teams?.away?.name;
-      const kickoff = f.fixture?.date;
-      const league = f.league?.name;
+      const hId = f.teams?.home?.id;
+      const aId = f.teams?.away?.id;
+      if (!hId || !aId) continue;
 
-      if (!home || !away) continue;
+      const [hStats, aStats] = await Promise.all([
+        getTeamStats(hId),
+        getTeamStats(aId),
+      ]);
 
-      // Dummy team stats → later replace with last-15 logic
-      const lambdaHome = 1.4;
-      const lambdaAway = 1.2;
-      const expGoals = lambdaHome + lambdaAway;
-
-      const pOver = probTotalsAtLeast(lambdaHome, lambdaAway, 3);
-      const pUnder = 1 - pOver;
-      const ouPick = pOver >= pUnder ? "Over 2.5" : "Under 2.5";
-      const ouConf = toPct(Math.max(pOver, pUnder));
+      // confidence formulas (very simple for now)
+      const ouConf = toPct((hStats.ou25 + aStats.ou25) / 2);
+      const bttsConf = toPct((hStats.btts + aStats.btts) / 2);
+      const oneX2Pick = hStats.avgGF > aStats.avgGF ? "Home" : "Away";
+      const oneX2Conf = toPct(Math.abs(hStats.avgGF - aStats.avgGF) / 3);
 
       items.push({
-        home, away, kickoff, league,
+        home: f.teams.home.name,
+        away: f.teams.away.name,
+        league: f.league.name,
+        kickoff: f.fixture.date,
         topBets: [
-          {
-            market: "OU 2.5",
-            pick: ouPick,
-            confidence: ouConf,
-            reason: `Expected goals ~${expGoals.toFixed(2)}`
-          }
+          { market: "OU 2.5", pick: ouConf >= 50 ? "Over" : "Under", confidence: ouConf, reason: "Based on last 15 matches OU2.5 rates" },
+          { market: "BTTS", pick: bttsConf >= 50 ? "Yes" : "No", confidence: bttsConf, reason: "Both teams scoring frequency" },
+          { market: "1X2", pick: oneX2Pick, confidence: oneX2Conf, reason: "Average goals for comparison" },
         ]
       });
     }
