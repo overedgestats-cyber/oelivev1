@@ -30,6 +30,11 @@
         <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
+      <!-- Global auth controls -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
     </nav>
   </header>
 
@@ -47,6 +52,31 @@
       <h2>Today’s Free Picks (preview)</h2>
       <div id="home-free-picks"></div>
       <p><a class="btn small" href="/free-picks">View full details →</a></p>
+    </section>
+
+    <!-- Referral Program -->
+    <section class="section">
+      <h2>Referral Program</h2>
+      <div class="card" style="padding:1rem;border:1px solid #eee;border-radius:14px">
+        <p class="muted" style="margin-top:0">
+          If you’re Pro for at least a month, share your link. When a friend subscribes Monthly, you get one free month.
+        </p>
+
+        <div id="ref-guest" style="display:none">
+          <p><strong>Step 1:</strong> <a href="/account">Sign in with Google</a> to get your unique referral link.</p>
+          <p><strong>Step 2:</strong> Share it anywhere—social, chats, or email.</p>
+        </div>
+
+        <div id="ref-user" style="display:none">
+          <p><strong>Your referral link</strong></p>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <input id="ref-link" type="text" readonly
+                   style="flex:1;min-width:260px;padding:.65rem .75rem;border:1px solid var(--border);border-radius:12px"/>
+            <button id="ref-copy" class="btn small" type="button">Copy</button>
+          </div>
+          <p class="muted" style="margin:.5rem 0 0">Tip: Share on Instagram, Facebook, or with your friends in chat.</p>
+        </div>
+      </div>
     </section>
 
     <section class="section">
@@ -101,6 +131,69 @@
       }
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
+  </script>
+
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
+
+  <!-- Referral UI module (initializes Firebase only if needed) -->
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+
+    const refUser  = document.getElementById('ref-user');
+    const refGuest = document.getElementById('ref-guest');
+    const refInput = document.getElementById('ref-link');
+    const refCopy  = document.getElementById('ref-copy');
+
+    function copyToClipboard(el){
+      try { el.select(); document.execCommand?.('copy'); } catch {}
+      try { navigator.clipboard?.writeText(el.value); } catch {}
+    }
+
+    async function ensureFirebase() {
+      if (!getApps().length) {
+        const cfgRes = await fetch('/api/rpc?action=public-config');
+        const cfg = (await cfgRes.json()).firebase || {};
+        initializeApp(cfg);
+      }
+    }
+
+    (async () => {
+      await ensureFirebase();
+      const authForReferral = getAuth();
+      onAuthStateChanged(authForReferral, async (user) => {
+        if (!user) {
+          refGuest.style.display = 'block';
+          refUser.style.display = 'none';
+          return;
+        }
+        refGuest.style.display = 'none';
+        refUser.style.display = 'block';
+
+        try {
+          const r = await fetch(`/api/rpc?action=get-ref-code&email=${encodeURIComponent(user.email)}`);
+          const { link } = await r.json();
+          refInput.value = link || (location.origin + '/?ref=' + encodeURIComponent(user.email));
+        } catch {
+          refInput.value = location.origin + '/?ref=' + encodeURIComponent(user.email);
+        }
+        refCopy?.addEventListener('click', () => copyToClipboard(refInput));
+      });
+    })();
+  </script>
+
+  <!-- Referral capture: store ?ref=CODE for 30 days -->
+  <script>
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>

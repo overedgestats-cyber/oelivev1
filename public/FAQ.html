@@ -24,7 +24,7 @@
         <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
         <a href="/pricing">Pricing</a>
-        <a href="/FAQ" aria-current="page">FAQ</a>
+        <a href="/faq" aria-current="page">FAQ</a>
         <a href="/account">Account</a>
       </div>
     </nav>
@@ -79,6 +79,18 @@
 
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
+  </script>
+  <script>
+    /* Referral capture: store ?ref=CODE for 30 days */
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>

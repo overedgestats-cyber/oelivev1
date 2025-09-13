@@ -21,7 +21,7 @@
     .muted-sm { opacity:.7; font-size:.9rem; }
     .pill { font-size:.75rem; padding:.1rem .5rem; border:1px solid #e5e7eb; border-radius:999px; }
     .row { padding:.75rem 1rem; border:1px solid #eee; border-radius:12px; margin:.5rem 0; }
-    .marketbox { background:#fafafa; padding:.5rem .75rem; border-radius:10px; margin-top:.5rem; border:1px dashed #e5e7eb;}
+    .marketbox { background:#fafafa; padding:.5rem .75rem; border-radius:10px; margin-top:.5rem; border:1px dashed #e5e7eb; }
     select.market { padding:.4rem .6rem; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
     .group { margin:1.25rem 0; }
     .group > h3 { margin:.5rem 0; }
@@ -66,7 +66,7 @@
       <section class="section">
         <h2>Hero Bet of the Day</h2>
         <div id="hero" class="hero-card">Loading…</div>
-        <p class="muted" style="margin-top:.5rem">Top-5 (and UEFA/FIFA) scope; U/19 etc. are excluded.</p>
+        <p class="muted" style="margin-top:.5rem">Top-5 (and UEFA/FIFA) scope; youth leagues are excluded.</p>
       </section>
 
       <section class="section">
@@ -114,7 +114,11 @@
       const cfg = await fetch('/api/rpc?action=public-config').then(r => r.json()).then(d => d.firebase || {});
       if (!getApps().length) initializeApp(cfg);
       auth = getAuth();
-      onAuthStateChanged(auth, u => { currentUser = u || null; updateNav(); if (u) gateAndLoad(); else showLocked(); });
+      onAuthStateChanged(auth, u => {
+        currentUser = u || null;
+        updateNav();
+        if (u) gateAndLoad(); else showLocked();
+      });
     }
 
     function updateNav(){
@@ -123,8 +127,15 @@
         navAuth.onclick = async () => { try { await signOut(auth); } catch {} };
         try {
           const cache = JSON.parse(localStorage.getItem("oe.user") || "null");
-          if (cache?.pro) { navPlan.textContent = cache.plan ? cache.plan : "Pro"; navPlan.classList.add("badge-pro"); navPlan.style.display="inline-block"; }
-          else { navPlan.textContent = "Free"; navPlan.classList.remove("badge-pro"); navPlan.style.display="inline-block"; }
+          if (cache?.pro) {
+            navPlan.textContent = cache.plan ? cache.plan : "Pro";
+            navPlan.classList.add("badge-pro");
+            navPlan.style.display="inline-block";
+          } else {
+            navPlan.textContent = "Free";
+            navPlan.classList.remove("badge-pro");
+            navPlan.style.display="inline-block";
+          }
         } catch { navPlan.style.display="none"; }
       } else {
         navAuth.textContent = "Sign In";
@@ -154,7 +165,14 @@
     async function gateAndLoad(){
       if (!currentUser) return showLocked();
       const sub = await verifySub(currentUser.email);
-      try { localStorage.setItem("oe.user", JSON.stringify({ email: currentUser.email, uid: currentUser.uid, pro: !!sub.pro, plan: sub.plan || null })); } catch {}
+      try {
+        localStorage.setItem("oe.user", JSON.stringify({
+          email: currentUser.email,
+          uid: currentUser.uid,
+          pro: !!sub.pro,
+          plan: sub.plan || null
+        }));
+      } catch {}
       if (!sub.pro) return showLocked();
       showPro();
       loadHero();
@@ -254,7 +272,7 @@
                 </select>
               </div>
             </div>
-            <div id="box-${fix.fixtureId}" class="mt-2">${marketDetail(fix, 'best')}</div>
+            <div id="box-${fix.fixtureId}" style="margin-top:.5rem">${marketDetail(fix, 'best')}</div>
           `;
 
           setTimeout(() => {
@@ -289,6 +307,18 @@
 
     // boot
     initFirebase();
+  </script>
+  <script>
+    /* Referral capture: store ?ref=CODE for 30 days */
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>

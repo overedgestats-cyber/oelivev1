@@ -27,6 +27,11 @@
         <a href="/faq">FAQ</a>
         <a href="/account">Account</a>
       </div>
+      <!-- Global auth controls -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
     </nav>
   </header>
 
@@ -79,6 +84,22 @@
       }
     }
     document.addEventListener('DOMContentLoaded', renderFreePicks);
+  </script>
+
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
+
+  <!-- Referral capture: store ?ref=CODE for 30 days -->
+  <script>
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>

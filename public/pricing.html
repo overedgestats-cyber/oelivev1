@@ -100,20 +100,27 @@
     </div>
   </footer>
 
-  <!-- Firebase auth gate for checkout -->
+  <!-- Firebase + referral-aware checkout -->
   <script type="module">
     import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
+    // Footer year
     document.getElementById('y').textContent = new Date().getFullYear();
 
-    // Your Stripe payment links
+    // Stripe links (live or test)
     const STRIPE_LINKS = {
       weekly:    "https://buy.stripe.com/bJe28s9DGabedyv5108k800",
       monthly:   "https://buy.stripe.com/5kQ4gA6rudnqcur5108k801",
       quarterly: "https://buy.stripe.com/8x24gAeY0erucurgJI8k802",
       yearly:    "https://buy.stripe.com/00w4gA17a5UY0LJ9hg8k803"
     };
+
+    // Helpers
+    function getCookie(name){
+      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : null;
+    }
 
     let auth = null;
     let currentUser = null;
@@ -134,19 +141,46 @@
       return true;
     }
 
+    // Main
     (async () => {
       await initFirebase();
 
       document.querySelectorAll('[data-plan]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
           e.preventDefault();
           if (!requireSignedIn()) return;
+
           const plan = btn.getAttribute('data-plan');
           const url  = STRIPE_LINKS[plan];
-          if (!url) return alert(`Payment link for "${plan}" is not set.`);
-          window.location.href = url;
+          if (!url) { alert(`Payment link for "${plan}" is not set.`); return; }
+
+          // Attach referral, if any
+          try {
+            const ref = getCookie('oe_ref');
+            if (ref && currentUser?.email) {
+              await fetch(`/api/rpc?action=attach-referral&friendEmail=${encodeURIComponent(currentUser.email)}&ref=${encodeURIComponent(ref)}`);
+            }
+          } catch {}
+
+          // Go to Stripe
+          location.href = url;
         });
       });
+    })();
+  </script>
+
+  <!-- Referral capture: store ?ref=CODE for 30 days -->
+  <script>
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = 'oe_ref=' + encodeURIComponent(ref) +
+            '; Max-Age=' + (30*24*3600) +
+            '; Path=/; SameSite=Lax';
+        }
+      } catch {}
     })();
   </script>
 </body>
