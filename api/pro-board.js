@@ -15,7 +15,7 @@ const LEAGUE_IDS = [
   140, 141,      // Spain La Liga 1 + 2
   61, 62,        // France Ligue 1 + 2
   2, 3, 848,     // UCL, UEL, UECL
-  1, 4, 5, 6,    // FIFA World Cup, UEFA Supercup, AFCON, Asian Cup
+  1, 4, 5, 6     // FIFA World Cup, UEFA Supercup, AFCON, Asian Cup
 ];
 
 // --- Utils ---
@@ -28,7 +28,8 @@ function toPct(n) {
 
 // Simple Poisson for OU2.5
 function poissonP(lambda, k) {
-  let logFact = 0; for (let i = 1; i <= k; i++) logFact += Math.log(i);
+  let logFact = 0;
+  for (let i = 1; i <= k; i++) logFact += Math.log(i);
   return Math.exp(-lambda + k * Math.log(lambda) - logFact);
 }
 function probTotalsAtLeast(lambdaH, lambdaA, minGoals = 3) {
@@ -46,9 +47,10 @@ function probTotalsAtLeast(lambdaH, lambdaA, minGoals = 3) {
 module.exports = async (req, res) => {
   try {
     const date = (req.query.date || todayYMD()).slice(0, 10);
-    const season = new Date(date).getMonth() + 1 >= 7
-  ? new Date(date).getFullYear()
-  : new Date(date).getFullYear() - 1;
+
+    // Correct season logic: July = start of new season
+    const d = new Date(date);
+    const season = d.getMonth() + 1 >= 7 ? d.getFullYear() : d.getFullYear() - 1;
 
     const fixtures = [];
     for (const lid of LEAGUE_IDS) {
@@ -68,7 +70,9 @@ module.exports = async (req, res) => {
       const kickoff = f.fixture?.date;
       const league = f.league?.name;
 
-      // Dummy team stats → later plug in last-15 logic
+      if (!home || !away) continue;
+
+      // Dummy team stats → later replace with last-15 logic
       const lambdaHome = 1.4;
       const lambdaAway = 1.2;
       const expGoals = lambdaHome + lambdaAway;
@@ -81,12 +85,17 @@ module.exports = async (req, res) => {
       items.push({
         home, away, kickoff, league,
         topBets: [
-          { market: "OU 2.5", pick: ouPick, confidence: ouConf, reason: `Expected goals ~${expGoals.toFixed(2)}` }
+          {
+            market: "OU 2.5",
+            pick: ouPick,
+            confidence: ouConf,
+            reason: `Expected goals ~${expGoals.toFixed(2)}`
+          }
         ]
       });
     }
 
-    res.json({ date, count: items.length, items });
+    res.json({ date, season, count: items.length, items });
   } catch (e) {
     console.error("pro-board error:", e.message);
     res.status(500).json({ error: "pro_board_failed", detail: e.message });
