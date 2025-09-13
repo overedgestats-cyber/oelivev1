@@ -1,44 +1,52 @@
-﻿<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>Free Picks · OverEdge</title>
-    <link rel="stylesheet" href="/style.css"/>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="alternate icon" href="/og.png" type="image/png">
-  </head>
-  <body>
-    <header>
-      <nav>
-        <a href="/home.html">Home</a>
-        <a href="/free-picks.html">Free Picks</a>
-        <a href="/pro.html">Pro</a>
-        <a href="/pricing.html">Pricing</a>
-        <a href="/about.html">About</a>
-        <a href="/FAQ.html">FAQ</a>
+<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/web/app.css"><title>OverEdge – Free Picks</title>
+</head><body>
+<nav>
+  <div class="row">
+    <a href="/web/home.html"><strong>OverEdge</strong></a>
+    <a href="/web/free-picks.html">Free Picks</a>
+    <a href="/web/pro.html">Pro</a>
+    <a href="/web/pricing.html">Pricing</a>
+    <a href="/web/about.html">About</a>
+    <a href="/web/faq.html">FAQ</a>
+  </div>
+  <div class="row">
+    <span id="nav-user" class="small muted">Account</span>
+    <span id="nav-auth"></span>
+  </div>
+</nav>
 
-        <span style="float:right; line-height:1.2; text-align:right">
-          <small id="userEmail"></small><br/>
-          <a id="accountLink" href="/account.html">Account</a>
-        </span>
-      </nav>
-    </header>
+<div class="container">
+  <h2>Free Picks</h2>
+  <div id="picks"></div>
+  <div id="empty" class="small muted hidden">No picks yet. Try later.</div>
+</div>
 
-    <main>
-      <h1>Free Picks</h1>
-      <div id="freePicks" class="cards">Loading…</div>
-    </main>
-
-    <footer>
-      © OverEdge ·
-      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a> ·
-      <a href="https://www.facebook.com/profile.php?id=61579190114778#" target="_blank" rel="noopener noreferrer">Facebook</a> ·
-      <a href="https://www.instagram.com/overedgefootball?igsh=MXJsb3U5ajR0cXR0bw%3D%3D&utm_source=qr" target="_blank" rel="noopener noreferrer">Instagram</a>
-    </footer>
-
-    <script src="/firebase-config.js"></script>
-    <script type="module" src="/firebase-init.js"></script>
-    <script type="module" src="/app.js?v=12"></script>
-  </body>
-</html>
+<script type="module" src="/web/app.js"></script>
+<script type="module">
+async function load(){
+  const r = await $api('/api/free-picks');
+  const list = r?.picks||[];
+  const mount = document.querySelector('#picks');
+  const empty = document.querySelector('#empty');
+  if(!list.length){ empty.classList.remove('hidden'); return; }
+  list.forEach(p=>{
+    const el=document.createElement('div'); el.className='card';
+    el.innerHTML=`
+      <div class="row" style="justify-content:space-between">
+        <div><strong>${p.match}</strong> <span class="badge">${p.league}</span></div>
+        <div class="small muted">${new Date(p.kickoff).toLocaleString()}</div>
+      </div>
+      <div class="row">
+        <div><strong>${p.prediction}</strong> · ${p.market}</div>
+        <div class="badge">Conf ${p.confidence}%</div>
+      </div>
+      <p class="small">${p.reasoning}</p>
+    `;
+    mount.appendChild(el);
+  });
+}
+load();
+</script>
+</body></html>
