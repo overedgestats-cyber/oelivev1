@@ -27,6 +27,16 @@
     .group > h3 { margin:.5rem 0; }
     .hero-card { padding:1rem; border:1px solid #eee; border-radius:12px; }
     .badge-pro { background:#eef6ff; border:1px solid #cfe4ff; color:#1d4ed8; }
+
+    /* NEW for grouped board */
+    .country-block { margin:1.25rem 0; }
+    .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; }
+    .flag { width:18px; height:12px; object-fit:cover; border-radius:2px; }
+    .league-title { font-weight:600; margin:.25rem 0 .25rem; opacity:.9; }
+    .fixture-row { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.6rem .8rem; border:1px solid #eee; border-radius:12px; margin:.25rem 0; }
+    .teams { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+    .teams img.logo { width:18px; height:18px; object-fit:contain; }
+    .market-controls { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
   </style>
 </head>
 <body>
@@ -70,7 +80,20 @@
       </section>
 
       <section class="section">
-        <h2>Pro Board</h2>
+        <div class="grid-2" style="margin-bottom:.5rem">
+          <h2 style="margin:0">Pro Board</h2>
+          <!-- GLOBAL MARKET DROPDOWN (exactly 5 options) -->
+          <div class="market-controls">
+            <label for="boardMarket" class="muted-sm">Market:</label>
+            <select id="boardMarket" class="market">
+              <option value="ou_goals">Under/Over Goals</option>
+              <option value="ou_cards">Under/Over Cards</option>
+              <option value="ou_corners">Under/Over Corners</option>
+              <option value="one_x_two">1X2</option>
+              <option value="btts">BTTS — Yes/No</option>
+            </select>
+          </div>
+        </div>
         <div id="board">Loading…</div>
       </section>
     </section>
@@ -98,6 +121,7 @@
     const proContent = document.getElementById('proContent');
     const heroEl = document.getElementById('hero');
     const boardEl = document.getElementById('board');
+    const boardMarketSel = document.getElementById('boardMarket');
 
     const navAuth = document.getElementById('nav-auth');
     const navPlan = document.getElementById('nav-plan');
@@ -176,10 +200,10 @@
       if (!sub.pro) return showLocked();
       showPro();
       loadHero();
-      loadBoard();
+      loadBoardGrouped(); // NEW
     }
 
-    // UPDATED: shows the bet type (selection) on the hero card
+    // ---------- HERO BET ----------
     function heroCard(h){
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
@@ -207,101 +231,72 @@
       }
     }
 
-    // ----- Pro Board -----
-    function marketDetail(fix, which){
-      const m = fix.markets;
-      if (which === 'best') {
-        const b = fix.best;
-        if (!b) return `<div class="marketbox">No best suggestion.</div>`;
-        if (b.market === 'ou25') {
-          return `<div class="marketbox"><strong>${m.ou25.recommendation}</strong> · ${m.ou25.confidencePct}% ${m.ou25.odds ? `· Odds: ${m.ou25.odds}` : ""}<br/><span class="muted-sm">${m.ou25.reasoning}</span></div>`;
-        } else if (b.market === 'btts') {
-          return `<div class="marketbox"><strong>${m.btts.recommendation}</strong> · ${m.btts.confidencePct}% ${m.btts.odds ? `· Odds: ${m.btts.odds}` : ""}<br/><span class="muted-sm">${m.btts.reasoning}</span></div>`;
-        } else {
-          return `<div class="marketbox"><strong>${m.onex2.recommendation ?? "1X2"}</strong> · ${m.onex2.confidencePct ?? "-"}%<br/><span class="muted-sm">${m.onex2.reasoning || ""}</span></div>`;
-        }
-      }
-      if (which === 'ou25') {
-        return `<div class="marketbox"><strong>${m.ou25.recommendation}</strong> · ${m.ou25.confidencePct}% ${m.ou25.odds ? `· Odds: ${m.ou25.odds}` : ""}<br/><span class="muted-sm">${m.ou25.reasoning}</span></div>`;
-      }
-      if (which === 'btts') {
-        return `<div class="marketbox"><strong>${m.btts.recommendation}</strong> · ${m.btts.confidencePct}% ${m.btts.odds ? `· Odds: ${m.btts.odds}` : ""}<br/><span class="muted-sm">${m.btts.reasoning}</span></div>`;
-      }
-      if (which === 'onex2') {
-        const o = m.onex2.odds || {};
-        const oddsTxt = (o.home || o.draw || o.away) ? `· Odds H/D/A: ${o.home ?? "-"} / ${o.draw ?? "-"} / ${o.away ?? "-"}` : "";
-        return `<div class="marketbox"><strong>${m.onex2.recommendation ?? "1X2"}</strong> · ${m.onex2.confidencePct ?? "-"}% ${oddsTxt}<br/><span class="muted-sm">${m.onex2.reasoning || ""}</span></div>`;
-      }
-      if (which === 'cards' || which === 'corners') {
-        return `<div class="marketbox">Coming soon.</div>`;
-      }
-      return `<div class="marketbox">Select a market.</div>`;
-    }
+    // ---------- GROUPED PRO BOARD (by country with flags) ----------
+    boardMarketSel.addEventListener('change', loadBoardGrouped);
 
-    function renderBoard(data){
-      if (!data || !data.groups || Object.keys(data.groups).length === 0) {
-        boardEl.innerHTML = "<p>No matches found in scope today.</p>";
+    function renderGroupedBoard(payload){
+      if (!payload || !payload.groups || !payload.groups.length) {
+        boardEl.innerHTML = "<p>No matches found today.</p>";
         return;
       }
-      const groups = data.groups;
-      const frag = document.createDocumentFragment();
+      const container = document.createDocumentFragment();
 
-      Object.keys(groups).sort().forEach(comp => {
-        const wrap = document.createElement('div');
-        wrap.className = 'group';
-        wrap.innerHTML = `<h3>${comp}</h3>`;
-        const list = document.createElement('div');
+      payload.groups.forEach(group => {
+        const countryWrap = document.createElement('div');
+        countryWrap.className = 'country-block';
+        countryWrap.innerHTML = `
+          <div class="country-header">
+            ${group.flag ? `<img class="flag" src="${group.flag}" alt="">` : ""}
+            <span>${group.country}</span>
+          </div>
+        `;
 
-        groups[comp].forEach(fix => {
-          const row = document.createElement('div');
-          row.className = 'row';
+        group.leagues.forEach(L => {
+          const leagueTitle = document.createElement('div');
+          leagueTitle.className = 'league-title';
+          leagueTitle.textContent = L.leagueName || 'League';
+          countryWrap.appendChild(leagueTitle);
 
-          const selectId = `sel-${fix.fixtureId}`;
-          row.innerHTML = `
-            <div class="grid-2">
-              <div>
-                <div style="font-weight:600">${fix.home} vs ${fix.away}</div>
-                <div class="muted-sm">${fix.matchTime}</div>
+          (L.fixtures || []).forEach(fx => {
+            const row = document.createElement('div');
+            row.className = 'fixture-row';
+            const rec = fx.recommendation;
+            const pickTxt = rec ? `${rec.pick || ""}` : "";
+            const confTxt = rec ? ` · ${rec.confidencePct ?? "-"}%` : "";
+            row.innerHTML = `
+              <div class="teams">
+                ${fx.home?.logo ? `<img class="logo" src="${fx.home.logo}" alt="">` : ""}
+                <span>${fx.home?.name || ""}</span>
+                <span style="opacity:.6">vs</span>
+                ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}
+                <span>${fx.away?.name || ""}</span>
               </div>
-              <div>
-                <select class="market" id="${selectId}">
-                  <option value="best">Best suggestion</option>
-                  <option value="ou25">Over/Under 2.5</option>
-                  <option value="btts">BTTS</option>
-                  <option value="onex2">1X2</option>
-                  <option value="cards" disabled>Cards (soon)</option>
-                  <option value="corners" disabled>Corners (soon)</option>
-                </select>
+              <div style="text-align:right">
+                <div class="muted-sm">${fx.time || ""}</div>
+                <div class="marketbox" style="margin-top:.35rem">
+                  <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt}
+                  ${fx.reasoning ? `<br/><span class="muted-sm">${fx.reasoning}</span>` : ""}
+                </div>
               </div>
-            </div>
-            <div id="box-${fix.fixtureId}" style="margin-top:.5rem">${marketDetail(fix, 'best')}</div>
-          `;
-
-          setTimeout(() => {
-            const sel = row.querySelector(`#${selectId}`);
-            const box = row.querySelector(`#box-${fix.fixtureId}`);
-            sel.addEventListener('change', () => {
-              box.innerHTML = marketDetail(fix, sel.value);
-            });
-          }, 0);
-
-          list.appendChild(row);
+            `;
+            countryWrap.appendChild(row);
+          });
         });
 
-        wrap.appendChild(list);
-        frag.appendChild(wrap);
+        container.appendChild(countryWrap);
       });
 
       boardEl.innerHTML = "";
-      boardEl.appendChild(frag);
+      boardEl.appendChild(container);
     }
 
-    async function loadBoard(){
+    async function loadBoardGrouped(){
       try {
         boardEl.innerHTML = "Loading…";
-        const res = await fetch(`/api/rpc?action=pro-board&tz=${encodeURIComponent(tzGuess())}`);
+        const market = boardMarketSel.value; // ou_goals | ou_cards | ou_corners | one_x_two | btts
+        const res = await fetch(`/api/rpc?action=pro-board-grouped&market=${encodeURIComponent(market)}&tz=${encodeURIComponent(tzGuess())}`);
         const data = await res.json();
-        renderBoard(data);
+        renderGroupedBoard(data);
       } catch {
         boardEl.innerHTML = "<p>Could not load Pro Board.</p>";
       }
@@ -310,6 +305,7 @@
     // boot
     initFirebase();
   </script>
+
   <script>
     /* Referral capture: store ?ref=CODE for 30 days */
     (function () {
