@@ -168,6 +168,24 @@ function narrativeCorners() {
   return "Wide play, crossing volume, and shot pressure correlate with corners. Teams that attack the byline or fire from range often push totals near the 9.5–10.5 band.";
 }
 
+/* ---- NEW: explicit lean calculators for Cards & Corners (with line) --- */
+function computeCardsLean(H, A) {
+  // Light proxy: use team GF/GA as discipline/pressure signal
+  const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
+  const baseline = 4.8;
+  const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.06));
+  const line = avg >= baseline ? 5.5 : 4.5;
+  return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
+}
+function computeCornersLean(H, A) {
+  // Light proxy: attacking output drives corners more than GA
+  const avg = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
+  const baseline = 9.7;
+  const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.05));
+  const line = avg >= baseline ? 10.5 : 9.5;
+  return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
+}
+
 /* -------------------- Team stats + odds utilities -------------------- */
 async function teamLastN(teamId, n = 12) {
   const rows = await apiGet("/fixtures", { team: teamId, last: n });
@@ -535,10 +553,12 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
           rec = { market: "1X2", pick: ox.pick, confidencePct: pct(ox.conf) };
           why = narrative1X2(ox.pick, fx?.fixture?.id);
         } else if (market === "ou_cards") {
-          rec = { market: "OU Cards", pick: "Check 4.5/5.5", confidencePct: 50 };
+          const lean = computeCardsLean(H, A);
+          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct };
           why = narrativeCards();
         } else if (market === "ou_corners") {
-          rec = { market: "OU Corners", pick: "Check 9.5/10.5", confidencePct: 50 };
+          const lean = computeCornersLean(H, A);
+          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct };
           why = narrativeCorners();
         }
       }
