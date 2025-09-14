@@ -179,6 +179,7 @@
       loadBoard();
     }
 
+    // UPDATED: shows the bet type (selection) on the hero card
     function heroCard(h){
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
@@ -187,6 +188,7 @@
           <div>
             <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
             <div class="muted-sm">${p.matchTime} — ${p.home} vs ${p.away}</div>
+            <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
           </div>
           <div class="muted-sm">Odds: ${p.odds ?? "-"} &nbsp; · &nbsp; Confidence: ${p.confidencePct}%</div>
         </div>

@@ -5,6 +5,7 @@
 //  - public-config
 //  - free-picks
 //  - pro-pick
+//  - pro-board
 //  - verify-sub
 //  - register-ref
 //  - get-ref-code
@@ -208,7 +209,7 @@ async function teamLastN(teamId, n = 12) {
   };
 }
 
-// Fallback numeric explainers (kept but not used in cards now)
+// Numeric explainers (kept for debugging / if needed)
 function reasoningOU(h, a, market) {
   if (market === "Over 2.5") {
     return `High-scoring trends: Home O2.5 ${pct(h.over25Rate)}%, Away O2.5 ${pct(a.over25Rate)}%. Avg GF (H) ${h.avgFor.toFixed(2)} vs (A) ${a.avgFor.toFixed(2)}.`;
@@ -293,7 +294,6 @@ async function scoreFixtureForOU25(fx) {
     market,
     confidencePct: pct(conf),
     odds: odds ? odds[market === "Over 2.5" ? "over25" : "under25"] : null,
-    // Narrative, stable per fixtureId
     reasoning: narrativeOU(home, away, market, fx?.fixture?.id),
   };
 }
@@ -318,14 +318,13 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
   fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league)); // scope
 
   const out = [];
-  for (const fx of fixtures.slice(0, 50)) {
+  for (const fx of fixtures.slice(0, 80)) {
     try {
       const s = await scoreFixtureForOU25(fx);
       if (s && s.confidencePct >= minConf) out.push(s);
     } catch {}
   }
 
-  // deterministic: highest confidence, then fixtureId asc
   out.sort((a, b) => (b.confidencePct - a.confidencePct) || ((a.fixtureId || 0) - (b.fixtureId || 0)));
   return { date, timezone: tz, picks: out.slice(0, 2) };
 }
@@ -341,7 +340,7 @@ async function scoreHeroCandidates(fx) {
   const candidates = [];
 
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
-  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5; // (bug fixed)
+  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5; // fixed
   const withinBand = (p) => p >= 0.62 && p <= 0.80;
 
   if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
@@ -383,13 +382,108 @@ async function pickHeroBet({ date, tz }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league));
   let candidates = [];
-  for (const fx of fixtures.slice(0, 50)) {
+  for (const fx of fixtures.slice(0, 100)) {
     try { candidates = candidates.concat(await scoreHeroCandidates(fx)); }
     catch {}
   }
   if (!candidates.length) return { heroBet: null, note: "No qualifying value pick found yet." };
   candidates.sort((a, b) => b.valueScore - a.valueScore);
   return { heroBet: candidates[0] };
+}
+
+/* --------------------------- Pro Board data --------------------------- */
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+
+/** quick 1X2 lean from simple differentials (very light model) */
+function onex2Lean(home, away) {
+  // home advantage term
+  const ha = 0.20; // small boost
+  const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
+  // convert to soft confidence band
+  if (score > 0.35) return { pick: "Home", conf: clamp01(0.55 + (score - 0.35) * 0.25) };
+  if (score < -0.35) return { pick: "Away", conf: clamp01(0.55 + (-score - 0.35) * 0.25) };
+  return { pick: "Draw", conf: 0.50 };
+}
+
+async function buildProBoard({ date, tz }) {
+  let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+  fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league));
+
+  const rows = [];
+  for (const fx of fixtures.slice(0, 120)) {
+    try {
+      const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
+      if (!homeId || !awayId) continue;
+
+      const [home, away, odds] = await Promise.all([
+        teamLastN(homeId),
+        teamLastN(awayId),
+        getOddsMap(fx?.fixture?.id),
+      ]);
+
+      const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
+      const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
+      const ouPick = overP >= underP ? "Over 2.5" : "Under 2.5";
+      const ouConf = overP >= underP ? overP : underP;
+      const ou = {
+        recommendation: ouPick,
+        confidencePct: pct(ouConf),
+        odds: ouPick === "Over 2.5" ? odds?.over25 : odds?.under25,
+        reasoning: narrativeOU(home, away, ouPick, fx?.fixture?.id),
+      };
+
+      const bttsP  = home.bttsRate * 0.5 + away.bttsRate * 0.5;
+      const bttsPick = bttsP >= 0.5 ? "BTTS: Yes" : "BTTS: No";
+      const btts = {
+        recommendation: bttsPick,
+        confidencePct: pct(bttsP >= 0.5 ? bttsP : 1 - bttsP),
+        odds: bttsPick === "BTTS: Yes" ? odds?.bttsYes : odds?.bttsNo,
+        reasoning: narrativeBTTS(home, away, fx?.fixture?.id),
+      };
+
+      const onex2 = onex2Lean(home, away);
+      const onex2Rec = {
+        recommendation: onex2.pick,
+        confidencePct: pct(onex2.conf),
+        odds: onex2.pick === "Home" ? odds?.homeWin : onex2.pick === "Away" ? odds?.awayWin : odds?.draw,
+        reasoning: "Light 1X2 lean based on recent scoring/against differentials and small home edge.",
+      };
+
+      // choose "best" by valueScore if odds available; otherwise by confidence
+      const cands = [
+        { market: "ou25", conf: ouConf, odds: ou.odds ?? 1.0 },
+        { market: "btts", conf: bttsP >= 0.5 ? bttsP : 1 - bttsP, odds: btts.odds ?? 1.0 },
+        { market: "onex2", conf: onex2.conf, odds: onex2Rec.odds ?? 1.0 },
+      ];
+      cands.forEach(c => c.value = (c.conf || 0) * (Number(c.odds) || 1));
+      cands.sort((a,b)=> (b.value - a.value));
+
+      rows.push({
+        fixtureId: fx?.fixture?.id,
+        competition: (fx?.league?.country ? `${fx.league.country} — ` : "") + (fx?.league?.name || "League"),
+        matchTime: clockFromISO(fx?.fixture?.date),
+        home: fx?.teams?.home?.name || "",
+        away: fx?.teams?.away?.name || "",
+        markets: { ou25: ou, btts: btts, onex2: onex2Rec },
+        best: { market: cands[0]?.market || "ou25" }
+      });
+    } catch {}
+  }
+
+  // group by competition (Country — League)
+  const groups = {};
+  rows.forEach(r => {
+    groups[r.competition] = groups[r.competition] || [];
+    groups[r.competition].push(r);
+  });
+
+  // sort matches by time within each group
+  Object.keys(groups).forEach(k => {
+    groups[k].sort((a,b)=> (a.matchTime || "").localeCompare(b.matchTime || ""));
+  });
+
+  return { date, timezone: tz, groups };
 }
 
 /* ----------------- Stripe verify + Pro override merge ---------------- */
@@ -494,6 +588,17 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
+    /* -- pro board -- */
+    if (action === "pro-board") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+      const payload = await buildProBoard({ date, tz });
+      return res.status(200).json(payload);
+    }
+
     /* -- verify subscription (+ dev bypass + override) -- */
     if (action === "verify-sub") {
       const email = (req.query.email || "").toString().trim().toLowerCase();
@@ -548,12 +653,11 @@ export default async function handler(req, res) {
         const v = await kvGet(`ref:owner:${email}`);
         code = (v && typeof v.result === "string" && v.result) ? v.result : null;
       } catch {}
-      // No code yet: return null; client can show fallback ?ref=email link
       return res.status(200).json({ ok: true, code });
     }
 
     // Attach a referral to the friend before redirecting to Stripe
-    // Backward compatible: friendEmail/email + ref/code are both accepted
+    // Accepts friendEmail/email + ref/code for backward compatibility
     if (action === "attach-referral") {
       const email = (req.query.friendEmail || req.query.email || "").toString().trim().toLowerCase();
       const code  = (req.query.ref || req.query.code || "").toString().trim();
