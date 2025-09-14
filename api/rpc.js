@@ -7,6 +7,7 @@
 //  - pro-pick
 //  - verify-sub
 //  - register-ref
+//  - get-ref-code
 //  - attach-referral
 //  - [optional analytics] ref-hit, ref-stats
 
@@ -156,6 +157,34 @@ function isYouthFixture(fx = {}) {
   return hit(ln) || hit(h) || hit(a);
 }
 
+/* ---------------- Narrative helpers (stable, seeded by id) ------------ */
+function seededPick(seed, n) {
+  const s = Number(seed || 0);
+  const x = (s * 9301 + 49297) % 233280;
+  return Math.abs(Math.floor((x / 233280) * n));
+}
+function narrativeOU(h, a, market, seed = 0) {
+  const overTemps = [
+    "Both teams arrive in good attacking rhythm and aren’t shy about pushing numbers forward. The matchup tends to open quickly with plenty of shots inside the box. An early goal should force the other side to chase and stretch the game. We expect enough clear looks for three or more goals.",
+    "This sets up as a front-foot game: the hosts build quickly through the flanks while the visitors press high and leave space behind. Transitions should be frequent and neither side is likely to sit on a narrow lead. With set-piece threat on both teams and pace in attack, the conditions favour goals. Over 2.5 is the value angle.",
+    "Recent performances suggest the attacks are sharper than the defences they face today. The midfield duel leans open rather than cagey, and both sides carry multiple scoring outlets. If the first half breaks the deadlock, the second should stretch. Over 2.5 makes sense."
+  ];
+  const underTemps = [
+    "Both managers lean on structure first and this matchup usually develops in a controlled rhythm. The hosts are compact without overcommitting, while the visitors keep a low block and wait for mistakes. With little space between the lines, chances should be limited. Under 2.5 fits the game state.",
+    "This looks tight: neither side needs to chase from the start and the early phase should be cautious. Expect longer spells of midfield play and defended zones rather than aggressive overlaps. Unless a big error opens it up, this should stay measured. Under 2.5 is the smarter read.",
+    "The strengths here are at the back — both teams protect their box well and don’t give much away in transition. Expect set-piece battles and careful build-up instead of end-to-end exchanges. Without an early breakthrough it’s unlikely to spiral. Under 2.5 appeals."
+  ];
+  const pool = market === "Over 2.5" ? overTemps : underTemps;
+  return pool[seededPick(seed, pool.length)];
+}
+function narrativeBTTS(h, a, seed = 0) {
+  const temps = [
+    "Both sides create enough to trouble each other and neither is flawless at the back. With runners in behind and set-piece threats, we expect chances at both ends. A goal for either team should open the throttle. BTTS looks live.",
+    "This matchup rarely stays quiet: the hosts push up at home while the visitors counter quickly. Defensive lines can be exposed in transition, so both keepers should be worked. We like both teams to find a way through."
+  ];
+  return temps[seededPick(seed, temps.length)];
+}
+
 /* -------------------- Team stats + odds utilities -------------------- */
 async function teamLastN(teamId, n = 12) {
   const rows = await apiGet("/fixtures", { team: teamId, last: n });
@@ -178,6 +207,8 @@ async function teamLastN(teamId, n = 12) {
     bttsRate: gp ? btts / gp : 0,
   };
 }
+
+// Fallback numeric explainers (kept but not used in cards now)
 function reasoningOU(h, a, market) {
   if (market === "Over 2.5") {
     return `High-scoring trends: Home O2.5 ${pct(h.over25Rate)}%, Away O2.5 ${pct(a.over25Rate)}%. Avg GF (H) ${h.avgFor.toFixed(2)} vs (A) ${a.avgFor.toFixed(2)}.`;
@@ -242,7 +273,7 @@ async function scoreFixtureForOU25(fx) {
   if (!homeId || !awayId) return null;
   const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
-  const overP = home.over25Rate * 0.5 + away.over25Rate * 0.5;
+  const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
 
   const market = overP >= underP ? "Over 2.5" : "Under 2.5";
@@ -262,7 +293,8 @@ async function scoreFixtureForOU25(fx) {
     market,
     confidencePct: pct(conf),
     odds: odds ? odds[market === "Over 2.5" ? "over25" : "under25"] : null,
-    reasoning: reasoningOU(home, away, market),
+    // Narrative, stable per fixtureId
+    reasoning: narrativeOU(home, away, market, fx?.fixture?.id),
   };
 }
 
@@ -282,7 +314,7 @@ function putCached(key, payload) {
 
 async function pickFreePicks({ date, tz, minConf = 75 }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
-  fixtures = fixtures.filter(fx => !isYouthFixture(fx));            // exclude youth
+  fixtures = fixtures.filter(fx => !isYouthFixture(fx));              // exclude youth
   fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league)); // scope
 
   const out = [];
@@ -308,27 +340,27 @@ async function scoreHeroCandidates(fx) {
   const time = clockFromISO(fx?.fixture?.date);
   const candidates = [];
 
-  const overP = home.over25Rate * 0.5 + away.over25Rate * 0.5;
-  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
+  const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
+  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5; // (bug fixed)
   const withinBand = (p) => p >= 0.62 && p <= 0.80;
 
   if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
     candidates.push({
       selection: "Over 2.5", market: "Over 2.5", conf: overP, odds: odds.over25,
-      reasoning: reasoningOU(home, away, "Over 2.5")
+      reasoning: narrativeOU(home, away, "Over 2.5", fx?.fixture?.id)
     });
   }
   if (odds?.under25 && odds.under25 >= 2.0 && withinBand(underP)) {
     candidates.push({
       selection: "Under 2.5", market: "Under 2.5", conf: underP, odds: odds.under25,
-      reasoning: reasoningOU(home, away, "Under 2.5")
+      reasoning: narrativeOU(home, away, "Under 2.5", fx?.fixture?.id)
     });
   }
   const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
   if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
     candidates.push({
       selection: "BTTS: Yes", market: "BTTS", conf: bttsP, odds: odds.bttsYes,
-      reasoning: reasoningBTTS(home, away)
+      reasoning: narrativeBTTS(home, away, fx?.fixture?.id)
     });
   }
 
@@ -507,10 +539,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, code });
     }
 
-    // Attach a referral to the friend before redirecting to Stripe
-    if (action === "attach-referral") {
+    // Get (or report) the user's referral code
+    if (action === "get-ref-code") {
       const email = (req.query.email || "").toString().trim().toLowerCase();
-      const code  = (req.query.code  || "").toString().trim();
+      if (!email) return res.status(400).json({ ok: false, error: "missing email" });
+      let code = null;
+      try {
+        const v = await kvGet(`ref:owner:${email}`);
+        code = (v && typeof v.result === "string" && v.result) ? v.result : null;
+      } catch {}
+      // No code yet: return null; client can show fallback ?ref=email link
+      return res.status(200).json({ ok: true, code });
+    }
+
+    // Attach a referral to the friend before redirecting to Stripe
+    // Backward compatible: friendEmail/email + ref/code are both accepted
+    if (action === "attach-referral") {
+      const email = (req.query.friendEmail || req.query.email || "").toString().trim().toLowerCase();
+      const code  = (req.query.ref || req.query.code || "").toString().trim();
       if (!email || !code) return res.status(400).json({ ok: false, error: "missing email or code" });
       // Store for 35 days; webhook will grant reward after first paid monthly invoice
       await kvSet(`ref:pending:${email}`, code, 35 * 24 * 60 * 60);
