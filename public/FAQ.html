@@ -7,6 +7,27 @@
   <meta name="description" content="Answers about OverEdge, Pro access, accuracy, and guarantees."/>
   <link rel="stylesheet" href="/style.css"/>
 
+  <!-- Small local styles for the hero image -->
+  <style>
+    .faq-hero { margin: 1rem 0 2rem; }
+    .faq-hero picture, .faq-hero img { display:block; width:100%; }
+    .faq-hero img {
+      height:auto;
+      border-radius:16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.12);
+      background:#0a0a0a;
+    }
+    @media (min-width: 900px){
+      .faq-hero img { max-height: 420px; object-fit: cover; }
+    }
+    .sr-only {
+      position:absolute !important;
+      width:1px; height:1px;
+      padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+    }
+  </style>
+
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
@@ -33,6 +54,21 @@
   <main>
     <section class="section">
       <h1>FAQ</h1>
+
+      <!-- Hero image -->
+      <figure class="faq-hero">
+        <picture>
+          <!-- Optional WebP (add this file if available) -->
+          <source srcset="/img/overedge-faq-hero.webp" type="image/webp">
+          <!-- PNG fallback -->
+          <img
+            src="/img/overedge-faq-hero.png"
+            alt="OverEdge — football analytics on the pitch"
+            loading="lazy"
+            width="1152" height="768">
+        </picture>
+        <figcaption class="sr-only">OverEdge brand on a football pitch.</figcaption>
+      </figure>
 
       <!-- Q1 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
