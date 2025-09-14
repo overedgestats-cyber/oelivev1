@@ -170,7 +170,6 @@ function narrativeCorners() {
 
 /* ---- NEW: explicit lean calculators for Cards & Corners (with line) --- */
 function computeCardsLean(H, A) {
-  // Light proxy: use team GF/GA as discipline/pressure signal
   const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
   const baseline = 4.8;
   const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.06));
@@ -178,7 +177,6 @@ function computeCardsLean(H, A) {
   return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
 }
 function computeCornersLean(H, A) {
-  // Light proxy: attacking output drives corners more than GA
   const avg = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
   const baseline = 9.7;
   const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.05));
@@ -230,44 +228,45 @@ function onex2Lean(home, away) {
 }
 
 // Odds helper — OU 2.5, BTTS, 1X2
+// Matches Free Picks behavior: later odds overwrite earlier ones.
+// Tracks per-market bookmaker internally (odds.bm.<market>) without changing response shapes.
 async function getOddsMap(fixtureId) {
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
     const out = {
       over25: null, under25: null, bttsYes: null, bttsNo: null,
-      homeWin: null, draw: null, awayWin: null, bookmaker: null,
+      homeWin: null, draw: null, awayWin: null,
+      bm: { over25: null, under25: null, bttsYes: null, bttsNo: null, homeWin: null, draw: null, awayWin: null },
     };
     const bms = rows?.[0]?.bookmakers || [];
     for (const b of bms) {
+      const bname = b?.name || null;
       for (const bet of b?.bets || []) {
         const name = (bet?.name || "").toLowerCase();
         // Over/Under
         if (name.includes("over/under") || name.includes("goals over/under")) {
           for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
-            if (val.includes("over 2.5")) out.over25 = Number(v.odd);
-            if (val.includes("under 2.5")) out.under25 = Number(v.odd);
+            if (val.includes("over 2.5")) { out.over25 = Number(v.odd); out.bm.over25 = bname; }
+            if (val.includes("under 2.5")) { out.under25 = Number(v.odd); out.bm.under25 = bname; }
           }
-          if (!out.bookmaker) out.bookmaker = b.name;
         }
         // BTTS
         if (name.includes("both teams to score")) {
           for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "yes") out.bttsYes = Number(v.odd);
-            if (val === "no") out.bttsNo = Number(v.odd);
+            if (val === "yes") { out.bttsYes = Number(v.odd); out.bm.bttsYes = bname; }
+            if (val === "no")  { out.bttsNo  = Number(v.odd); out.bm.bttsNo  = bname; }
           }
-          if (!out.bookmaker) out.bookmaker = b.name;
         }
         // 1X2
         if (name.includes("match winner") || name.includes("1x2")) {
           for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "home" || val === "1") out.homeWin = Number(v.odd);
-            if (val === "draw" || val === "x") out.draw = Number(v.odd);
-            if (val === "away" || val === "2") out.awayWin = Number(v.odd);
+            if (val === "home" || val === "1") { out.homeWin = Number(v.odd); out.bm.homeWin = bname; }
+            if (val === "draw" || val === "x") { out.draw    = Number(v.odd); out.bm.draw    = bname; }
+            if (val === "away" || val === "2") { out.awayWin = Number(v.odd); out.bm.awayWin = bname; }
           }
-          if (!out.bookmaker) out.bookmaker = b.name;
         }
       }
     }
@@ -386,7 +385,7 @@ async function scoreHeroCandidates(fx) {
 async function pickHeroBet({ date, tz, market = "auto" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
-  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league)); // <— tightened
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
   let candidates = [];
   for (const fx of fixtures.slice(0, 100)) {
     try {
@@ -514,7 +513,7 @@ async function buildProBoard({ date, tz }) {
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
-  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league)); // <— tightened
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
   fixtures = stableSortFixtures(fixtures);
 
   const byCountry = new Map();
