@@ -4,9 +4,9 @@
 //  - health
 //  - public-config
 //  - free-picks
-//  - pro-pick            (Hero Bet; now supports market=auto|ou_goals|btts|one_x_two)
-//  - pro-board           (flat list; unchanged shape, but improved internals & reasoning)
-//  - pro-board-grouped   (NEW: competitions grouped by country with flag + per-market reasoning)
+//  - pro-pick            (Hero Bet; supports market=auto|ou_goals|btts|one_x_two)
+//  - pro-board           (flat list; strict allowed comps)
+//  - pro-board-grouped   (grouped by country with flag; strict allowed comps)
 //  - verify-sub
 //  - register-ref
 //  - get-ref-code
@@ -70,8 +70,7 @@ function getLeagueFlag(league = {}) {
   return league?.flag || flagURLFromCountryName(league?.country || "");
 }
 
-/* -------- European scope (1st/2nd tiers + national cups + UEFA) ------- */
-/* (used by Free Picks; do NOT change per user's request) */
+/* -------- European scope (Free Picks only; keep broad) ------- */
 const EURO_COUNTRIES = [
   "England","Scotland","Wales","Northern Ireland","Ireland",
   "Spain","Italy","Germany","France","Portugal","Netherlands","Belgium",
@@ -108,7 +107,7 @@ function isEuropeanTier12OrCup(league = {}) {
   return false;
 }
 
-/* -------------------- Youth exclusion (Free Picks) -------------------- */
+/* -------------------- Youth exclusion -------------------- */
 const YOUTH_REGEXES = [
   /\bu-?\s?(14|15|16|17|18|19|20|21|22|23)\b/i,
   /\bu(?:14|15|16|17|18|19|20|21|22|23)\b/i,
@@ -364,9 +363,12 @@ async function scoreHeroCandidates(fx) {
     reasoning: c.reasoning,
   }));
 }
+
+// STRICT: Only allowed Pro competitions + exclude youth
 async function pickHeroBet({ date, tz, market = "auto" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
-  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league));
+  fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league)); // <— tightened
   let candidates = [];
   for (const fx of fixtures.slice(0, 100)) {
     try {
@@ -386,7 +388,6 @@ async function pickHeroBet({ date, tz, market = "auto" }) {
 }
 
 /* --------------------------- Pro Board data --------------------------- */
-/* Strict scope: only the competitions the user listed */
 const PRO_ALLOWED = {
   England: [/^Premier League$/i, /^Championship$/i, /^FA Cup$/i],
   Germany: [/^Bundesliga$/i, /^2\.?\s*Bundesliga$/i, /^DFB[ -]?Pokal$/i],
@@ -395,13 +396,20 @@ const PRO_ALLOWED = {
   France: [/^Ligue ?1$/i, /^Ligue ?2$/i, /^Coupe de France$/i],
 };
 const PRO_GLOBALS = [
-  /FIFA Club World Cup/i, /UEFA Champions League/i, /UEFA Europa League/i, /UEFA Europa Conference League/i,
-  /FIFA World Cup/i, /(UEFA )?European Championship|EURO\b/i, /Africa Cup of Nations|AFCON/i, /CONCACAF/i, /(UEFA )?Nations League/i,
+  /FIFA Club World Cup/i,
+  /UEFA Champions League/i,
+  /UEFA Europa League/i,
+  /UEFA Europa Conference League/i,
+  /FIFA World Cup/i,
+  /(UEFA )?European Championship|EURO\b/i,
+  /Africa Cup of Nations|AFCON/i,
+  /CONCACAF/i,
+  /(UEFA )?Nations League/i,
 ];
 function allowedForProBoard(league = {}) {
   const name = league?.name || "";
   const country = league?.country || "";
-  if (PRO_GLOBALS.some(rx => rx.test(name))) return true;
+  if (PRO_GLOBALS.some(rx => rx.test(name))) return true; // International comps
   const rx = PRO_ALLOWED[country];
   if (!rx) return false;
   return rx.some(r => r.test(name));
@@ -479,16 +487,16 @@ async function buildProBoard({ date, tz }) {
   return { date, timezone: tz, groups };
 }
 
-/* --------------- NEW: Pro Board grouped by country (flags) ------------ */
+/* --------------- Pro Board grouped by country (flags) ---------------- */
 /**
  * GET ?action=pro-board-grouped&market=ou_goals|ou_cards|ou_corners|one_x_two|btts
  * Returns: { date, timezone, groups: [ { country, flag, leagues: [ { leagueId, leagueName, fixtures: [ ... ] } ] } ] }
- * Each fixture includes a lightweight recommendation + edited reasoning for the selected market.
+ * Strict: only allowed Pro competitions (plus listed international comps).
  */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
-  // Keep it broad for browsing the day; UI decides what to show
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league)); // <— tightened
   fixtures = stableSortFixtures(fixtures);
 
   const byCountry = new Map();
@@ -527,7 +535,6 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
           rec = { market: "1X2", pick: ox.pick, confidencePct: pct(ox.conf) };
           why = narrative1X2(ox.pick, fx?.fixture?.id);
         } else if (market === "ou_cards") {
-          // Lightweight: provide edited reasoning without heavy per-fixture stats
           rec = { market: "OU Cards", pick: "Check 4.5/5.5", confidencePct: 50 };
           why = narrativeCards();
         } else if (market === "ou_corners") {
@@ -567,7 +574,7 @@ async function verifyStripeByEmail(email) {
     headers: { Authorization: `Bearer ${key}` }, cache: "no-store",
   });
   if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
-  const custData = await custResp.json(); // fixed bug
+  const custData = await custResp.json();
   const customers = custData?.data || [];
   if (!customers.length) return { pro: false, plan: null, status: "none" };
 
@@ -695,7 +702,7 @@ export default async function handler(req, res) {
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
-      const market = (req.query.market || "auto").toString().toLowerCase(); // NEW
+      const market = (req.query.market || "auto").toString().toLowerCase();
       const payload = await pickHeroBet({ date, tz, market });
       return res.status(200).json(payload);
     }
@@ -711,14 +718,14 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD GROUPED (by country + flag) — NEW
+    // PRO BOARD GROUPED (by country + flag)
     if (action === "pro-board-grouped") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
-      const market = (req.query.market || "ou_goals").toString().toLowerCase(); // one of: ou_goals, ou_cards, ou_corners, one_x_two, btts
+      const market = (req.query.market || "ou_goals").toString().toLowerCase(); // ou_goals|ou_cards|ou_corners|one_x_two|btts
       const payload = await buildProBoardGrouped({ date, tz, market });
       return res.status(200).json(payload);
     }
