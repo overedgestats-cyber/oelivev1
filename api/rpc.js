@@ -81,6 +81,37 @@ async function kvDel(key) {
   try { return await r.json(); } catch { return null; }
 }
 
+/* ----- Free Picks persistent cache (Redis) ----- */
+function fpRedisKey(date, tz, minConf){ return `freepicks:${date}:${tz}:${minConf}`; }
+
+async function fpGet(date, tz, minConf){
+  try {
+    const v = await kvGet(fpRedisKey(date, tz, minConf));
+    if (v && typeof v.result === "string" && v.result) {
+      return JSON.parse(v.result);
+    }
+  } catch {}
+  return null;
+}
+async function fpSet(date, tz, minConf, payload){
+  try {
+    // keep for ~1 day
+    await kvSet(fpRedisKey(date, tz, minConf), JSON.stringify(payload), 22 * 60 * 60);
+  } catch {}
+}
+
+// Deterministic order so slicing/scoring is stable across calls
+function stableSortFixtures(fixtures = []) {
+  return [...fixtures].sort((a,b) => {
+    const ai = a?.fixture?.id ?? 0;
+    const bi = b?.fixture?.id ?? 0;
+    if (ai !== bi) return ai - bi;
+    const ad = a?.fixture?.date || "";
+    const bd = b?.fixture?.date || "";
+    return ad.localeCompare(bd);
+  });
+}
+
 /* -------- European scope (1st/2nd tiers + national cups + UEFA) ------- */
 /* (used by Free Picks; do NOT change per user's request) */
 const EURO_COUNTRIES = [
@@ -317,6 +348,7 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));              // exclude youth
   fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league)); // scope (unchanged)
+  fixtures = stableSortFixtures(fixtures);                             // deterministic order
 
   const out = [];
   for (const fx of fixtures.slice(0, 80)) {
@@ -599,13 +631,22 @@ export default async function handler(req, res) {
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
 
       const key = cacheKey(date, tz, minConf);
+
+      // shared Redis cache (and keep in-memory as fast path)
       if (!refresh) {
+        const persisted = await fpGet(date, tz, minConf);
+        if (persisted) {
+          putCached(key, persisted);
+          return res.status(200).json(persisted);
+        }
         const cached = getCached(key);
         if (cached) return res.status(200).json(cached);
       }
 
       const payload = await pickFreePicks({ date, tz, minConf });
       putCached(key, payload);
+      await fpSet(date, tz, minConf, payload);
+
       return res.status(200).json(payload);
     }
 
