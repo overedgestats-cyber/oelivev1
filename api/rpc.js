@@ -82,6 +82,7 @@ async function kvDel(key) {
 }
 
 /* -------- European scope (1st/2nd tiers + national cups + UEFA) ------- */
+/* (used by Free Picks; do NOT change per user's request) */
 const EURO_COUNTRIES = [
   "England","Scotland","Wales","Northern Ireland","Ireland",
   "Spain","Italy","Germany","France","Portugal","Netherlands","Belgium",
@@ -141,63 +142,6 @@ function isEuropeanTier12OrCup(league = {}) {
   if (matchAny(TIER1_PATTERNS, name)) return true;
   if (matchAny(TIER2_PATTERNS, name)) return true;
   return false;
-}
-
-/* ----------------------- Strict Pro scope (your list) ----------------------- */
-/* Countries: ENG/GER/ESP/ITA/FRA (1st, 2nd, National Cup) + selected intl comps */
-
-const STRICT_COUNTRY_LEAGUE_RX = {
-  England: [
-    /\bpremier\s*league\b/i,
-    /\bchampionship\b/i,
-    /\bfa\s*cup\b/i,
-  ],
-  Germany: [
-    /\bbundesliga\b(?!.*\b2\b)/i,                       // Bundesliga
-    /(2\.?\s*bundesliga|bundesliga\s*2)\b/i,            // 2. Bundesliga
-    /\bdfb\s*pokal\b/i,                                 // DFB-Pokal
-  ],
-  Spain: [
-    /\bla\s*liga\b(?!\s*2)/i,                           // La Liga
-    /(la\s*liga\s*2|segunda\s*divisi[oó]n)\b/i,         // La Liga 2 / Segunda
-    /\bcopa\s*del\s*rey\b/i,                            // Copa del Rey
-  ],
-  Italy: [
-    /\bserie\s*a\b/i,
-    /\bserie\s*b\b/i,
-    /\b(coppa|copa)\s*italia\b/i,                       // Coppa Italia / common misspell
-  ],
-  France: [
-    /\bligue\s*1\b/i,
-    /\bligue\s*2\b/i,
-    /\b(coupe\s*de\s*france|french\s*cup)\b/i,
-  ],
-};
-
-const INTERNATIONAL_RX = [
-  /\bfifa\s*club\s*world\s*cup\b/i,
-  /\buefa\s*champions\s*league\b/i, /\bchampions\s*league\b/i,
-  /\beuropa\s*league\b(?!.*conference)/i,
-  /(europa\s*)?conference\s*league\b/i,
-  /\bfifa\s*world\s*cup\b/i,
-  /\b(euro|european\s*championship)\b/i,
-  /(afcon|africa\s*cup\s*of\s*nations)\b/i,
-  /\bconcacaf\b/i,
-  /\bnations\s*league\b/i,
-];
-
-function isProScopeStrict(league = {}) {
-  const country = league?.country || "";
-  const name = league?.name || "";
-
-  // Named international competitions
-  if (country === "Europe" || country === "World") {
-    return INTERNATIONAL_RX.some(rx => rx.test(name));
-  }
-
-  // Strictly allow only the five countries + their 1st/2nd tiers + main cups
-  const allowList = STRICT_COUNTRY_LEAGUE_RX[country];
-  return Array.isArray(allowList) ? allowList.some(rx => rx.test(name)) : false;
 }
 
 /* -------------------- Youth exclusion (Free Picks) -------------------- */
@@ -372,7 +316,7 @@ function putCached(key, payload) {
 async function pickFreePicks({ date, tz, minConf = 75 }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));              // exclude youth
-  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league)); // BROAD scope (unchanged)
+  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league)); // scope (unchanged)
 
   const out = [];
   for (const fx of fixtures.slice(0, 80)) {
@@ -437,8 +381,7 @@ async function scoreHeroCandidates(fx) {
 }
 async function pickHeroBet({ date, tz }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
-  fixtures = fixtures.filter(fx => isProScopeStrict(fx.league)); // STRICT pro scope
-
+  fixtures = fixtures.filter(fx => isEuropeanTier12OrCup(fx.league)); // keep broader scope for Hero
   let candidates = [];
   for (const fx of fixtures.slice(0, 100)) {
     try { candidates = candidates.concat(await scoreHeroCandidates(fx)); }
@@ -450,14 +393,44 @@ async function pickHeroBet({ date, tz }) {
 }
 
 /* --------------------------- Pro Board data --------------------------- */
+/* Strict scope: only the competitions the user listed */
+const PRO_ALLOWED = {
+  England: [/^Premier League$/i, /^Championship$/i, /^FA Cup$/i],
+  Germany: [/^Bundesliga$/i, /^2\.?\s*Bundesliga$/i, /^DFB[ -]?Pokal$/i],
+  Spain: [/^La ?Liga$/i, /^(Segunda( División)?|La ?Liga 2)$/i, /^Copa del Rey$/i],
+  Italy: [/^Serie ?A$/i, /^Serie ?B$/i, /^Coppa Italia$/i],
+  France: [/^Ligue ?1$/i, /^Ligue ?2$/i, /^Coupe de France$/i],
+};
+
+const PRO_GLOBALS = [
+  /FIFA Club World Cup/i,
+  /UEFA Champions League/i,
+  /UEFA Europa League/i,
+  /UEFA Europa Conference League/i,
+  /FIFA World Cup/i,
+  /(UEFA )?European Championship|EURO\b/i,
+  /Africa Cup of Nations|AFCON/i,
+  /CONCACAF/i,
+  /(UEFA )?Nations League/i,
+];
+
+function allowedForProBoard(league = {}) {
+  const name = league?.name || "";
+  const country = league?.country || "";
+  // Global competitions by name
+  if (PRO_GLOBALS.some(rx => rx.test(name))) return true;
+  // Country-scoped leagues/cups
+  const rx = PRO_ALLOWED[country];
+  if (!rx) return false;
+  return rx.some(r => r.test(name));
+}
+
 function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 
 /** quick 1X2 lean from simple differentials (very light model) */
 function onex2Lean(home, away) {
-  // home advantage term
-  const ha = 0.20; // small boost
+  const ha = 0.20; // small home-advantage term
   const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
-  // convert to soft confidence band
   if (score > 0.35) return { pick: "Home", conf: clamp01(0.55 + (score - 0.35) * 0.25) };
   if (score < -0.35) return { pick: "Away", conf: clamp01(0.55 + (-score - 0.35) * 0.25) };
   return { pick: "Draw", conf: 0.50 };
@@ -466,10 +439,11 @@ function onex2Lean(home, away) {
 async function buildProBoard({ date, tz }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
-  fixtures = fixtures.filter(fx => isProScopeStrict(fx.league)); // STRICT pro scope
+  // STRICT scope just for Pro Board:
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
 
   const rows = [];
-  for (const fx of fixtures.slice(0, 120)) {
+  for (const fx of fixtures.slice(0, 160)) {
     try {
       const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
       if (!homeId || !awayId) continue;
@@ -553,5 +527,206 @@ async function verifyStripeByEmail(email) {
     headers: { Authorization: `Bearer ${key}` }, cache: "no-store",
   });
   if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
-  const custData = await resp.json(); // <-- This line had a bug in some copies; keep 'custResp'
+  const custData = await custResp.json();
+  const customers = custData?.data || [];
+  if (!customers.length) return { pro: false, plan: null, status: "none" };
+
+  let best = null;
+  for (const c of customers) {
+    const subResp = await fetch(
+      `https://api.stripe.com/v1/subscriptions?${qs({ customer: c.id, status: "all", limit: 10 })}`,
+      { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" }
+    );
+    if (!subResp.ok) continue;
+    const subData = await subResp.json();
+    for (const s of subData?.data || []) {
+      if (!best || (s.created || 0) > (best.created || 0)) best = s;
+    }
+  }
+  if (!best) return { pro: false, plan: null, status: "none" };
+
+  const activeStatuses = new Set(["active", "trialing"]);
+  const isPro = activeStatuses.has(best.status);
+
+  const item = best.items?.data?.[0] || {};
+  const price = item.price || {};
+  const nickname = price.nickname || null;
+  const interval = price.recurring?.interval || null;
+  const amount = typeof price.unit_amount === "number" ? (price.unit_amount / 100).toFixed(2) : null;
+  const currency = price.currency ? price.currency.toUpperCase() : null;
+
+  const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
+  return { pro: isPro, plan, status: best.status };
+}
+
+async function getProOverride(email) {
+  const v = await kvGet(`pro:override:${email}`);
+  const sec = v && typeof v.result === "string" ? Number(v.result) : 0;
+  return Number.isFinite(sec) ? sec : 0;
+}
+
+/* ------------------------------ Handler ------------------------------ */
+export default async function handler(req, res) {
+  try {
+    const { action = "health" } = req.query;
+
+    /* -- health -- */
+    if (action === "health") {
+      return res.status(200).json({ ok: true, env: process.env.NODE_ENV || "unknown" });
+    }
+
+    /* -- public Firebase config -- */
+    if (action === "public-config") {
+      return res.status(200).json({
+        firebase: {
+          apiKey: process.env.FB_API_KEY || "",
+          authDomain: process.env.FB_AUTH_DOMAIN || "",
+          projectId: process.env.FB_PROJECT_ID || "",
+          appId: process.env.FB_APP_ID || "",
+          measurementId: process.env.FB_MEASUREMENT_ID || "",
+        },
+      });
+    }
+
+    /* -- free picks -- */
+    if (action === "free-picks") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+      const minConf = Number(req.query.minConf || 75);
+      const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
+
+      const key = cacheKey(date, tz, minConf);
+      if (!refresh) {
+        const cached = getCached(key);
+        if (cached) return res.status(200).json(cached);
+      }
+
+      const payload = await pickFreePicks({ date, tz, minConf });
+      putCached(key, payload);
+      return res.status(200).json(payload);
+    }
+
+    /* -- hero bet -- */
+    if (action === "pro-pick") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+      const payload = await pickHeroBet({ date, tz });
+      return res.status(200).json(payload);
+    }
+
+    /* -- pro board -- */
+    if (action === "pro-board") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+      const payload = await buildProBoard({ date, tz });
+      return res.status(200).json(payload);
+    }
+
+    /* -- verify subscription (+ dev bypass + override) -- */
+    if (action === "verify-sub") {
+      const email = (req.query.email || "").toString().trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: "Missing email" });
+
+      // Dev bypass
+      const devs = (process.env.OE_DEV_EMAILS || "")
+        .split(",")
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (devs.includes(email)) {
+        return res.status(200).json({
+          pro: true, plan: "DEV", status: "override", overrideUntil: "9999-12-31"
+        });
+      }
+
+      let base = { pro: false, plan: null, status: "none" };
+      try { base = await verifyStripeByEmail(email); } catch {}
+
+      let overrideSec = 0;
+      try { overrideSec = await getProOverride(email); } catch {}
+      const nowSec = Math.floor(Date.now() / 1000);
+      const hasOverride = overrideSec > nowSec;
+
+      return res.status(200).json({
+        pro: base.pro || hasOverride,
+        plan: base.plan,
+        status: base.pro ? base.status : (hasOverride ? "override" : base.status),
+        overrideUntil: hasOverride ? new Date(overrideSec * 1000).toISOString() : null,
+      });
+    }
+
+    /* --------------------- Referral endpoints --------------------- */
+
+    // Register a user's referral code (call once after sign-in)
+    if (action === "register-ref") {
+      const email = (req.query.email || "").toString().trim().toLowerCase();
+      const uid   = (req.query.uid || "").toString().trim();
+      if (!email || !uid) return res.status(400).json({ ok: false, error: "missing email or uid" });
+      const code = uid.slice(-10);
+      await kvSet(`ref:code:${code}`, email);
+      await kvSet(`ref:owner:${email}`, code);
+      return res.status(200).json({ ok: true, code });
+    }
+
+    // Get (or report) the user's referral code
+    if (action === "get-ref-code") {
+      const email = (req.query.email || "").toString().trim().toLowerCase();
+      if (!email) return res.status(400).json({ ok: false, error: "missing email" });
+      let code = null;
+      try {
+        const v = await kvGet(`ref:owner:${email}`);
+        code = (v && typeof v.result === "string" && v.result) ? v.result : null;
+      } catch {}
+      return res.status(200).json({ ok: true, code });
+    }
+
+    // Attach a referral to the friend before redirecting to Stripe
+    // Accepts friendEmail/email + ref/code for backward compatibility
+    if (action === "attach-referral") {
+      const email = (req.query.friendEmail || req.query.email || "").toString().trim().toLowerCase();
+      const code  = (req.query.ref || req.query.code || "").toString().trim();
+      if (!email || !code) return res.status(400).json({ ok: false, error: "missing email or code" });
+      // Store for 35 days; webhook will grant reward after first paid monthly invoice
+      await kvSet(`ref:pending:${email}`, code, 35 * 24 * 60 * 60);
+      return res.status(200).json({ ok: true });
+    }
+
+    // Optional: simple click analytics
+    if (action === "ref-hit") {
+      const code = (req.query.code || "").toString().slice(0, 64);
+      const path = (req.query.path || "/").toString().slice(0, 64);
+      if (!code) return res.status(400).json({ ok: false, error: "missing code" });
+      const day = ymd();
+      try {
+        await kvIncr(`ref:${code}:hits:${day}`);
+        await kvIncr(`ref:${code}:hits:total`);
+      } catch {}
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === "ref-stats") {
+      const code = (req.query.code || "").toString().slice(0, 64);
+      if (!code) return res.status(400).json({ ok: false, error: "missing code" });
+      let total = 0;
+      try {
+        const v = await kvGet(`ref:${code}:hits:total`);
+        total = typeof v?.result === "string" ? Number(v.result) : 0;
+      } catch {}
+      return res.status(200).json({ ok: true, code, total });
+    }
+
+    /* -- fallback -- */
+    return res.status(404).json({ error: "Unknown action" });
+  } catch (err) {
+    console.error("RPC error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 }
