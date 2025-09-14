@@ -185,7 +185,7 @@
       return `
         <div class="grid-2">
           <div>
-            <div style="font-weight:600">${p.league}</div>
+            <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
             <div class="muted-sm">${p.matchTime} — ${p.home} vs ${p.away}</div>
           </div>
           <div class="muted-sm">Odds: ${p.odds ?? "-"} &nbsp; · &nbsp; Confidence: ${p.confidencePct}%</div>

@@ -69,7 +69,7 @@
         }
         el.innerHTML = data.picks.map(p => `
           <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-            <div style="font-weight:600">${p.league}</div>
+            <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
             <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
             <div style="margin:.5rem 0">
               <span style="font-weight:600">${p.market}</span>
