@@ -30,6 +30,35 @@
       margin-right:.4rem;
     }
     .perweek{ font-size:.9rem; opacity:.75; margin:.25rem 0 .25rem; }
+
+    /* NEW: “Most Popular” / “Best Value” highlights */
+    .plan{ position:relative; }
+    .plan .tag{
+      position:absolute; top:-10px; right:12px;
+      padding:.2rem .55rem; border-radius:999px;
+      font-weight:800; font-size:.75rem; letter-spacing:.02em;
+      border:1px solid transparent;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      user-select:none;
+    }
+    .plan.popular{
+      border-color:#bfdbfe; /* blue-200 */
+      box-shadow: 0 8px 24px rgba(37,99,235,.12);
+    }
+    .plan.popular .tag{
+      background:#eff6ff; /* blue-50 */
+      color:#1d4ed8;      /* blue-700 */
+      border-color:#bfdbfe;
+    }
+    .plan.best{
+      border-color:#bbf7d0; /* green-200 */
+      box-shadow: 0 8px 24px rgba(16,185,129,.12);
+    }
+    .plan.best .tag{
+      background:#ecfdf5;  /* emerald-50 */
+      color:#065f46;       /* emerald-900 */
+      border-color:#bbf7d0;
+    }
   </style>
 </head>
 <body>
@@ -114,7 +143,9 @@
           <p><a class="btn" href="#" data-plan="monthly">Subscribe</a></p>
         </div>
 
-        <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+        <!-- Quarterly — Most Popular -->
+        <div class="plan card popular" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <span class="tag">Most Popular</span>
           <h3>Quarterly</h3>
           <div class="price">€44.99</div>
           <div class="perweek">
@@ -128,7 +159,9 @@
           <p><a class="btn" href="#" data-plan="quarterly">Subscribe</a></p>
         </div>
 
-        <div class="plan card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+        <!-- Yearly — Best Value -->
+        <div class="plan card best" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+          <span class="tag">Best Value</span>
           <h3>Yearly</h3>
           <div class="price">€146.99</div>
           <div class="perweek">
