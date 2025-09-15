@@ -170,6 +170,7 @@ function narrativeCorners() {
 
 /* ---- NEW: explicit lean calculators for Cards & Corners (with line) --- */
 function computeCardsLean(H, A) {
+  // Light proxy: use team GF/GA as discipline/pressure signal
   const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
   const baseline = 4.8;
   const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.06));
@@ -177,6 +178,7 @@ function computeCardsLean(H, A) {
   return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
 }
 function computeCornersLean(H, A) {
+  // Light proxy: attacking output drives corners more than GA
   const avg = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
   const baseline = 9.7;
   const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.05));
@@ -670,6 +672,55 @@ async function fpGet(date, tz, minConf){ try {
 } catch {} return null; }
 async function fpSet(date, tz, minConf, payload){ try { await kvSet(fpRedisKey(date, tz, minConf), JSON.stringify(payload), 22 * 60 * 60); } catch {} }
 
+/* --- In-memory day caches for Pro endpoints (22h TTL) --- */
+const DAY_TTL_MS = 22 * 60 * 60 * 1000;
+
+const PROPICK_CACHE   = new Map(); // key -> { payload, exp }
+const PROBOARD_CACHE  = new Map();
+const PROBOARDG_CACHE = new Map();
+
+function getCachedPP(key){ const e = PROPICK_CACHE.get(key);   if (e && e.exp > Date.now()) return e.payload;   if (e) PROPICK_CACHE.delete(key);   return null; }
+function putCachedPP(key, payload){ PROPICK_CACHE.set(key,   { payload, exp: Date.now() + DAY_TTL_MS }); }
+
+function getCachedPB(key){ const e = PROBOARD_CACHE.get(key);  if (e && e.exp > Date.now()) return e.payload;   if (e) PROBOARD_CACHE.delete(key);  return null; }
+function putCachedPB(key, payload){ PROBOARD_CACHE.set(key,  { payload, exp: Date.now() + DAY_TTL_MS }); }
+
+function getCachedPBG(key){ const e = PROBOARDG_CACHE.get(key); if (e && e.exp > Date.now()) return e.payload; if (e) PROBOARDG_CACHE.delete(key); return null; }
+function putCachedPBG(key, payload){ PROBOARDG_CACHE.set(key, { payload, exp: Date.now() + DAY_TTL_MS }); }
+
+// Cache keys
+function ppCacheKey(date, tz, market){ return `pp|${date}|${tz}|${market}`; }
+function pbCacheKey(date, tz){ return `pb|${date}|${tz}`; }
+function pbgCacheKey(date, tz, market){ return `pbg|${date}|${tz}|${market}`; }
+
+/* ----- Pro pick / board persistent caches (Redis) ----- */
+function ppRedisKey(date, tz, market){ return `propick:${date}:${tz}:${market}`; }
+async function ppGet(date, tz, market){
+  try { const v = await kvGet(ppRedisKey(date, tz, market)); if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result); }
+  catch {} return null;
+}
+async function ppSet(date, tz, market, payload){
+  try { await kvSet(ppRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
+}
+
+function pbRedisKey(date, tz){ return `proboard:${date}:${tz}`; }
+async function pbGet(date, tz){
+  try { const v = await kvGet(pbRedisKey(date, tz)); if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result); }
+  catch {} return null;
+}
+async function pbSet(date, tz, payload){
+  try { await kvSet(pbRedisKey(date, tz), JSON.stringify(payload), 22 * 60 * 60); } catch {}
+}
+
+function pbgRedisKey(date, tz, market){ return `proboardg:${date}:${tz}:${market}`; }
+async function pbgGet(date, tz, market){
+  try { const v = await kvGet(pbgRedisKey(date, tz, market)); if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result); }
+  catch {} return null;
+}
+async function pbgSet(date, tz, market, payload){
+  try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
+}
+
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
   try {
@@ -714,7 +765,7 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // HERO BET (Pro pick)
+    // HERO BET (Pro pick) — pinned by date/tz/market unless refresh=1
     if (action === "pro-pick") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
@@ -722,22 +773,46 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const market = (req.query.market || "auto").toString().toLowerCase();
+      const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
+      const key = ppCacheKey(date, tz, market);
+
+      if (!refresh) {
+        const persisted = await ppGet(date, tz, market);
+        if (persisted) { putCachedPP(key, persisted); return res.status(200).json(persisted); }
+        const cached = getCachedPP(key);
+        if (cached) return res.status(200).json(cached);
+      }
+
       const payload = await pickHeroBet({ date, tz, market });
+      putCachedPP(key, payload);
+      await ppSet(date, tz, market, payload);
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD (flat)
+    // PRO BOARD (flat) — pinned by date/tz unless refresh=1
     if (action === "pro-board") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
+      const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
+      const key = pbCacheKey(date, tz);
+
+      if (!refresh) {
+        const persisted = await pbGet(date, tz);
+        if (persisted) { putCachedPB(key, persisted); return res.status(200).json(persisted); }
+        const cached = getCachedPB(key);
+        if (cached) return res.status(200).json(cached);
+      }
+
       const payload = await buildProBoard({ date, tz });
+      putCachedPB(key, payload);
+      await pbSet(date, tz, payload);
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD GROUPED (by country + flag)
+    // PRO BOARD GROUPED — pinned by date/tz/market unless refresh=1
     if (action === "pro-board-grouped") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
@@ -745,7 +820,19 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const market = (req.query.market || "ou_goals").toString().toLowerCase(); // ou_goals|ou_cards|ou_corners|one_x_two|btts
+      const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
+      const key = pbgCacheKey(date, tz, market);
+
+      if (!refresh) {
+        const persisted = await pbgGet(date, tz, market);
+        if (persisted) { putCachedPBG(key, persisted); return res.status(200).json(persisted); }
+        const cached = getCachedPBG(key);
+        if (cached) return res.status(200).json(cached);
+      }
+
       const payload = await buildProBoardGrouped({ date, tz, market });
+      putCachedPBG(key, payload);
+      await pbgSet(date, tz, market, payload);
       return res.status(200).json(payload);
     }
 
