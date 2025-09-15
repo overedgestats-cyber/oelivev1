@@ -17,6 +17,8 @@
 /* ---------- Reset / Base ---------- */
 *{ box-sizing: border-box; }
 html,body{ height: 100%; }
+main{ display:block; }
+
 body{
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
@@ -36,8 +38,6 @@ h1{ font-size: clamp(1.75rem, 3vw, 2.25rem); }
 h2{ font-size: clamp(1.25rem, 2.2vw, 1.6rem); }
 h3{ font-size: clamp(1.1rem, 1.8vw, 1.3rem); }
 
-main{ display:block; }
-
 /* ---------- Layout ---------- */
 .site-header{
   position: sticky; top: 0; z-index: 40;
@@ -50,10 +50,27 @@ main{ display:block; }
   display: flex; align-items: center; justify-content: space-between;
   padding: .75rem 1rem;
 }
+
+/* Old text-only logo (still supported) */
 .logo{
   font-weight: 800; letter-spacing: .2px; color: var(--text);
   font-size: 1.05rem;
 }
+
+/* New image + wordmark logo */
+.brandmark{
+  display:flex; align-items:center; gap:.5rem;
+  color: var(--text);
+  font-weight:800;
+  text-decoration:none;
+}
+.brandmark img{
+  width:28px; height:28px; object-fit:contain;
+}
+.brandmark span{
+  font-size:1.05rem; letter-spacing:.2px;
+}
+
 .links{ display: flex; gap: .9rem; align-items: center; }
 .links a{ color: var(--text); padding: .25rem .35rem; border-radius: .5rem; }
 .links a:hover{ background: #f8fafc; text-decoration: none; }
@@ -113,7 +130,7 @@ main{ display:block; }
 }
 hr{ border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 
-/* ---------- Pricing grid (optional, if not using inline styles) ---------- */
+/* ---------- Pricing grid ---------- */
 .plans{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
@@ -143,7 +160,6 @@ details[open]{ box-shadow: var(--shadow); }
   padding: 1.25rem 1rem;
   text-align: center;
 }
-/* Footer contact links */
 .site-footer .contact{
   margin-top: .5rem;
   font-size: .9rem;
@@ -163,48 +179,63 @@ details[open]{ box-shadow: var(--shadow); }
 @media (min-width: 700px){
   .hero{ padding: 3rem 1rem 1.5rem; }
 }
-.badge.odds {
+
+/* ---------- Odds pill ---------- */
+.badge.odds{
   background:#eef2ff;
   color:#1e3a8a;
   border:1px solid #dbeafe;
   font-weight:700;
   padding:.15rem .5rem;
+  border-radius:999px;
 }
 
+/* ---------- Generic team emphasis (used in /pro grouped rows) ---------- */
+.teams{
+  display:flex; align-items:center; gap:.4rem; flex-wrap:wrap;
+}
+.teams img.logo{
+  width:18px; height:18px; object-fit:contain;
+}
+.teams .team{
+  font-weight:800;
+  letter-spacing:.02em;
+  font-size:1.02rem;
+  color:var(--text);
+  line-height:1.25;
+}
+.teams .sep{
+  opacity:.55;
+  padding:0 .15rem;
+}
 
-/* ---------- Pro Board: make team names pop ---------- */
-/* These selectors are resilient to small markup differences on the /pro page. */
+/* ---------- Pro Board: make team names pop (robust selectors) ---------- */
 .pro-board .fixture-card .club,
-.pro-board .fixture .club {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
+.pro-board .fixture .club{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
 }
-
 .pro-board .fixture-card .club img,
 .pro-board .fixture .club img,
-.pro-board .fixture .teams img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
+.pro-board .fixture .teams img{
+  width:22px; height:22px; object-fit:contain;
 }
-
 .pro-board .fixture-card .club .team-name,
 .pro-board .fixture .club .team-name,
 .pro-board .fixture-card .teams .name,
 .pro-board .fixture .teams .name,
 .pro-board .fixture .teams .home,
-.pro-board .fixture .teams .away {
-  font-weight: 800;                         /* heavier */
-  font-size: clamp(1.05rem, 0.9rem + 0.6vw, 1.35rem); /* larger, responsive */
-  line-height: 1.25;
-  color: var(--text);                       /* high contrast */
-  letter-spacing: .02em;
+.pro-board .fixture .teams .away{
+  font-weight:800;
+  font-size: clamp(1.05rem, 0.9rem + 0.6vw, 1.35rem);
+  line-height:1.25;
+  color:var(--text);
+  letter-spacing:.02em;
 }
-
 .pro-board .fixture-card .vs,
-.pro-board .fixture .vs {
-  opacity: .75;
-  font-weight: 600;
-  margin: 0 .25rem;
+.pro-board .fixture .vs{
+  opacity:.75;
+  font-weight:600;
+  margin:0 .25rem;
 }

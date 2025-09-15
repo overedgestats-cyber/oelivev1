@@ -7,6 +7,12 @@
   <meta name="description" content="Two free football picks every day with confidence and reasoning."/>
   <link rel="stylesheet" href="/style.css"/>
 
+  <!-- Favicons / icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
+
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
@@ -19,7 +25,11 @@
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="logo" href="/">OverEdge</a>
+      <a class="logo brand" href="/" aria-label="OverEdge">
+  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+  <span class="sr-only">OverEdge</span>
+</a>
+
       <div class="links">
         <a href="/free-picks" aria-current="page">Free Picks</a>
         <a href="/pro">Pro</a>
@@ -88,18 +98,5 @@
 
   <!-- Shared navbar auth module -->
   <script type="module" src="/auth.js"></script>
-
-  <!-- Referral capture: store ?ref=CODE for 30 days -->
-  <script>
-    (function () {
-      try {
-        const u = new URL(location.href);
-        const ref = u.searchParams.get('ref');
-        if (ref) {
-          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
-        }
-      } catch {}
-    })();
-  </script>
 </body>
 </html>

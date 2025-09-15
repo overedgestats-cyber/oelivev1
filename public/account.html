@@ -7,6 +7,12 @@
   <meta name="description" content="Manage your OverEdge account and subscription."/>
   <link rel="stylesheet" href="/style.css"/>
 
+  <!-- Favicons / icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
+
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
@@ -19,7 +25,11 @@
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="logo" href="/">OverEdge</a>
+      <a class="logo brand" href="/" aria-label="OverEdge">
+  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+  <span class="sr-only">OverEdge</span>
+</a>
+
       <div class="links">
         <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
@@ -51,30 +61,6 @@
           <a class="btn secondary small" href="/pricing">Manage / Upgrade</a>
         </p>
         <p class="muted" style="margin-top:.5rem">After Stripe checkout, return here and click “Refresh status”.</p>
-      </div>
-    </section>
-
-    <!-- Referral Program -->
-    <section class="section">
-      <h2>Referral Program</h2>
-      <div class="card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
-        <p class="muted" style="margin-top:0">
-          Share your link. When a friend becomes Pro Monthly, you get one free month.
-        </p>
-
-        <div id="ref-user" style="display:none">
-          <p><strong>Your referral link</strong></p>
-          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-            <input id="ref-link" type="text" readonly
-                   style="flex:1;min-width:260px;padding:.65rem .75rem;border:1px solid var(--border);border-radius:12px"/>
-            <button id="ref-copy" class="btn small" type="button">Copy</button>
-          </div>
-          <p class="muted" style="margin:.5rem 0 0">Tip: share on Instagram/Facebook or in chats.</p>
-        </div>
-
-        <div id="ref-guest" style="display:none">
-          <p><a href="/account">Sign in</a> to get your personal referral link.</p>
-        </div>
       </div>
     </section>
   </main>
@@ -180,69 +166,6 @@
         const sub = await verifyStripe(user.email);
         renderUser(user, sub);
       });
-    })();
-  </script>
-
-  <!-- Firebase referral UI (separate module, distinct auth variable) -->
-  <script type="module">
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-
-    const refUser  = document.getElementById('ref-user');
-    const refGuest = document.getElementById('ref-guest');
-    const refInput = document.getElementById('ref-link');
-    const refCopy  = document.getElementById('ref-copy');
-
-    function copyToClipboard(el){
-      try { el.select(); document.execCommand?.('copy'); } catch {}
-      try { navigator.clipboard?.writeText(el.value); } catch {}
-    }
-
-    async function ensureFirebase() {
-      if (!getApps().length) {
-        const cfgRes = await fetch('/api/rpc?action=public-config');
-        const cfg = (await cfgRes.json()).firebase || {};
-        initializeApp(cfg);
-      }
-    }
-
-    (async () => {
-      await ensureFirebase();
-      const authForReferral = getAuth();
-
-      onAuthStateChanged(authForReferral, async (user) => {
-        if (!user) {
-          refGuest.style.display = 'block';
-          refUser.style.display = 'none';
-          return;
-        }
-        refGuest.style.display = 'none';
-        refUser.style.display = 'block';
-
-        try {
-          const r = await fetch(`/api/rpc?action=get-ref-code&email=${encodeURIComponent(user.email)}`);
-          const { link } = await r.json();
-          refInput.value = link || (location.origin + '/?ref=' + encodeURIComponent(user.email));
-        } catch {
-          refInput.value = location.origin + '/?ref=' + encodeURIComponent(user.email);
-        }
-        refCopy?.addEventListener('click', () => copyToClipboard(refInput));
-      });
-    })();
-  </script>
-
-  <!-- Referral capture: store ?ref=CODE for 30 days -->
-  <script>
-    (function () {
-      try {
-        const u = new URL(location.href);
-        const ref = u.searchParams.get('ref');
-        if (ref) {
-          document.cookie = 'oe_ref=' + encodeURIComponent(ref) +
-            '; Max-Age=' + (30*24*3600) +
-            '; Path=/; SameSite=Lax';
-        }
-      } catch {}
     })();
   </script>
 </body>

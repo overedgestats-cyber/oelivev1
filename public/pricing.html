@@ -7,6 +7,12 @@
   <meta name="description" content="Choose a plan: Weekly, Monthly, Quarterly, or Yearly."/>
   <link rel="stylesheet" href="/style.css"/>
 
+  <!-- Favicons / icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
+
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
@@ -35,7 +41,11 @@
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="logo" href="/">OverEdge</a>
+      <a class="logo brand" href="/" aria-label="OverEdge">
+  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+  <span class="sr-only">OverEdge</span>
+</a>
+
       <div class="links">
         <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
@@ -170,11 +180,6 @@
       onAuthStateChanged(auth, (u) => { currentUser = u || null; });
     }
 
-    function getCookie(name){
-      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
-      return m ? decodeURIComponent(m[1]) : null;
-    }
-
     function requireSignedIn() {
       if (!currentUser) {
         alert('Please sign in with Google first.');
@@ -195,14 +200,6 @@
           const plan = btn.getAttribute('data-plan');
           const url  = STRIPE_LINKS[plan];
           if (!url) { alert(`Payment link for "${plan}" is not set.`); return; }
-
-          // If a referral is present, attach it to this friend before checkout
-          try {
-            const ref = getCookie('oe_ref');
-            if (ref && currentUser?.email) {
-              await fetch(`/api/rpc?action=attach-referral&friendEmail=${encodeURIComponent(currentUser.email)}&ref=${encodeURIComponent(ref)}`);
-            }
-          } catch {}
 
           // Go to Stripe
           location.href = url;
@@ -244,19 +241,6 @@
     const sMonthly   = savePct('monthly');   if (document.getElementById('save-monthly'))   setTxt('save-monthly',   `Save ${sMonthly}%`);
     const sQuarterly = savePct('quarterly'); if (document.getElementById('save-quarterly')) setTxt('save-quarterly', `Save ${sQuarterly}%`);
     const sYearly    = savePct('yearly');    if (document.getElementById('save-yearly'))    setTxt('save-yearly',    `Save ${sYearly}%`);
-  </script>
-
-  <script>
-  /* Referral capture: store ?ref=CODE for 30 days */
-  (function () {
-    try {
-      const u = new URL(location.href);
-      const ref = u.searchParams.get('ref');
-      if (ref) {
-        document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
-      }
-    } catch {}
-  })();
   </script>
 </body>
 </html>
