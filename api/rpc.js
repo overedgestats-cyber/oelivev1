@@ -50,16 +50,6 @@ function stableSortFixtures(fixtures = []) {
   });
 }
 
-/* ----------------- Preferred bookmaker (Bet365) config ----------------- */
-const BM_PREF_NAME   = (process.env.PREFERRED_BOOKMAKER || "bet365"); // human name, fuzzy-matched
-const BM_PREF_ID     = process.env.PREFERRED_BOOKMAKER_ID || "";      // API-Football bookmaker id (optional)
-const BM_STRICT_ONLY = ["1","true","yes"].includes(
-  (process.env.PREFERRED_BOOKMAKER_STRICT || "").toLowerCase()
-);
-
-const _bmNorm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
-const _isPreferredBM = (name) => _bmNorm(name).includes(_bmNorm(BM_PREF_NAME));
-
 /* ---------------------------- Flags helper ---------------------------- */
 const COUNTRY_CODE_MAP = {
   "England":"gb","Scotland":"gb","Wales":"gb","Northern Ireland":"gb","Ireland":"ie",
@@ -148,14 +138,14 @@ function narrativeOU(h, a, pick, seed = 0) {
   const pool = pick === "Over 2.5" ? overs : unders;
   return pool[seededPick(seed, pool.length)];
 }
-function narrativeBTTS(h, a, seed = 0) {
+function narrativeBTTS() {
   const temps = [
     "Both create enough to trouble each other and neither is flawless at the back. If one scores, the game should open. BTTS live.",
     "Hosts push at home while visitors counter with pace — both defences can be exposed in transition. BTTS makes sense."
   ];
-  return temps[seededPick(seed, temps.length)];
+  return temps[seededPick(0, temps.length)];
 }
-function narrative1X2(label, seed = 0) {
+function narrative1X2(label) {
   const h = [
     "Home side carry the better recent differential and enjoy the venue edge. Narrow home lean.",
     "Support tilts to the hosts: stronger forward output and decent control phases suggest 1."
@@ -169,7 +159,7 @@ function narrative1X2(label, seed = 0) {
     "Form tilt and chance quality favour the travellers. 2 is live."
   ];
   const pool = label === "Home" ? h : label === "Draw" ? d : a;
-  return pool[seededPick(seed, pool.length)];
+  return pool[seededPick(0, pool.length)];
 }
 function narrativeCards() {
   return "Discipline trends + derby intensity and referee profile drive card volume. Consider common lines around 4.5–5.5; late-game tactical fouls can inflate counts.";
@@ -180,7 +170,6 @@ function narrativeCorners() {
 
 /* ---- NEW: explicit lean calculators for Cards & Corners (with line) --- */
 function computeCardsLean(H, A) {
-  // Light proxy: use team GF/GA as discipline/pressure signal
   const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
   const baseline = 4.8;
   const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.06));
@@ -188,7 +177,6 @@ function computeCardsLean(H, A) {
   return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
 }
 function computeCornersLean(H, A) {
-  // Light proxy: attacking output drives corners more than GA
   const avg = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
   const baseline = 9.7;
   const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.05));
@@ -219,116 +207,65 @@ async function teamLastN(teamId, n = 12) {
   };
 }
 
-// Numeric explainers (kept)
-function reasoningOU(h, a, market) {
-  if (market === "Over 2.5") {
-    return `High-scoring trends: Home O2.5 ${pct(h.over25Rate)}%, Away O2.5 ${pct(a.over25Rate)}%. Avg GF (H) ${h.avgFor.toFixed(2)} vs (A) ${a.avgFor.toFixed(2)}.`;
-  }
-  return `Low-scoring trends: Home U2.5 ${pct(h.under25Rate)}%, Away U2.5 ${pct(a.under25Rate)}%. Avg GA (H) ${h.avgAg.toFixed(2)} vs (A) ${a.avgAg.toFixed(2)}.`;
-}
-function reasoningBTTS(h, a) {
-  return `BTTS form: Home ${pct(h.bttsRate)}% & Away ${pct(a.bttsRate)}%. Attack outputs (GF): H ${h.avgFor.toFixed(2)} / A ${a.avgFor.toFixed(2)}.`;
-}
+// Prefer this bookmaker id (Bet365 = 8 in API-Football)
+const PREFERRED_BOOKMAKER_ID = Number(process.env.PREFERRED_BOOKMAKER_ID || 8) || null;
 
-// 1X2 quick lean from differentials (very light)
-function onex2Lean(home, away) {
-  const ha = 0.20; // small home-advantage term
-  const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
-  if (score > 0.35) return { pick: "Home", conf: clamp01(0.55 + (score - 0.35) * 0.25) };
-  if (score < -0.35) return { pick: "Away", conf: clamp01(0.55 + (-score - 0.35) * 0.25) };
-  return { pick: "Draw", conf: 0.50 };
-}
-
-/* ---------------- Odds: prefer Bet365, optional strict mode ----------- */
-// If PREFERRED_BOOKMAKER_ID is set, we request only that bookmaker for speed/cost.
-// If STRICT is true and preferred bookmaker isn't present, return null odds.
-// Odds helper — prefer a specific bookmaker (Bet365) if provided.
-// Falls back to the first available bookmaker when preferred is missing.
+// Odds helper — OU 2.5, BTTS, 1X2; prefers Bet365 when present
 async function getOddsMap(fixtureId) {
-  const PREF_ID = Number(process.env.PREFERRED_BOOKMAKER_ID || "");
-  const PREF_NAME = (process.env.PREFERRED_BOOKMAKER || "").toLowerCase();
-
-  const empty = () => ({
-    over25: null, under25: null, bttsYes: null, bttsNo: null,
-    homeWin: null, draw: null, awayWin: null,
-    bm: { over25: null, under25: null, bttsYes: null, bttsNo: null, homeWin: null, draw: null, awayWin: null },
-    usedBookmaker: null, // convenience label
-  });
-
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
-    const bms = rows?.[0]?.bookmakers || [];
-    if (!bms.length) return empty();
+    const first = rows?.[0] || {};
+    let bookies = first.bookmakers || [];
 
-    const pref = empty();
-    const any  = empty();
+    // Prefer a specific bookmaker if configured
+    let chosen = null;
+    if (PREFERRED_BOOKMAKER_ID && Array.isArray(bookies)) {
+      chosen = bookies.find(b => Number(b?.id) === PREFERRED_BOOKMAKER_ID) || null;
+    }
+    if (!chosen) chosen = bookies?.[0] || null;
+    const useList = chosen ? [chosen] : bookies;
 
-    const fillFromBookmaker = (dest, b) => {
-      const bname = b?.name || null;
-      for (const bet of (b?.bets || [])) {
+    const out = {
+      over25: null, under25: null, bttsYes: null, bttsNo: null,
+      homeWin: null, draw: null, awayWin: null,
+      source: chosen ? { id: chosen.id, name: chosen.name } : (bookies?.[0] ? { id: bookies[0].id, name: bookies[0].name } : null),
+    };
+
+    for (const b of useList || []) {
+      for (const bet of b?.bets || []) {
         const name = (bet?.name || "").toLowerCase();
-
-        // Over/Under goals 2.5
+        // Over/Under
         if (name.includes("over/under") || name.includes("goals over/under")) {
-          for (const v of (bet.values || [])) {
+          for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
-            if (val.includes("over 2.5")) { dest.over25 = Number(v.odd); dest.bm.over25 = bname; }
-            if (val.includes("under 2.5")) { dest.under25 = Number(v.odd); dest.bm.under25 = bname; }
+            if (val.includes("over 2.5")) out.over25 = Number(v.odd);
+            if (val.includes("under 2.5")) out.under25 = Number(v.odd);
           }
         }
-
         // BTTS
         if (name.includes("both teams to score")) {
-          for (const v of (bet.values || [])) {
+          for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "yes") { dest.bttsYes = Number(v.odd); dest.bm.bttsYes = bname; }
-            if (val === "no")  { dest.bttsNo  = Number(v.odd); dest.bm.bttsNo  = bname; }
+            if (val === "yes") out.bttsYes = Number(v.odd);
+            if (val === "no")  out.bttsNo  = Number(v.odd);
           }
         }
-
         // 1X2
         if (name.includes("match winner") || name.includes("1x2")) {
-          for (const v of (bet.values || [])) {
+          for (const v of bet.values || []) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "home" || val === "1") { dest.homeWin = Number(v.odd); dest.bm.homeWin = bname; }
-            if (val === "draw" || val === "x") { dest.draw    = Number(v.odd); dest.bm.draw    = bname; }
-            if (val === "away" || val === "2") { dest.awayWin = Number(v.odd); dest.bm.awayWin = bname; }
+            if (val === "home" || val === "1") out.homeWin = Number(v.odd);
+            if (val === "draw" || val === "x") out.draw    = Number(v.odd);
+            if (val === "away" || val === "2") out.awayWin = Number(v.odd);
           }
         }
       }
-    };
-
-    // Split into preferred vs others
-    const isPreferred = (b) =>
-      (PREF_ID && Number(b?.id) === PREF_ID) ||
-      (PREF_NAME && ((b?.name || "").toLowerCase().includes(PREF_NAME)));
-
-    const preferredList = bms.filter(isPreferred);
-    const othersList    = bms.filter(b => !isPreferred(b));
-
-    // Fill containers
-    for (const b of preferredList) fillFromBookmaker(pref, b);
-    for (const b of othersList)    fillFromBookmaker(any,  b);
-
-    // If we got anything from preferred, use that; else fallback to any
-    const chosePreferred =
-      pref.over25 !== null || pref.under25 !== null ||
-      pref.bttsYes !== null || pref.bttsNo !== null ||
-      pref.homeWin !== null || pref.draw !== null || pref.awayWin !== null;
-
-    const out = chosePreferred ? pref : any;
-    // Set a single label for convenience (keeps your existing bm.* too)
-    out.usedBookmaker =
-      chosePreferred
-        ? (preferredList[0]?.name || "Preferred")
-        : (othersList[0]?.name || bms[0]?.name || null);
-
+      // If we were able to use a preferred bookmaker, don't fall through to others
+      if (chosen) break;
+    }
     return out;
-  } catch {
-    return empty();
-  }
+  } catch { return null; }
 }
-
 
 /* ------------------------ Free Picks (OU 2.5) ------------------------ */
 async function scoreFixtureForOU25(fx) {
@@ -352,6 +289,7 @@ async function scoreFixtureForOU25(fx) {
     market,
     confidencePct: pct(conf),
     odds: odds ? odds[market === "Over 2.5" ? "over25" : "under25"] : null,
+    bookmaker: odds?.source?.name || null,
     reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, market, fx?.fixture?.id),
   };
 }
@@ -393,12 +331,14 @@ async function scoreHeroCandidates(fx) {
   if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
     candidates.push({
       selection: "Over 2.5", market: "Over 2.5", conf: overP, odds: odds.over25,
+      bookmaker: odds?.source?.name || null,
       reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Over 2.5", fx?.fixture?.id)
     });
   }
   if (odds?.under25 && odds.under25 >= 2.0 && withinBand(underP)) {
     candidates.push({
       selection: "Under 2.5", market: "Under 2.5", conf: underP, odds: odds.under25,
+      bookmaker: odds?.source?.name || null,
       reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Under 2.5", fx?.fixture?.id)
     });
   }
@@ -406,7 +346,8 @@ async function scoreHeroCandidates(fx) {
   if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
     candidates.push({
       selection: "BTTS: Yes", market: "BTTS", conf: bttsP, odds: odds.bttsYes,
-      reasoning: narrativeBTTS(fx?.teams?.home?.name, fx?.teams?.away?.name, fx?.fixture?.id)
+      bookmaker: odds?.source?.name || null,
+      reasoning: narrativeBTTS()
     });
   }
   // 1X2 candidate
@@ -416,7 +357,8 @@ async function scoreHeroCandidates(fx) {
     if (choose && choose >= 2.0 && withinBand(one.conf, 0.55, 0.72)) {
       candidates.push({
         selection: one.pick, market: "1X2", conf: one.conf, odds: choose,
-        reasoning: narrative1X2(one.pick, fx?.fixture?.id)
+        bookmaker: odds?.source?.name || null,
+        reasoning: narrative1X2(one.pick)
       });
     }
   }
@@ -432,6 +374,7 @@ async function scoreHeroCandidates(fx) {
     market: c.market,
     confidencePct: pct(c.conf),
     odds: c.odds,
+    bookmaker: c.bookmaker || null,
     valueScore: Number((c.conf * c.odds).toFixed(4)),
     reasoning: c.reasoning,
   }));
@@ -509,6 +452,7 @@ async function buildProBoard({ date, tz }) {
         recommendation: ouPick,
         confidencePct: pct(ouConf),
         odds: ouPick === "Over 2.5" ? odds?.over25 : odds?.under25,
+        bookmaker: odds?.source?.name || null,
         reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, ouPick, fx?.fixture?.id),
       };
 
@@ -518,7 +462,8 @@ async function buildProBoard({ date, tz }) {
         recommendation: bttsPick,
         confidencePct: pct(bttsP >= 0.5 ? bttsP : 1 - bttsP),
         odds: bttsPick === "BTTS: Yes" ? odds?.bttsYes : odds?.bttsNo,
-        reasoning: narrativeBTTS(fx?.teams?.home?.name, fx?.teams?.away?.name, fx?.fixture?.id),
+        bookmaker: odds?.source?.name || null,
+        reasoning: narrativeBTTS(),
       };
 
       const onex2 = onex2Lean(home, away);
@@ -526,6 +471,7 @@ async function buildProBoard({ date, tz }) {
         recommendation: onex2.pick,
         confidencePct: pct(onex2.conf),
         odds: onex2.pick === "Home" ? odds?.homeWin : onex2.pick === "Away" ? odds?.awayWin : odds?.draw,
+        bookmaker: odds?.source?.name || null,
         reasoning: "Light 1X2 lean from recent GF/GA differentials + small home edge.",
       };
 
@@ -586,34 +532,54 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
       if (!c.leagues.has(leagueId)) c.leagues.set(leagueId, { leagueId, leagueName, fixtures: [] });
       const L = c.leagues.get(leagueId);
 
-      // Per-market quick recommendation + edited reasoning
+      // Per-market quick recommendation + reasoning + ODDS
       const hId = fx?.teams?.home?.id, aId = fx?.teams?.away?.id;
-      let rec = null, why = "";
+      let rec = null, why = "", odds = null;
       if (hId && aId) {
-        const [H, A] = await Promise.all([teamLastN(hId), teamLastN(aId)]);
+        const [H, A, O] = await Promise.all([teamLastN(hId), teamLastN(aId), getOddsMap(fx?.fixture?.id)]);
+        odds = O || null;
+
         if (market === "ou_goals") {
           const overP = H.over25Rate*0.5 + A.over25Rate*0.5;
           const underP = H.under25Rate*0.5 + A.under25Rate*0.5;
           const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
           const conf = overP >= underP ? overP : underP;
-          rec = { market: "OU Goals", pick, confidencePct: pct(conf) };
+          rec = {
+            market: "OU Goals",
+            pick,
+            confidencePct: pct(conf),
+            odds: pick === "Over 2.5" ? odds?.over25 : odds?.under25,
+            bookmaker: odds?.source?.name || null
+          };
           why = narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, pick, fx?.fixture?.id);
         } else if (market === "btts") {
           const b = H.bttsRate*0.5 + A.bttsRate*0.5;
           const pick = b >= 0.5 ? "BTTS: Yes" : "BTTS: No";
-          rec = { market: "BTTS", pick, confidencePct: pct(b >= 0.5 ? b : 1-b) };
-          why = narrativeBTTS(fx?.teams?.home?.name, fx?.teams?.away?.name, fx?.fixture?.id);
+          rec = {
+            market: "BTTS",
+            pick,
+            confidencePct: pct(b >= 0.5 ? b : 1-b),
+            odds: pick === "BTTS: Yes" ? odds?.bttsYes : odds?.bttsNo,
+            bookmaker: odds?.source?.name || null
+          };
+          why = narrativeBTTS();
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
-          rec = { market: "1X2", pick: ox.pick, confidencePct: pct(ox.conf) };
-          why = narrative1X2(ox.pick, fx?.fixture?.id);
+          rec = {
+            market: "1X2",
+            pick: ox.pick,
+            confidencePct: pct(ox.conf),
+            odds: ox.pick === "Home" ? odds?.homeWin : ox.pick === "Away" ? odds?.awayWin : odds?.draw,
+            bookmaker: odds?.source?.name || null
+          };
+          why = narrative1X2(ox.pick);
         } else if (market === "ou_cards") {
           const lean = computeCardsLean(H, A);
-          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct };
+          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct, odds: null, bookmaker: null };
           why = narrativeCards();
         } else if (market === "ou_corners") {
           const lean = computeCornersLean(H, A);
-          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct };
+          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct, odds: null, bookmaker: null };
           why = narrativeCorners();
         }
       }
@@ -729,7 +695,7 @@ async function fpSet(date, tz, minConf, payload){ try { await kvSet(fpRedisKey(d
 /* --- In-memory day caches for Pro endpoints (22h TTL) --- */
 const DAY_TTL_MS = 22 * 60 * 60 * 1000;
 
-const PROPICK_CACHE   = new Map(); // key -> { payload, exp }
+const PROPICK_CACHE   = new Map();
 const PROBOARD_CACHE  = new Map();
 const PROBOARDG_CACHE = new Map();
 

@@ -28,7 +28,12 @@
     .hero-card { padding:1rem; border:1px solid #eee; border-radius:12px; }
     .badge-pro { background:#eef6ff; border:1px solid #cfe4ff; color:#1d4ed8; }
 
-    /* NEW for grouped board */
+    /* NEW: odds pill + stronger teams */
+    .badge.odds{ background:#eef2ff; color:#1e3a8a; border:1px solid #dbeafe; font-weight:700; padding:.15rem .5rem; border-radius:999px; }
+    .teams .team{ font-weight:800; letter-spacing:.2px; font-size:1.02rem; color:#0f172a; }
+    .teams .sep{ opacity:.55; padding:0 .15rem; }
+
+    /* Grouped board */
     .country-block { margin:1.25rem 0; }
     .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; }
     .flag { width:18px; height:12px; object-fit:cover; border-radius:2px; }
@@ -82,7 +87,7 @@
       <section class="section">
         <div class="grid-2" style="margin-bottom:.5rem">
           <h2 style="margin:0">Pro Board</h2>
-          <!-- GLOBAL MARKET DROPDOWN (exactly 5 options) -->
+          <!-- GLOBAL MARKET DROPDOWN -->
           <div class="market-controls">
             <label for="boardMarket" class="muted-sm">Market:</label>
             <select id="boardMarket" class="market">
@@ -200,21 +205,27 @@
       if (!sub.pro) return showLocked();
       showPro();
       loadHero();
-      loadBoardGrouped(); // NEW
+      loadBoardGrouped();
     }
 
     // ---------- HERO BET ----------
     function heroCard(h){
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
+      const oddsHtml = (p.odds != null)
+        ? `<span class="badge odds">Odds ${Number(p.odds).toFixed(2)}${p.bookmaker ? ` (${p.bookmaker})` : ""}</span>`
+        : "";
       return `
         <div class="grid-2">
           <div>
             <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
-            <div class="muted-sm">${p.matchTime} — ${p.home} vs ${p.away}</div>
+            <div class="muted-sm">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
             <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
           </div>
-          <div class="muted-sm">Odds: ${p.odds ?? "-"} &nbsp; · &nbsp; Confidence: ${p.confidencePct}%</div>
+          <div style="text-align:right">
+            ${oddsHtml}
+            <span class="pill" style="margin-left:.25rem">Confidence ${p.confidencePct}%</span>
+          </div>
         </div>
         <div style="margin-top:.5rem">${p.reasoning || ""}</div>
       `;
@@ -261,20 +272,25 @@
             const row = document.createElement('div');
             row.className = 'fixture-row';
             const rec = fx.recommendation;
+
             const pickTxt = rec ? `${rec.pick || ""}` : "";
             const confTxt = rec ? ` · ${rec.confidencePct ?? "-"}%` : "";
+            const oddsHtml = (rec && rec.odds != null)
+              ? ` <span class="badge odds">Odds ${Number(rec.odds).toFixed(2)}${rec.bookmaker ? ` (${rec.bookmaker})` : ""}</span>`
+              : "";
+
             row.innerHTML = `
               <div class="teams">
                 ${fx.home?.logo ? `<img class="logo" src="${fx.home.logo}" alt="">` : ""}
-                <span>${fx.home?.name || ""}</span>
-                <span style="opacity:.6">vs</span>
+                <span class="team">${fx.home?.name || ""}</span>
+                <span class="sep">vs</span>
                 ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}
-                <span>${fx.away?.name || ""}</span>
+                <span class="team">${fx.away?.name || ""}</span>
               </div>
               <div style="text-align:right">
                 <div class="muted-sm">${fx.time || ""}</div>
                 <div class="marketbox" style="margin-top:.35rem">
-                  <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt}
+                  <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt} ${oddsHtml}
                   ${fx.reasoning ? `<br/><span class="muted-sm">${fx.reasoning}</span>` : ""}
                 </div>
               </div>

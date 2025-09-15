@@ -163,3 +163,48 @@ details[open]{ box-shadow: var(--shadow); }
 @media (min-width: 700px){
   .hero{ padding: 3rem 1rem 1.5rem; }
 }
+.badge.odds {
+  background:#eef2ff;
+  color:#1e3a8a;
+  border:1px solid #dbeafe;
+  font-weight:700;
+  padding:.15rem .5rem;
+}
+
+
+/* ---------- Pro Board: make team names pop ---------- */
+/* These selectors are resilient to small markup differences on the /pro page. */
+.pro-board .fixture-card .club,
+.pro-board .fixture .club {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.pro-board .fixture-card .club img,
+.pro-board .fixture .club img,
+.pro-board .fixture .teams img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.pro-board .fixture-card .club .team-name,
+.pro-board .fixture .club .team-name,
+.pro-board .fixture-card .teams .name,
+.pro-board .fixture .teams .name,
+.pro-board .fixture .teams .home,
+.pro-board .fixture .teams .away {
+  font-weight: 800;                         /* heavier */
+  font-size: clamp(1.05rem, 0.9rem + 0.6vw, 1.35rem); /* larger, responsive */
+  line-height: 1.25;
+  color: var(--text);                       /* high contrast */
+  letter-spacing: .02em;
+}
+
+.pro-board .fixture-card .vs,
+.pro-board .fixture .vs {
+  opacity: .75;
+  font-weight: 600;
+  margin: 0 .25rem;
+}
