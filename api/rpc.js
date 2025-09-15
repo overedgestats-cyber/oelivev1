@@ -615,7 +615,7 @@ async function verifyStripeByEmail(email) {
     headers: { Authorization: `Bearer ${key}` }, cache: "no-store",
   });
   if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
-  const custData = await custResp.json();
+  const custData = await resp.json();
   const customers = custData?.data || [];
   if (!customers.length) return { pro: false, plan: null, status: "none" };
 
