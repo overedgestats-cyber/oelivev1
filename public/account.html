@@ -19,19 +19,26 @@
 <body>
   <header class="site-header">
     <nav class="nav">
-      <a class="logo brand" href="/" aria-label="OverEdge">
-        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-        <span class="sr-only">OverEdge</span>
-      </a>
+  <a class="logo brand" href="/" aria-label="OverEdge">
+    <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+    <span class="sr-only">OverEdge</span>
+  </a>
 
-      <div class="links">
-        <a href="/free-picks">Free Picks</a>
-        <a href="/pro">Pro</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/FAQ">FAQ</a>
-        <a href="/account" aria-current="page">Account</a>
-      </div>
-    </nav>
+  <div class="links">
+    <a href="/free-picks">Free Picks</a>
+    <a href="/pro">Pro</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/FAQ">FAQ</a>
+    <a href="/account">Account</a>
+  </div>
+
+  <!-- Global auth controls (like Free Picks / Pro) -->
+  <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+    <span id="nav-plan" class="badge" style="display:none"></span>
+    <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+  </div>
+</nav>
+
   </header>
 
   <main>
@@ -159,5 +166,8 @@
       });
     })();
   </script>
+  <!-- Shared navbar auth module -->
+<script type="module" src="/auth.js"></script>
+
 </body>
 </html>
