@@ -28,8 +28,7 @@
     .hero-card { padding:1rem; border:1px solid #eee; border-radius:12px; }
     .badge-pro { background:#eef6ff; border:1px solid #cfe4ff; color:#1d4ed8; }
 
-    /* NEW: odds pill + stronger teams */
-    .badge.odds{ background:#eef2ff; color:#1e3a8a; border:1px solid #dbeafe; font-weight:700; padding:.15rem .5rem; border-radius:999px; }
+    /* Stronger team names */
     .teams .team{ font-weight:800; letter-spacing:.2px; font-size:1.02rem; color:#0f172a; }
     .teams .sep{ opacity:.55; padding:0 .15rem; }
 
@@ -87,7 +86,6 @@
       <section class="section">
         <div class="grid-2" style="margin-bottom:.5rem">
           <h2 style="margin:0">Pro Board</h2>
-          <!-- GLOBAL MARKET DROPDOWN -->
           <div class="market-controls">
             <label for="boardMarket" class="muted-sm">Market:</label>
             <select id="boardMarket" class="market">
@@ -208,13 +206,10 @@
       loadBoardGrouped();
     }
 
-    // ---------- HERO BET ----------
+    // ---------- HERO BET (no odds shown) ----------
     function heroCard(h){
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
-      const oddsHtml = (p.odds != null)
-        ? `<span class="badge odds">Odds ${Number(p.odds).toFixed(2)}${p.bookmaker ? ` (${p.bookmaker})` : ""}</span>`
-        : "";
       return `
         <div class="grid-2">
           <div>
@@ -223,8 +218,7 @@
             <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
           </div>
           <div style="text-align:right">
-            ${oddsHtml}
-            <span class="pill" style="margin-left:.25rem">Confidence ${p.confidencePct}%</span>
+            <span class="pill">Confidence ${p.confidencePct}%</span>
           </div>
         </div>
         <div style="margin-top:.5rem">${p.reasoning || ""}</div>
@@ -242,7 +236,7 @@
       }
     }
 
-    // ---------- GROUPED PRO BOARD (by country with flags) ----------
+    // ---------- GROUPED PRO BOARD (no odds shown) ----------
     boardMarketSel.addEventListener('change', loadBoardGrouped);
 
     function renderGroupedBoard(payload){
@@ -272,12 +266,8 @@
             const row = document.createElement('div');
             row.className = 'fixture-row';
             const rec = fx.recommendation;
-
             const pickTxt = rec ? `${rec.pick || ""}` : "";
             const confTxt = rec ? ` · ${rec.confidencePct ?? "-"}%` : "";
-            const oddsHtml = (rec && rec.odds != null)
-              ? ` <span class="badge odds">Odds ${Number(rec.odds).toFixed(2)}${rec.bookmaker ? ` (${rec.bookmaker})` : ""}</span>`
-              : "";
 
             row.innerHTML = `
               <div class="teams">
@@ -290,7 +280,7 @@
               <div style="text-align:right">
                 <div class="muted-sm">${fx.time || ""}</div>
                 <div class="marketbox" style="margin-top:.35rem">
-                  <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt} ${oddsHtml}
+                  <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt}
                   ${fx.reasoning ? `<br/><span class="muted-sm">${fx.reasoning}</span>` : ""}
                 </div>
               </div>
@@ -309,7 +299,7 @@
     async function loadBoardGrouped(){
       try {
         boardEl.innerHTML = "Loading…";
-        const market = boardMarketSel.value; // ou_goals | ou_cards | ou_corners | one_x_two | btts
+        const market = boardMarketSel.value;
         const res = await fetch(`/api/rpc?action=pro-board-grouped&market=${encodeURIComponent(market)}&tz=${encodeURIComponent(tzGuess())}`);
         const data = await res.json();
         renderGroupedBoard(data);
@@ -320,19 +310,6 @@
 
     // boot
     initFirebase();
-  </script>
-
-  <script>
-    /* Referral capture: store ?ref=CODE for 30 days */
-    (function () {
-      try {
-        const u = new URL(location.href);
-        const ref = u.searchParams.get('ref');
-        if (ref) {
-          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
-        }
-      } catch {}
-    })();
   </script>
 </body>
 </html>

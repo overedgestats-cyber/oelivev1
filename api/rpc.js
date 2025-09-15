@@ -8,10 +8,6 @@
 //  - pro-board           (flat list; strict allowed comps)
 //  - pro-board-grouped   (grouped by country with flag; strict allowed comps)
 //  - verify-sub
-//  - register-ref
-//  - get-ref-code
-//  - attach-referral
-//  - [optional analytics] ref-hit, ref-stats
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -210,58 +206,52 @@ async function teamLastN(teamId, n = 12) {
 // Prefer this bookmaker id (Bet365 = 8 in API-Football)
 const PREFERRED_BOOKMAKER_ID = Number(process.env.PREFERRED_BOOKMAKER_ID || 8) || null;
 
-// Odds helper — OU 2.5, BTTS, 1X2; prefers Bet365 when present
+// Odds helper — internal only (we still use it for hero-pick selection),
+// but we DO NOT expose odds anywhere except free-picks.
 async function getOddsMap(fixtureId) {
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
     const first = rows?.[0] || {};
-    let bookies = first.bookmakers || [];
-
-    // Prefer a specific bookmaker if configured
-    let chosen = null;
-    if (PREFERRED_BOOKMAKER_ID && Array.isArray(bookies)) {
-      chosen = bookies.find(b => Number(b?.id) === PREFERRED_BOOKMAKER_ID) || null;
+    let bookies = Array.isArray(first.bookmakers) ? first.bookmakers.slice() : [];
+    if (PREFERRED_BOOKMAKER_ID) {
+      bookies.sort((a, b) => {
+        const ap = Number(a?.id) === PREFERRED_BOOKMAKER_ID ? -1 : 0;
+        const bp = Number(b?.id) === PREFERRED_BOOKMAKER_ID ? -1 : 0;
+        return ap - bp;
+      });
     }
-    if (!chosen) chosen = bookies?.[0] || null;
-    const useList = chosen ? [chosen] : bookies;
-
     const out = {
       over25: null, under25: null, bttsYes: null, bttsNo: null,
       homeWin: null, draw: null, awayWin: null,
-      source: chosen ? { id: chosen.id, name: chosen.name } : (bookies?.[0] ? { id: bookies[0].id, name: bookies[0].name } : null),
     };
+    const fill = (k, v) => { if (out[k] == null && v != null && !isNaN(Number(v))) out[k] = Number(v); };
 
-    for (const b of useList || []) {
-      for (const bet of b?.bets || []) {
+    for (const b of bookies) {
+      for (const bet of (b?.bets || [])) {
         const name = (bet?.name || "").toLowerCase();
-        // Over/Under
         if (name.includes("over/under") || name.includes("goals over/under")) {
-          for (const v of bet.values || []) {
+          for (const v of (bet.values || [])) {
             const val = (v?.value || "").toLowerCase();
-            if (val.includes("over 2.5")) out.over25 = Number(v.odd);
-            if (val.includes("under 2.5")) out.under25 = Number(v.odd);
+            if (val.includes("over 2.5"))  fill("over25",  v.odd);
+            if (val.includes("under 2.5")) fill("under25", v.odd);
           }
         }
-        // BTTS
         if (name.includes("both teams to score")) {
-          for (const v of bet.values || []) {
+          for (const v of (bet.values || [])) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "yes") out.bttsYes = Number(v.odd);
-            if (val === "no")  out.bttsNo  = Number(v.odd);
+            if (val === "yes") fill("bttsYes", v.odd);
+            if (val === "no")  fill("bttsNo",  v.odd);
           }
         }
-        // 1X2
         if (name.includes("match winner") || name.includes("1x2")) {
-          for (const v of bet.values || []) {
+          for (const v of (bet.values || [])) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "home" || val === "1") out.homeWin = Number(v.odd);
-            if (val === "draw" || val === "x") out.draw    = Number(v.odd);
-            if (val === "away" || val === "2") out.awayWin = Number(v.odd);
+            if (val === "home" || val === "1") fill("homeWin", v.odd);
+            if (val === "draw" || val === "x") fill("draw",    v.odd);
+            if (val === "away" || val === "2") fill("awayWin", v.odd);
           }
         }
       }
-      // If we were able to use a preferred bookmaker, don't fall through to others
-      if (chosen) break;
     }
     return out;
   } catch { return null; }
@@ -288,8 +278,8 @@ async function scoreFixtureForOU25(fx) {
     away: fx?.teams?.away?.name,
     market,
     confidencePct: pct(conf),
+    // KEEP odds for Free Picks only
     odds: odds ? odds[market === "Over 2.5" ? "over25" : "under25"] : null,
-    bookmaker: odds?.source?.name || null,
     reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, market, fx?.fixture?.id),
   };
 }
@@ -317,11 +307,19 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
 }
 
 /* ------------------------- Hero Bet (value) -------------------------- */
+function onex2Lean(home, away) {
+  const ha = 0.20;
+  const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
+  if (score > 0.35) return { pick: "Home", conf: clamp01(0.55 + (score - 0.35) * 0.25) };
+  if (score < -0.35) return { pick: "Away", conf: clamp01(0.55 + (-score - 0.35) * 0.25) };
+  return { pick: "Draw", conf: 0.50 };
+}
+
 async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
   const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
-  const odds = await getOddsMap(fx?.fixture?.id);
+  const odds = await getOddsMap(fx?.fixture?.id); // used internally only
   const time = clockFromISO(fx?.fixture?.date);
   const candidates = [];
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
@@ -329,37 +327,24 @@ async function scoreHeroCandidates(fx) {
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
   if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
-    candidates.push({
-      selection: "Over 2.5", market: "Over 2.5", conf: overP, odds: odds.over25,
-      bookmaker: odds?.source?.name || null,
-      reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Over 2.5", fx?.fixture?.id)
-    });
+    candidates.push({ selection: "Over 2.5", market: "Over 2.5", conf: overP, valueScore: overP * odds.over25,
+      reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Over 2.5", fx?.fixture?.id) });
   }
   if (odds?.under25 && odds.under25 >= 2.0 && withinBand(underP)) {
-    candidates.push({
-      selection: "Under 2.5", market: "Under 2.5", conf: underP, odds: odds.under25,
-      bookmaker: odds?.source?.name || null,
-      reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Under 2.5", fx?.fixture?.id)
-    });
+    candidates.push({ selection: "Under 2.5", market: "Under 2.5", conf: underP, valueScore: underP * odds.under25,
+      reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Under 2.5", fx?.fixture?.id) });
   }
   const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
   if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
-    candidates.push({
-      selection: "BTTS: Yes", market: "BTTS", conf: bttsP, odds: odds.bttsYes,
-      bookmaker: odds?.source?.name || null,
-      reasoning: narrativeBTTS()
-    });
+    candidates.push({ selection: "BTTS: Yes", market: "BTTS", conf: bttsP, valueScore: bttsP * odds.bttsYes,
+      reasoning: narrativeBTTS() });
   }
-  // 1X2 candidate
   const one = onex2Lean(home, away);
   if (odds) {
     const choose = one.pick === "Home" ? odds.homeWin : one.pick === "Away" ? odds.awayWin : odds.draw;
     if (choose && choose >= 2.0 && withinBand(one.conf, 0.55, 0.72)) {
-      candidates.push({
-        selection: one.pick, market: "1X2", conf: one.conf, odds: choose,
-        bookmaker: odds?.source?.name || null,
-        reasoning: narrative1X2(one.pick)
-      });
+      candidates.push({ selection: one.pick, market: "1X2", conf: one.conf, valueScore: one.conf * choose,
+        reasoning: narrative1X2(one.pick) });
     }
   }
 
@@ -373,42 +358,18 @@ async function scoreHeroCandidates(fx) {
     selection: c.selection,
     market: c.market,
     confidencePct: pct(c.conf),
-    odds: c.odds,
-    bookmaker: c.bookmaker || null,
-    valueScore: Number((c.conf * c.odds).toFixed(4)),
+    // DO NOT expose odds here
+    valueScore: Number((c.valueScore || 0).toFixed(4)),
     reasoning: c.reasoning,
   }));
 }
 
 // STRICT: Only allowed Pro competitions + exclude youth
-async function pickHeroBet({ date, tz, market = "auto" }) {
-  let fixtures = await apiGet("/fixtures", { date, timezone: tz });
-  fixtures = fixtures.filter(fx => !isYouthFixture(fx));
-  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
-  let candidates = [];
-  for (const fx of fixtures.slice(0, 100)) {
-    try {
-      const c = await scoreHeroCandidates(fx);
-      candidates = candidates.concat(
-        market === "auto" ? c : c.filter(x =>
-          (market === "ou_goals" && (x.market === "Over 2.5" || x.market === "Under 2.5")) ||
-          (market === "btts" && x.market === "BTTS") ||
-          (market === "one_x_two" && x.market === "1X2")
-        )
-      );
-    } catch {}
-  }
-  if (!candidates.length) return { heroBet: null, note: "No qualifying value pick found yet." };
-  candidates.sort((a, b) => b.valueScore - a.valueScore);
-  return { heroBet: candidates[0] };
-}
-
-/* --------------------------- Pro Board data --------------------------- */
 const PRO_ALLOWED = {
   England: [/^Premier League$/i, /^Championship$/i, /^FA Cup$/i],
   Germany: [/^Bundesliga$/i, /^2\.?\s*Bundesliga$/i, /^DFB[ -]?Pokal$/i],
   Spain: [/^La ?Liga$/i, /^(Segunda( División)?|La ?Liga 2)$/i, /^Copa del Rey$/i],
-  Italy: [/^Serie ?A$/i, /^Serie ?B$/i, /^Coppa Italia$/i],
+  Italy: [/^Serie ?A$/i, [/^Serie ?B$/i][0], /^Coppa Italia$/i],
   France: [/^Ligue ?1$/i, /^Ligue ?2$/i, /^Coupe de France$/i],
 };
 const PRO_GLOBALS = [
@@ -425,13 +386,15 @@ const PRO_GLOBALS = [
 function allowedForProBoard(league = {}) {
   const name = league?.name || "";
   const country = league?.country || "";
-  if (PRO_GLOBALS.some(rx => rx.test(name))) return true; // International comps
+  if (PRO_GLOBALS.some(rx => rx.test(name))) return true;
   const rx = PRO_ALLOWED[country];
   if (!rx) return false;
   return rx.some(r => r.test(name));
 }
 
-/** Build classic (flat) Pro Board; markets: OU Goals, BTTS, 1X2 */
+/** Build classic (flat) Pro Board; markets: OU Goals, BTTS, 1X2
+ *  (NO odds exposed; best market chosen by confidence only)
+ */
 async function buildProBoard({ date, tz }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
@@ -442,7 +405,7 @@ async function buildProBoard({ date, tz }) {
     try {
       const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
       if (!homeId || !awayId) continue;
-      const [home, away, odds] = await Promise.all([teamLastN(homeId), teamLastN(awayId), getOddsMap(fx?.fixture?.id)]);
+      const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
       const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
       const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
@@ -451,8 +414,6 @@ async function buildProBoard({ date, tz }) {
       const ou = {
         recommendation: ouPick,
         confidencePct: pct(ouConf),
-        odds: ouPick === "Over 2.5" ? odds?.over25 : odds?.under25,
-        bookmaker: odds?.source?.name || null,
         reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, ouPick, fx?.fixture?.id),
       };
 
@@ -461,8 +422,6 @@ async function buildProBoard({ date, tz }) {
       const btts = {
         recommendation: bttsPick,
         confidencePct: pct(bttsP >= 0.5 ? bttsP : 1 - bttsP),
-        odds: bttsPick === "BTTS: Yes" ? odds?.bttsYes : odds?.bttsNo,
-        bookmaker: odds?.source?.name || null,
         reasoning: narrativeBTTS(),
       };
 
@@ -470,18 +429,15 @@ async function buildProBoard({ date, tz }) {
       const onex2Rec = {
         recommendation: onex2.pick,
         confidencePct: pct(onex2.conf),
-        odds: onex2.pick === "Home" ? odds?.homeWin : onex2.pick === "Away" ? odds?.awayWin : odds?.draw,
-        bookmaker: odds?.source?.name || null,
         reasoning: "Light 1X2 lean from recent GF/GA differentials + small home edge.",
       };
 
       const cands = [
-        { market: "ou25", conf: ouConf, odds: ou.odds ?? 1.0 },
-        { market: "btts", conf: bttsP >= 0.5 ? bttsP : 1 - bttsP, odds: btts.odds ?? 1.0 },
-        { market: "onex2", conf: onex2.conf, odds: onex2Rec.odds ?? 1.0 },
+        { market: "ou25", conf: ouConf },
+        { market: "btts", conf: bttsP >= 0.5 ? bttsP : 1 - bttsP },
+        { market: "onex2", conf: onex2.conf },
       ];
-      cands.forEach(c => c.value = (c.conf || 0) * (Number(c.odds) || 1));
-      cands.sort((a,b)=> (b.value - a.value));
+      cands.sort((a,b)=> (b.conf - a.conf));
 
       rows.push({
         fixtureId: fx?.fixture?.id,
@@ -507,11 +463,6 @@ async function buildProBoard({ date, tz }) {
 }
 
 /* --------------- Pro Board grouped by country (flags) ---------------- */
-/**
- * GET ?action=pro-board-grouped&market=ou_goals|ou_cards|ou_corners|one_x_two|btts
- * Returns: { date, timezone, groups: [ { country, flag, leagues: [ { leagueId, leagueName, fixtures: [ ... ] } ] } ] }
- * Strict: only allowed Pro competitions (plus listed international comps).
- */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
@@ -532,54 +483,33 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
       if (!c.leagues.has(leagueId)) c.leagues.set(leagueId, { leagueId, leagueName, fixtures: [] });
       const L = c.leagues.get(leagueId);
 
-      // Per-market quick recommendation + reasoning + ODDS
       const hId = fx?.teams?.home?.id, aId = fx?.teams?.away?.id;
-      let rec = null, why = "", odds = null;
+      let rec = null, why = "";
       if (hId && aId) {
-        const [H, A, O] = await Promise.all([teamLastN(hId), teamLastN(aId), getOddsMap(fx?.fixture?.id)]);
-        odds = O || null;
-
+        const [H, A] = await Promise.all([teamLastN(hId), teamLastN(aId)]);
         if (market === "ou_goals") {
           const overP = H.over25Rate*0.5 + A.over25Rate*0.5;
           const underP = H.under25Rate*0.5 + A.under25Rate*0.5;
           const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
           const conf = overP >= underP ? overP : underP;
-          rec = {
-            market: "OU Goals",
-            pick,
-            confidencePct: pct(conf),
-            odds: pick === "Over 2.5" ? odds?.over25 : odds?.under25,
-            bookmaker: odds?.source?.name || null
-          };
+          rec = { market: "OU Goals", pick, confidencePct: pct(conf) };
           why = narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, pick, fx?.fixture?.id);
         } else if (market === "btts") {
           const b = H.bttsRate*0.5 + A.bttsRate*0.5;
           const pick = b >= 0.5 ? "BTTS: Yes" : "BTTS: No";
-          rec = {
-            market: "BTTS",
-            pick,
-            confidencePct: pct(b >= 0.5 ? b : 1-b),
-            odds: pick === "BTTS: Yes" ? odds?.bttsYes : odds?.bttsNo,
-            bookmaker: odds?.source?.name || null
-          };
+          rec = { market: "BTTS", pick, confidencePct: pct(b >= 0.5 ? b : 1-b) };
           why = narrativeBTTS();
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
-          rec = {
-            market: "1X2",
-            pick: ox.pick,
-            confidencePct: pct(ox.conf),
-            odds: ox.pick === "Home" ? odds?.homeWin : ox.pick === "Away" ? odds?.awayWin : odds?.draw,
-            bookmaker: odds?.source?.name || null
-          };
+          rec = { market: "1X2", pick: ox.pick, confidencePct: pct(ox.conf) };
           why = narrative1X2(ox.pick);
         } else if (market === "ou_cards") {
           const lean = computeCardsLean(H, A);
-          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct, odds: null, bookmaker: null };
+          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct };
           why = narrativeCards();
         } else if (market === "ou_corners") {
           const lean = computeCornersLean(H, A);
-          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct, odds: null, bookmaker: null };
+          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct };
           why = narrativeCorners();
         }
       }
@@ -615,7 +545,7 @@ async function verifyStripeByEmail(email) {
     headers: { Authorization: `Bearer ${key}` }, cache: "no-store",
   });
   if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
-  const custData = await resp.json();
+  const custData = await custResp.json();
   const customers = custData?.data || [];
   if (!customers.length) return { pro: false, plan: null, status: "none" };
 
@@ -786,6 +716,7 @@ export default async function handler(req, res) {
     }
 
     // HERO BET (Pro pick) — pinned by date/tz/market unless refresh=1
+    // (Does NOT expose odds)
     if (action === "pro-pick") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
@@ -809,7 +740,7 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD (flat) — pinned by date/tz unless refresh=1
+    // PRO BOARD (flat) — NO odds
     if (action === "pro-board") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
@@ -832,7 +763,7 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD GROUPED — pinned by date/tz/market unless refresh=1
+    // PRO BOARD GROUPED — NO odds
     if (action === "pro-board-grouped") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
@@ -880,53 +811,6 @@ export default async function handler(req, res) {
         status: base.pro ? base.status : (hasOverride ? "override" : base.status),
         overrideUntil: hasOverride ? new Date(overrideSec * 1000).toISOString() : null,
       });
-    }
-
-    /* --------------------- Referral endpoints --------------------- */
-    if (action === "register-ref") {
-      const email = (req.query.email || "").toString().trim().toLowerCase();
-      const uid   = (req.query.uid || "").toString().trim();
-      if (!email || !uid) return res.status(400).json({ ok: false, error: "missing email or uid" });
-      const code = uid.slice(-10);
-      await kvSet(`ref:code:${code}`, email);
-      await kvSet(`ref:owner:${email}`, code);
-      return res.status(200).json({ ok: true, code });
-    }
-
-    if (action === "get-ref-code") {
-      const email = (req.query.email || "").toString().trim().toLowerCase();
-      if (!email) return res.status(400).json({ ok: false, error: "missing email" });
-      let code = null;
-      try {
-        const v = await kvGet(`ref:owner:${email}`);
-        code = (v && typeof v.result === "string" && v.result) ? v.result : null;
-      } catch {}
-      return res.status(200).json({ ok: true, code });
-    }
-
-    if (action === "attach-referral") {
-      const email = (req.query.friendEmail || req.query.email || "").toString().trim().toLowerCase();
-      const code  = (req.query.ref || req.query.code || "").toString().trim();
-      if (!email || !code) return res.status(400).json({ ok: false, error: "missing email or code" });
-      await kvSet(`ref:pending:${email}`, code, 35 * 24 * 60 * 60);
-      return res.status(200).json({ ok: true });
-    }
-
-    if (action === "ref-hit") {
-      const code = (req.query.code || "").toString().slice(0, 64);
-      const path = (req.query.path || "/").toString().slice(0, 64);
-      if (!code) return res.status(400).json({ ok: false, error: "missing code" });
-      const day = ymd();
-      try { await kvIncr(`ref:${code}:hits:${day}`); await kvIncr(`ref:${code}:hits:total`); } catch {}
-      return res.status(200).json({ ok: true });
-    }
-
-    if (action === "ref-stats") {
-      const code = (req.query.code || "").toString().slice(0, 64);
-      if (!code) return res.status(400).json({ ok: false, error: "missing code" });
-      let total = 0;
-      try { const v = await kvGet(`ref:${code}:hits:total`); total = typeof v?.result === "string" ? Number(v.result) : 0; } catch {}
-      return res.status(200).json({ ok: true, code, total });
     }
 
     return res.status(404).json({ error: "Unknown action" });
