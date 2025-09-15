@@ -204,6 +204,30 @@ details[open]{ box-shadow: var(--shadow); }
   color:var(--text);
   line-height:1.25;
 }
+/* ---- Header brand logo (fix size) ---- */
+.logo.brand{
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+.logo.brand .brand-img{
+  height: 28px;      /* desktop becomes 32px below */
+  width: auto;
+  display: block;
+}
+@media (min-width: 700px){
+  .logo.brand .brand-img{ height: 32px; }
+}
+
+/* Accessible hidden text used beside the logo */
+.sr-only{
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+
 .teams .sep{
   opacity:.55;
   padding:0 .15rem;
