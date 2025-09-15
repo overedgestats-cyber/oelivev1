@@ -50,6 +50,16 @@ function stableSortFixtures(fixtures = []) {
   });
 }
 
+/* ----------------- Preferred bookmaker (Bet365) config ----------------- */
+const BM_PREF_NAME   = (process.env.PREFERRED_BOOKMAKER || "bet365"); // human name, fuzzy-matched
+const BM_PREF_ID     = process.env.PREFERRED_BOOKMAKER_ID || "";      // API-Football bookmaker id (optional)
+const BM_STRICT_ONLY = ["1","true","yes"].includes(
+  (process.env.PREFERRED_BOOKMAKER_STRICT || "").toLowerCase()
+);
+
+const _bmNorm = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+const _isPreferredBM = (name) => _bmNorm(name).includes(_bmNorm(BM_PREF_NAME));
+
 /* ---------------------------- Flags helper ---------------------------- */
 const COUNTRY_CODE_MAP = {
   "England":"gb","Scotland":"gb","Wales":"gb","Northern Ireland":"gb","Ireland":"ie",
@@ -229,52 +239,96 @@ function onex2Lean(home, away) {
   return { pick: "Draw", conf: 0.50 };
 }
 
-// Odds helper — OU 2.5, BTTS, 1X2
-// Matches Free Picks behavior: later odds overwrite earlier ones.
-// Tracks per-market bookmaker internally (odds.bm.<market>) without changing response shapes.
+/* ---------------- Odds: prefer Bet365, optional strict mode ----------- */
+// If PREFERRED_BOOKMAKER_ID is set, we request only that bookmaker for speed/cost.
+// If STRICT is true and preferred bookmaker isn't present, return null odds.
+// Odds helper — prefer a specific bookmaker (Bet365) if provided.
+// Falls back to the first available bookmaker when preferred is missing.
 async function getOddsMap(fixtureId) {
+  const PREF_ID = Number(process.env.PREFERRED_BOOKMAKER_ID || "");
+  const PREF_NAME = (process.env.PREFERRED_BOOKMAKER || "").toLowerCase();
+
+  const empty = () => ({
+    over25: null, under25: null, bttsYes: null, bttsNo: null,
+    homeWin: null, draw: null, awayWin: null,
+    bm: { over25: null, under25: null, bttsYes: null, bttsNo: null, homeWin: null, draw: null, awayWin: null },
+    usedBookmaker: null, // convenience label
+  });
+
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
-    const out = {
-      over25: null, under25: null, bttsYes: null, bttsNo: null,
-      homeWin: null, draw: null, awayWin: null,
-      bm: { over25: null, under25: null, bttsYes: null, bttsNo: null, homeWin: null, draw: null, awayWin: null },
-    };
     const bms = rows?.[0]?.bookmakers || [];
-    for (const b of bms) {
+    if (!bms.length) return empty();
+
+    const pref = empty();
+    const any  = empty();
+
+    const fillFromBookmaker = (dest, b) => {
       const bname = b?.name || null;
-      for (const bet of b?.bets || []) {
+      for (const bet of (b?.bets || [])) {
         const name = (bet?.name || "").toLowerCase();
-        // Over/Under
+
+        // Over/Under goals 2.5
         if (name.includes("over/under") || name.includes("goals over/under")) {
-          for (const v of bet.values || []) {
+          for (const v of (bet.values || [])) {
             const val = (v?.value || "").toLowerCase();
-            if (val.includes("over 2.5")) { out.over25 = Number(v.odd); out.bm.over25 = bname; }
-            if (val.includes("under 2.5")) { out.under25 = Number(v.odd); out.bm.under25 = bname; }
+            if (val.includes("over 2.5")) { dest.over25 = Number(v.odd); dest.bm.over25 = bname; }
+            if (val.includes("under 2.5")) { dest.under25 = Number(v.odd); dest.bm.under25 = bname; }
           }
         }
+
         // BTTS
         if (name.includes("both teams to score")) {
-          for (const v of bet.values || []) {
+          for (const v of (bet.values || [])) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "yes") { out.bttsYes = Number(v.odd); out.bm.bttsYes = bname; }
-            if (val === "no")  { out.bttsNo  = Number(v.odd); out.bm.bttsNo  = bname; }
+            if (val === "yes") { dest.bttsYes = Number(v.odd); dest.bm.bttsYes = bname; }
+            if (val === "no")  { dest.bttsNo  = Number(v.odd); dest.bm.bttsNo  = bname; }
           }
         }
+
         // 1X2
         if (name.includes("match winner") || name.includes("1x2")) {
-          for (const v of bet.values || []) {
+          for (const v of (bet.values || [])) {
             const val = (v?.value || "").toLowerCase();
-            if (val === "home" || val === "1") { out.homeWin = Number(v.odd); out.bm.homeWin = bname; }
-            if (val === "draw" || val === "x") { out.draw    = Number(v.odd); out.bm.draw    = bname; }
-            if (val === "away" || val === "2") { out.awayWin = Number(v.odd); out.bm.awayWin = bname; }
+            if (val === "home" || val === "1") { dest.homeWin = Number(v.odd); dest.bm.homeWin = bname; }
+            if (val === "draw" || val === "x") { dest.draw    = Number(v.odd); dest.bm.draw    = bname; }
+            if (val === "away" || val === "2") { dest.awayWin = Number(v.odd); dest.bm.awayWin = bname; }
           }
         }
       }
-    }
+    };
+
+    // Split into preferred vs others
+    const isPreferred = (b) =>
+      (PREF_ID && Number(b?.id) === PREF_ID) ||
+      (PREF_NAME && ((b?.name || "").toLowerCase().includes(PREF_NAME)));
+
+    const preferredList = bms.filter(isPreferred);
+    const othersList    = bms.filter(b => !isPreferred(b));
+
+    // Fill containers
+    for (const b of preferredList) fillFromBookmaker(pref, b);
+    for (const b of othersList)    fillFromBookmaker(any,  b);
+
+    // If we got anything from preferred, use that; else fallback to any
+    const chosePreferred =
+      pref.over25 !== null || pref.under25 !== null ||
+      pref.bttsYes !== null || pref.bttsNo !== null ||
+      pref.homeWin !== null || pref.draw !== null || pref.awayWin !== null;
+
+    const out = chosePreferred ? pref : any;
+    // Set a single label for convenience (keeps your existing bm.* too)
+    out.usedBookmaker =
+      chosePreferred
+        ? (preferredList[0]?.name || "Preferred")
+        : (othersList[0]?.name || bms[0]?.name || null);
+
     return out;
-  } catch { return null; }
+  } catch {
+    return empty();
+  }
 }
+
 
 /* ------------------------ Free Picks (OU 2.5) ------------------------ */
 async function scoreFixtureForOU25(fx) {
