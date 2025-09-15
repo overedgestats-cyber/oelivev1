@@ -7,13 +7,6 @@
   <meta name="description" content="Answers about OverEdge, Pro access, accuracy, and guarantees."/>
   <link rel="stylesheet" href="/style.css"/>
 
-  <!-- Favicons / icons -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
-
-  <!-- Small local styles for the hero image -->
   <style>
     .faq-hero { margin: 1rem 0 2rem; }
     .faq-hero picture, .faq-hero img { display:block; width:100%; }
@@ -47,9 +40,9 @@
   <header class="site-header">
     <nav class="nav">
       <a class="logo brand" href="/" aria-label="OverEdge">
-  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-  <span class="sr-only">OverEdge</span>
-</a>
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
 
       <div class="links">
         <a href="/free-picks">Free Picks</a>
@@ -63,21 +56,19 @@
 
   <main>
     <section class="section">
-      <h1>FAQ</h1>
+      <h1 class="center">FAQ</h1>
 
-      <!-- Hero image -->
-     <figure class="faq-hero">
-  <img
-    src="/img/overedge-faq-hero.png"
-    alt="OverEdge — football analytics on the pitch"
-    loading="lazy"
-    decoding="async"
-    width="1152" height="768"
-    style="display:block;width:100%;height:auto;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12);background:#0a0a0a"
-  />
-  <figcaption class="sr-only">OverEdge brand on a football pitch.</figcaption>
-</figure>
-
+      <figure class="faq-hero">
+        <img
+          src="/img/overedge-faq-hero.png"
+          alt="OverEdge — football analytics on the pitch"
+          loading="lazy"
+          decoding="async"
+          width="1152" height="768"
+          style="display:block;width:100%;height:auto;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12);background:#0a0a0a"
+        />
+        <figcaption class="sr-only">OverEdge brand on a football pitch.</figcaption>
+      </figure>
 
       <!-- Q1 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
@@ -90,7 +81,7 @@
         </ul>
       </details>
 
-      <!-- Q2 -->
+      <!-- (rest unchanged)… -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
         <summary><strong>What is the Pro Board and the Hero Pick of the Day?</strong></summary>
         <p><strong>Pro Board</strong> shows today’s fixtures from Top-5 leagues (England, Spain, Italy, Germany, France), their second tiers, cups, and UEFA/FIFA—grouped by competition—with:</p>
@@ -102,7 +93,6 @@
         <p><strong>Hero Pick of the Day</strong> is a single higher-odds value shot (target odds ≈ 2.00) chosen from the same scope when the data fits our confidence band. If there’s no solid candidate, we’ll say so.</p>
       </details>
 
-      <!-- Q3 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
         <summary><strong>How do I get Pro access?</strong></summary>
         <ol>
@@ -113,7 +103,6 @@
         <p>You can cancel anytime from your Stripe customer portal.</p>
       </details>
 
-      <!-- Q4 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
         <summary><strong>How accurate are the picks?</strong></summary>
         <p>Accuracy varies by slate and season—football is volatile. We show a <strong>confidence %</strong> for every suggestion so you can judge risk.</p>
@@ -124,7 +113,6 @@
         <p>We’ll surface rolling performance tracking as the dataset grows. Use our numbers as one input—not the only one.</p>
       </details>
 
-      <!-- Q5 -->
       <details class="card" style="margin:.5rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
         <summary><strong>Is the win guaranteed?</strong></summary>
         <p>No—there are <strong>no guarantees</strong>. Our content is data-driven analysis, not financial advice. Please bet responsibly, only what you can afford to lose, and follow local laws (18+ or legal age).</p>
@@ -144,8 +132,17 @@
     </div>
   </footer>
 
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
   <script>
-    document.getElementById('y').textContent = new Date().getFullYear();
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>

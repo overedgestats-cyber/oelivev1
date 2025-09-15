@@ -232,6 +232,8 @@ details[open]{ box-shadow: var(--shadow); }
   opacity:.55;
   padding:0 .15rem;
 }
+/* Alignment helpers */
+.center, .text-center { text-align: center; }
 
 /* ---------- Pro Board: make team names pop (robust selectors) ---------- */
 .pro-board .fixture-card .club,

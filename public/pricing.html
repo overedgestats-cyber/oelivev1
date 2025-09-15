@@ -7,12 +7,6 @@
   <meta name="description" content="Choose a plan: Weekly, Monthly, Quarterly, or Yearly."/>
   <link rel="stylesheet" href="/style.css"/>
 
-  <!-- Favicons / icons -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
-
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
@@ -27,9 +21,9 @@
     .save-pill{
       display:inline-block;
       padding:.2rem .55rem;
-      border:1px solid #bbf7d0;      /* green-200 */
-      background:#ecfdf5;            /* emerald-50 */
-      color:#065f46;                 /* emerald-900 */
+      border:1px solid #bbf7d0;
+      background:#ecfdf5;
+      color:#065f46;
       border-radius:999px;
       font-weight:700;
       font-size:.8rem;
@@ -42,10 +36,9 @@
   <header class="site-header">
     <nav class="nav">
       <a class="logo brand" href="/" aria-label="OverEdge">
-  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-  <span class="sr-only">OverEdge</span>
-</a>
-
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
       <div class="links">
         <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
@@ -58,8 +51,8 @@
 
   <main>
     <section class="section">
-      <h1>Pricing</h1>
-      <p class="muted">You must be <strong>signed in with Google</strong> before subscribing.</p>
+      <h1 class="center">Pricing</h1>
+      <p class="muted center">You must be <strong>signed in with Google</strong> before subscribing.</p>
 
       <!-- Free vs Pro comparison -->
       <div class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin:.5rem 0 1rem">
@@ -162,7 +155,6 @@
 
     document.getElementById('y').textContent = new Date().getFullYear();
 
-    // Your Stripe payment links
     const STRIPE_LINKS = {
       weekly:    "https://buy.stripe.com/bJe28s9DGabedyv5108k800",
       monthly:   "https://buy.stripe.com/5kQ4gA6rudnqcur5108k801",
@@ -178,6 +170,11 @@
       if (!getApps().length) initializeApp(cfg);
       auth = getAuth();
       onAuthStateChanged(auth, (u) => { currentUser = u || null; });
+    }
+
+    function getCookie(name){
+      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : null;
     }
 
     function requireSignedIn() {
@@ -201,7 +198,13 @@
           const url  = STRIPE_LINKS[plan];
           if (!url) { alert(`Payment link for "${plan}" is not set.`); return; }
 
-          // Go to Stripe
+          try {
+            const ref = (document.cookie.match(/(?:^|; )oe_ref=([^;]+)/)||[])[1];
+            if (ref && currentUser?.email) {
+              await fetch(`/api/rpc?action=attach-referral&friendEmail=${encodeURIComponent(currentUser.email)}&ref=${encodeURIComponent(decodeURIComponent(ref))}`);
+            }
+          } catch {}
+
           location.href = url;
         });
       });
@@ -210,26 +213,16 @@
 
   <!-- Savings & per-week calculator -->
   <script>
-    // Baseline prices
-    const PRICES = {
-      weekly:    6.99,
-      monthly:   17.99,
-      quarterly: 44.99,
-      yearly:    146.99
-    };
-    // Weeks assumed for fair comparison vs weekly
-    const WEEKS = { weekly: 1, monthly: 4, quarterly: 13, yearly: 52 };
-
+    const PRICES = { weekly:6.99, monthly:17.99, quarterly:44.99, yearly:146.99 };
+    const WEEKS  = { weekly:1, monthly:4, quarterly:13, yearly:52 };
     const fmt = n => n.toFixed(2);
     const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
-    // Effective cost per week
     setTxt('pw-weekly',    fmt(PRICES.weekly / WEEKS.weekly));
     setTxt('pw-monthly',   fmt(PRICES.monthly / WEEKS.monthly));
     setTxt('pw-quarterly', fmt(PRICES.quarterly / WEEKS.quarterly));
     setTxt('pw-yearly',    fmt(PRICES.yearly / WEEKS.yearly));
 
-    // Savings vs paying weekly for same period
     function savePct(planKey){
       const baseline = PRICES.weekly * WEEKS[planKey];
       const actual   = PRICES[planKey];
@@ -237,10 +230,21 @@
       return Math.max(0, pct);
     }
 
-    // Fill savings badges
     const sMonthly   = savePct('monthly');   if (document.getElementById('save-monthly'))   setTxt('save-monthly',   `Save ${sMonthly}%`);
     const sQuarterly = savePct('quarterly'); if (document.getElementById('save-quarterly')) setTxt('save-quarterly', `Save ${sQuarterly}%`);
     const sYearly    = savePct('yearly');    if (document.getElementById('save-yearly'))    setTxt('save-yearly',    `Save ${sYearly}%`);
+  </script>
+
+  <script>
+    (function () {
+      try {
+        const u = new URL(location.href);
+        const ref = u.searchParams.get('ref');
+        if (ref) {
+          document.cookie = `oe_ref=${encodeURIComponent(ref)}; Max-Age=${30*24*3600}; Path=/; SameSite=Lax`;
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>
