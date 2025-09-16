@@ -118,7 +118,7 @@ function isYouthFixture(fx = {}) {
   return hit(ln) || hit(h) || hit(a);
 }
 
-/* ---------------- Narrative helpers (edited per market) --------------- */
+/* ---------------- Narrative helpers (legacy + rich) --------------- */
 function seededPick(seed, n) { const s = Number(seed || 0); const x = (s * 9301 + 49297) % 233280; return Math.abs(Math.floor((x / 233280) * n)); }
 function narrativeOU(h, a, pick, seed = 0) {
   const overs = [
@@ -164,6 +164,111 @@ function narrativeCorners() {
   return "Wide play, crossing volume, and shot pressure correlate with corners. Teams that attack the byline or fire from range often push totals near the 9.5–10.5 band.";
 }
 
+/* ===== Rich, data-forward reasoning blocks ===== */
+const CARDS_BASELINE = 4.8;
+const CORNERS_BASELINE = 9.7;
+const fmtN = (x, d = 1) => (Number.isFinite(x) ? Number(x).toFixed(d) : "-");
+const pctS = (p) => `${Math.round(Math.max(0, Math.min(1, p)) * 100)}%`;
+const BR = "<br/>";
+
+/* OU Goals (Over/Under 2.5) */
+function reasonOURich(fx, H, A, pick, confPct) {
+  const hN = fx.teams?.home?.name || "Home";
+  const aN = fx.teams?.away?.name || "Away";
+  const lines = [
+    `${pick} — Confidence ${confPct}%`,
+    `${hN}: O2.5 ${pct(H.over25Rate)} (For ${fmtN(H.avgFor)}/Ag ${fmtN(H.avgAg)}) · ${aN}: O2.5 ${pct(A.over25Rate)} (For ${fmtN(A.avgFor)}/Ag ${fmtN(A.avgAg)})`,
+    `${hN} home O2.5 ${pct(H.o25HomeRate || 0)} · ${aN} away O2.5 ${pct(A.o25AwayRate || 0)}`,
+    `Form context: PPG ${fmtN(H.ppg,2)} vs ${fmtN(A.ppg,2)} · Clean-sheets ${pctS(H.cleanSheetRate)} / ${pctS(A.cleanSheetRate)}`
+  ];
+  const tail = pick.startsWith("Over")
+    ? "Proactive shapes and repeat entries keep 3+ live."
+    : "Controlled tempo + compact lines point to 0–2 goals more often.";
+  return `${lines.join(BR)}${BR}${tail}`;
+}
+
+/* BTTS */
+function reasonBTTSRich(fx, H, A, pick, confPct) {
+  const hN = fx.teams?.home?.name || "Home";
+  const aN = fx.teams?.away?.name || "Away";
+  const lines = [
+    `${pick} — Confidence ${confPct}%`,
+    `${hN}: BTTS ${pct(H.bttsRate)} · FTS ${pct(H.failToScoreRate)} · CS ${pct(H.cleanSheetRate)}`,
+    `${aN}: BTTS ${pct(A.bttsRate)} · FTS ${pct(A.failToScoreRate)} · CS ${pct(A.cleanSheetRate)}`,
+    `GF/GA (per match): ${hN} ${fmtN(H.avgFor)}/${fmtN(H.avgAg)} · ${aN} ${fmtN(A.avgFor)}/${fmtN(A.avgAg)}`
+  ];
+  const tail = pick.includes("Yes")
+    ? "Both sides create enough to break each other; first goal should open the game."
+    : "At least one side profiles for a clean sheet or low xG creation; BTTS fades.";
+  return `${lines.join(BR)}${BR}${tail}`;
+}
+
+/* 1X2 */
+function reason1X2Rich(fx, H, A, pick, confPct) {
+  const hN = fx.teams?.home?.name || "Home";
+  const aN = fx.teams?.away?.name || "Away";
+  const hGD = (H.avgFor - H.avgAg);
+  const aGD = (A.avgFor - A.avgAg);
+  const lines = [
+    `${pick} — Confidence ${confPct}%`,
+    `${hN}: PPG ${fmtN(H.ppg,2)} · GD/Match ${fmtN(hGD,2)} · W-D-L ${pct(H.winRate)}/${pct(H.drawRate)}/${pct(H.lossRate)}`,
+    `${aN}: PPG ${fmtN(A.ppg,2)} · GD/Match ${fmtN(aGD,2)} · W-D-L ${pct(A.winRate)}/${pct(A.drawRate)}/${pct(A.lossRate)}`,
+    `Edge drivers: venue boost (+0.20), recent differential, and GF/GA balance.`
+  ];
+  const tail = pick === "Home"
+    ? "Hosts carry form + venue edge."
+    : pick === "Away"
+      ? "Visitors’ differential + transition threat travel well."
+      : "Margins tight; risk profiles align toward a stalemate.";
+  return `${lines.join(BR)}${BR}${tail}`;
+}
+
+/* OU Cards */
+function reasonCardsRich(fx, H, A, pick, confPct) {
+  const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
+  const line = avg >= CARDS_BASELINE ? 5.5 : 4.5;
+  const hName = fx.teams.home.name, aName = fx.teams.away.name;
+  const homeTot = H.avgFor + H.avgAg, awayTot = A.avgFor + A.avgAg;
+  const top = [
+    `Model line: ${line} · Pick: ${pick} · Confidence ${confPct}%`,
+    `${hName}: For ${fmtN(H.avgFor)}/Ag ${fmtN(H.avgAg)} · ${aName}: For ${fmtN(A.avgFor)}/Ag ${fmtN(A.avgAg)}`,
+    `Clean sheets ${pctS(H.cleanSheetRate)} / ${pctS(A.cleanSheetRate)} · Failed-to-score ${pctS(H.failToScoreRate)} / ${pctS(A.failToScoreRate)}`
+  ].join(BR);
+  const parity = Math.abs(H.ppg - A.ppg) <= 0.30 ? "evenly matched" : (H.ppg > A.ppg ? "home-favoured" : "away-favoured");
+  const overview = [
+    `Tempo proxy: match totals run ${fmtN(homeTot)} (home) and ${fmtN(awayTot)} (away),`,
+    `${avg >= CARDS_BASELINE ? "above" : "near/below"} baseline ${CARDS_BASELINE}.`,
+    `Game looks ${parity}.`,
+    pick.startsWith("Over")
+      ? "Transitions + tactical fouls can lift count; late game management adds upside."
+      : "Controlled phases and lower disruption can suppress bookings."
+  ].join(" ");
+  const verdict = `Pick: <strong>${pick}</strong> · Confidence ${confPct}%`;
+  return `${top}${BR}${overview}${BR}${verdict}`;
+}
+
+/* OU Corners */
+function reasonCornersRich(fx, H, A, pick, confPct) {
+  const pressure = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
+  const line = pressure >= CORNERS_BASELINE ? 10.5 : 9.5;
+  const hName = fx.teams.home.name, aName = fx.teams.away.name;
+  const top = [
+    `Model line: ${line} · Pick: ${pick} · Confidence ${confPct}%`,
+    `Pressure proxy (GF/GA weighted): ${fmtN(pressure,1)} vs baseline ${CORNERS_BASELINE}`,
+    `${hName} For ${fmtN(H.avgFor)} / Ag ${fmtN(H.avgAg)} · ${aName} For ${fmtN(A.avgFor)} / Ag ${fmtN(A.avgAg)}`
+  ].join(BR);
+  const balance = Math.abs(H.avgFor - A.avgFor) <= 0.2 ? "balanced supply from both flanks" : "attacking bias may tilt restarts";
+  const overview = [
+    `Sustained entries + shot pressure point to ${line === 10.5 ? "an above" : "a sub"}-baseline corner environment;`,
+    balance + ".",
+    pick.startsWith("Over")
+      ? "Repeat entries/blocks favour volume; late leads can add defensive corners."
+      : "If tempo compresses, entries drop and totals undershoot."
+  ].join(" ");
+  const verdict = `Pick: <strong>${pick}</strong> · Confidence ${confPct}%`;
+  return `${top}${BR}${overview}${BR}${verdict}`;
+}
+
 /* ---- NEW: explicit lean calculators for Cards & Corners (with line) --- */
 function computeCardsLean(H, A) {
   const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
@@ -184,15 +289,42 @@ function computeCornersLean(H, A) {
 async function teamLastN(teamId, n = 12) {
   const rows = await apiGet("/fixtures", { team: teamId, last: n });
   let gp = 0, goalsFor = 0, goalsAg = 0, over25 = 0, under25 = 0, btts = 0;
+  let wins = 0, draws = 0, losses = 0, cs = 0, fts = 0;
+
+  // Venue splits for O2.5
+  let homeG = 0, awayG = 0, o25Home = 0, o25Away = 0;
+  // (Optional) Venue PPG (not exposed, but can be added later)
+  // let ppgHomePts = 0, ppgAwayPts = 0;
+
   for (const r of rows) {
     const gh = r?.goals?.home ?? 0, ga = r?.goals?.away ?? 0, total = gh + ga;
     const isHome = r?.teams?.home?.id === teamId;
-    const tf = isHome ? gh : ga, ta = isHome ? ga : gh;
-    gp += 1; goalsFor += tf; goalsAg += ta;
+    const tf = isHome ? gh : ga;
+    const ta = isHome ? ga : gh;
+
+    gp += 1;
+    goalsFor += tf;
+    goalsAg  += ta;
+
     if (total >= 3) over25 += 1;
     if (total <= 2) under25 += 1;
     if (gh > 0 && ga > 0) btts += 1;
+
+    // Outcomes
+    if (tf > ta) { wins += 1; /* if (isHome) ppgHomePts += 3; else ppgAwayPts += 3; */ }
+    else if (tf === ta) { draws += 1; /* if (isHome) ppgHomePts += 1; else ppgAwayPts += 1; */ }
+    else { losses += 1; }
+
+    if (ta === 0) cs += 1;
+    if (tf === 0) fts += 1;
+
+    // Venue splits for O2.5
+    if (isHome) { homeG += 1; if (total >= 3) o25Home += 1; }
+    else { awayG += 1; if (total >= 3) o25Away += 1; }
   }
+
+  const ppg = gp ? (wins * 3 + draws * 1) / gp : 0;
+
   return {
     games: gp,
     avgFor: gp ? goalsFor / gp : 0,
@@ -200,14 +332,25 @@ async function teamLastN(teamId, n = 12) {
     over25Rate: gp ? over25 / gp : 0,
     under25Rate: gp ? under25 / gp : 0,
     bttsRate: gp ? btts / gp : 0,
+
+    // Rich metrics
+    ppg,
+    winRate:   gp ? wins  / gp : 0,
+    drawRate:  gp ? draws / gp : 0,
+    lossRate:  gp ? losses/ gp : 0,
+    cleanSheetRate:  gp ? cs  / gp : 0,
+    failToScoreRate: gp ? fts / gp : 0,
+
+    // Venue split for O2.5
+    o25HomeRate: homeG ? o25Home / homeG : 0,
+    o25AwayRate: awayG ? o25Away / awayG : 0,
   };
 }
 
 // Prefer this bookmaker id (Bet365 = 8 in API-Football)
 const PREFERRED_BOOKMAKER_ID = Number(process.env.PREFERRED_BOOKMAKER_ID || 8) || null;
 
-// Odds helper — internal only (we still use it for hero-pick selection),
-// but we DO NOT expose odds anywhere except free-picks.
+// Odds helper — internal only (kept for free-picks and value calc), hidden elsewhere
 async function getOddsMap(fixtureId) {
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
@@ -264,10 +407,12 @@ async function scoreFixtureForOU25(fx) {
   const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
-  const market = overP >= underP ? "Over 2.5" : "Under 2.5";
+  const pick   = overP >= underP ? "Over 2.5" : "Under 2.5";
   const conf   = overP >= underP ? overP : underP;
   const time   = clockFromISO(fx?.fixture?.date);
   const odds   = await getOddsMap(fx?.fixture?.id);
+  const confPct = pct(conf);
+
   return {
     fixtureId: fx?.fixture?.id,
     league: fx?.league?.name || "",
@@ -276,11 +421,11 @@ async function scoreFixtureForOU25(fx) {
     matchTime: time,
     home: fx?.teams?.home?.name,
     away: fx?.teams?.away?.name,
-    market,
-    confidencePct: pct(conf),
-    // KEEP odds for Free Picks only
-    odds: odds ? odds[market === "Over 2.5" ? "over25" : "under25"] : null,
-    reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, market, fx?.fixture?.id),
+    market: pick,
+    confidencePct: confPct,
+    // Keep odds for Free Picks only
+    odds: odds ? odds[pick === "Over 2.5" ? "over25" : "under25"] : null,
+    reasoning: reasonOURich(fx, home, away, pick, confPct),
   };
 }
 
@@ -319,32 +464,50 @@ async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
   const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
-  const odds = await getOddsMap(fx?.fixture?.id); // used internally only
+  const odds = await getOddsMap(fx?.fixture?.id); // used internally only (no exposure)
   const time = clockFromISO(fx?.fixture?.date);
   const candidates = [];
+
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
   if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
-    candidates.push({ selection: "Over 2.5", market: "Over 2.5", conf: overP, valueScore: overP * odds.over25,
-      reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Over 2.5", fx?.fixture?.id) });
+    const confPct = pct(overP);
+    candidates.push({
+      selection: "Over 2.5", market: "Over 2.5", conf: overP,
+      valueScore: overP * odds.over25,
+      reasoning: reasonOURich(fx, home, away, "Over 2.5", confPct),
+    });
   }
   if (odds?.under25 && odds.under25 >= 2.0 && withinBand(underP)) {
-    candidates.push({ selection: "Under 2.5", market: "Under 2.5", conf: underP, valueScore: underP * odds.under25,
-      reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, "Under 2.5", fx?.fixture?.id) });
+    const confPct = pct(underP);
+    candidates.push({
+      selection: "Under 2.5", market: "Under 2.5", conf: underP,
+      valueScore: underP * odds.under25,
+      reasoning: reasonOURich(fx, home, away, "Under 2.5", confPct),
+    });
   }
   const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
   if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
-    candidates.push({ selection: "BTTS: Yes", market: "BTTS", conf: bttsP, valueScore: bttsP * odds.bttsYes,
-      reasoning: narrativeBTTS() });
+    const confPct = pct(bttsP);
+    candidates.push({
+      selection: "BTTS: Yes", market: "BTTS", conf: bttsP,
+      valueScore: bttsP * odds.bttsYes,
+      reasoning: reasonBTTSRich(fx, home, away, "BTTS: Yes", confPct),
+    });
   }
+
   const one = onex2Lean(home, away);
   if (odds) {
     const choose = one.pick === "Home" ? odds.homeWin : one.pick === "Away" ? odds.awayWin : odds.draw;
     if (choose && choose >= 2.0 && withinBand(one.conf, 0.55, 0.72)) {
-      candidates.push({ selection: one.pick, market: "1X2", conf: one.conf, valueScore: one.conf * choose,
-        reasoning: narrative1X2(one.pick) });
+      const confPct = pct(one.conf);
+      candidates.push({
+        selection: one.pick, market: "1X2", conf: one.conf,
+        valueScore: one.conf * choose,
+        reasoning: reason1X2Rich(fx, home, away, one.pick, confPct),
+      });
     }
   }
 
@@ -358,13 +521,37 @@ async function scoreHeroCandidates(fx) {
     selection: c.selection,
     market: c.market,
     confidencePct: pct(c.conf),
-    // DO NOT expose odds here
+    // no odds exposed
     valueScore: Number((c.valueScore || 0).toFixed(4)),
     reasoning: c.reasoning,
   }));
 }
 
-// STRICT: Only allowed Pro competitions + exclude youth
+async function pickHeroBet({ date, tz, market = "auto" }) {
+  let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+  fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
+
+  let candidates = [];
+  for (const fx of fixtures.slice(0, 100)) {
+    try {
+      const c = await scoreHeroCandidates(fx);
+      const filtered = (market === "auto")
+        ? c
+        : c.filter(x =>
+            (market === "ou_goals" && (x.market === "Over 2.5" || x.market === "Under 2.5")) ||
+            (market === "btts" && x.market === "BTTS") ||
+            (market === "one_x_two" && x.market === "1X2")
+          );
+      candidates = candidates.concat(filtered);
+    } catch {}
+  }
+  if (!candidates.length) return { heroBet: null, note: "No qualifying value pick found yet." };
+  candidates.sort((a, b) => b.valueScore - a.valueScore);
+  return { heroBet: candidates[0] };
+}
+
+/* --------------------------- Pro Board data --------------------------- */
 const PRO_ALLOWED = {
   England: [/^Premier League$/i, /^Championship$/i, /^FA Cup$/i],
   Germany: [/^Bundesliga$/i, /^2\.?\s*Bundesliga$/i, /^DFB[ -]?Pokal$/i],
@@ -392,9 +579,7 @@ function allowedForProBoard(league = {}) {
   return rx.some(r => r.test(name));
 }
 
-/** Build classic (flat) Pro Board; markets: OU Goals, BTTS, 1X2
- *  (NO odds exposed; best market chosen by confidence only)
- */
+/** Build classic (flat) Pro Board; markets: OU Goals, BTTS, 1X2 (NO odds) */
 async function buildProBoard({ date, tz }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
@@ -411,30 +596,34 @@ async function buildProBoard({ date, tz }) {
       const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
       const ouPick = overP >= underP ? "Over 2.5" : "Under 2.5";
       const ouConf = overP >= underP ? overP : underP;
+      const ouConfPct = pct(ouConf);
       const ou = {
         recommendation: ouPick,
-        confidencePct: pct(ouConf),
-        reasoning: narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, ouPick, fx?.fixture?.id),
+        confidencePct: ouConfPct,
+        reasoning: reasonOURich(fx, home, away, ouPick, ouConfPct),
       };
 
       const bttsP  = home.bttsRate * 0.5 + away.bttsRate * 0.5;
       const bttsPick = bttsP >= 0.5 ? "BTTS: Yes" : "BTTS: No";
+      const bttsConf = bttsP >= 0.5 ? bttsP : 1 - bttsP;
+      const bttsConfPct = pct(bttsConf);
       const btts = {
         recommendation: bttsPick,
-        confidencePct: pct(bttsP >= 0.5 ? bttsP : 1 - bttsP),
-        reasoning: narrativeBTTS(),
+        confidencePct: bttsConfPct,
+        reasoning: reasonBTTSRich(fx, home, away, bttsPick, bttsConfPct),
       };
 
       const onex2 = onex2Lean(home, away);
+      const onex2ConfPct = pct(onex2.conf);
       const onex2Rec = {
         recommendation: onex2.pick,
-        confidencePct: pct(onex2.conf),
-        reasoning: "Light 1X2 lean from recent GF/GA differentials + small home edge.",
+        confidencePct: onex2ConfPct,
+        reasoning: reason1X2Rich(fx, home, away, onex2.pick, onex2ConfPct),
       };
 
       const cands = [
         { market: "ou25", conf: ouConf },
-        { market: "btts", conf: bttsP >= 0.5 ? bttsP : 1 - bttsP },
+        { market: "btts", conf: bttsConf },
         { market: "onex2", conf: onex2.conf },
       ];
       cands.sort((a,b)=> (b.conf - a.conf));
@@ -492,25 +681,29 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
           const underP = H.under25Rate*0.5 + A.under25Rate*0.5;
           const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
           const conf = overP >= underP ? overP : underP;
-          rec = { market: "OU Goals", pick, confidencePct: pct(conf) };
-          why = narrativeOU(fx?.teams?.home?.name, fx?.teams?.away?.name, pick, fx?.fixture?.id);
+          const confPct = pct(conf);
+          rec = { market: "OU Goals", pick, confidencePct: confPct };
+          why = reasonOURich(fx, H, A, pick, confPct);
         } else if (market === "btts") {
           const b = H.bttsRate*0.5 + A.bttsRate*0.5;
           const pick = b >= 0.5 ? "BTTS: Yes" : "BTTS: No";
-          rec = { market: "BTTS", pick, confidencePct: pct(b >= 0.5 ? b : 1-b) };
-          why = narrativeBTTS();
+          const conf = b >= 0.5 ? b : 1 - b;
+          const confPct = pct(conf);
+          rec = { market: "BTTS", pick, confidencePct: confPct };
+          why = reasonBTTSRich(fx, H, A, pick, confPct);
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
-          rec = { market: "1X2", pick: ox.pick, confidencePct: pct(ox.conf) };
-          why = narrative1X2(ox.pick);
+          const confPct = pct(ox.conf);
+          rec = { market: "1X2", pick: ox.pick, confidencePct: confPct };
+          why = reason1X2Rich(fx, H, A, ox.pick, confPct);
         } else if (market === "ou_cards") {
           const lean = computeCardsLean(H, A);
           rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct };
-          why = narrativeCards();
+          why = reasonCardsRich(fx, H, A, lean.pick, lean.confidencePct);
         } else if (market === "ou_corners") {
           const lean = computeCornersLean(H, A);
           rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct };
-          why = narrativeCorners();
+          why = reasonCornersRich(fx, H, A, lean.pick, lean.confidencePct);
         }
       }
 
@@ -568,7 +761,8 @@ async function verifyStripeByEmail(email) {
 
   const item = best.items?.data?.[0] || {};
   const price = item.price || {};
-  const nickname = price.nickname || null;
+  theNickname = price.nickname || null;
+  const nickname = theNickname;
   const interval = price.recurring?.interval || null;
   const amount = typeof price.unit_amount === "number" ? (price.unit_amount / 100).toFixed(2) : null;
   const currency = price.currency ? price.currency.toUpperCase() : null;
@@ -715,8 +909,7 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // HERO BET (Pro pick) — pinned by date/tz/market unless refresh=1
-    // (Does NOT expose odds)
+    // HERO BET (Pro pick) — pinned by date/tz/market unless refresh=1 (no odds exposed)
     if (action === "pro-pick") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
