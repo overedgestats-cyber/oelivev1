@@ -49,12 +49,11 @@
   </header>
 
   <main class="section" style="max-width:900px">
-    <h1>Today’s Free Picks (preview)</h1>
-    <p class="lead">No confident picks available yet today.</p>
-    <p>
-      <a class="btn" href="/free-picks">View full details →</a>
-    </p>
-  </main>
+  <h1>Today’s Free Picks (preview)</h1>
+  <div id="home-free-picks" class="lead">Loading…</div>
+  <p><a class="btn" href="/free-picks">View full details →</a></p>
+</main>
+
 
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
@@ -70,5 +69,46 @@
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
   </script>
+  <script>
+  // Year (if you have a footer year element elsewhere)
+  const yEl = document.getElementById('y');
+  if (yEl) yEl.textContent = new Date().getFullYear();
+
+  function tzGuess(){
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
+    catch { return "Europe/Sofia"; }
+  }
+
+  async function loadPreview() {
+    const el = document.getElementById('home-free-picks');
+    if (!el) return;
+    el.textContent = 'Loading…';
+    try {
+      const res = await fetch(`/api/rpc?action=free-picks&tz=${encodeURIComponent(tzGuess())}&minConf=75`);
+      const data = await res.json();
+      if (!data.picks || data.picks.length === 0) {
+        el.innerHTML = '<p class="lead">No confident picks available yet today.</p>';
+        return;
+      }
+      el.innerHTML = data.picks.map(p => `
+        <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
+          <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
+          <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
+          <div style="margin:.5rem 0">
+            <span style="font-weight:600">${p.market}</span>
+            <span style="margin-left:.5rem">(${p.confidencePct}% confidence)</span>
+            ${p.odds ? `<span style="margin-left:1rem">Odds: ${p.odds}</span>` : ``}
+          </div>
+          <div style="font-size:.95rem">${p.reasoning || ""}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      el.innerHTML = '<p class="lead">Could not load picks.</p>';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadPreview);
+</script>
+
 </body>
 </html>
