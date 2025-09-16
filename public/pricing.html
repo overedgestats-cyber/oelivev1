@@ -31,7 +31,7 @@
     }
     .perweek{ font-size:.9rem; opacity:.75; margin:.25rem 0 .25rem; }
 
-    /* NEW: “Most Popular” / “Best Value” highlights */
+    /* “Most Popular” / “Best Value” highlights */
     .plan{ position:relative; }
     .plan .tag{
       position:absolute; top:-10px; right:12px;
@@ -64,26 +64,25 @@
 <body>
   <header class="site-header">
     <nav class="nav">
-  <a class="logo brand" href="/" aria-label="OverEdge">
-    <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-    <span class="sr-only">OverEdge</span>
-  </a>
+      <a class="logo brand" href="/" aria-label="OverEdge">
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
 
-  <div class="links">
-    <a href="/free-picks">Free Picks</a>
-    <a href="/pro">Pro</a>
-    <a href="/pricing">Pricing</a>
-    <a href="/FAQ">FAQ</a>
-    <a href="/account">Account</a>
-  </div>
+      <div class="links">
+        <a href="/free-picks">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing" aria-current="page">Pricing</a>
+        <a href="/FAQ">FAQ</a>
+        <a href="/account">Account</a>
+      </div>
 
-  <!-- Global auth controls (like Free Picks / Pro) -->
-  <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-    <span id="nav-plan" class="badge" style="display:none"></span>
-    <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
-  </div>
-</nav>
-
+      <!-- Global auth controls -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge pill" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
+    </nav>
   </header>
 
   <main>
@@ -213,11 +212,6 @@
       onAuthStateChanged(auth, (u) => { currentUser = u || null; });
     }
 
-    function getCookie(name){
-      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
-      return m ? decodeURIComponent(m[1]) : null;
-    }
-
     function requireSignedIn() {
       if (!currentUser) {
         alert('Please sign in with Google first.');
@@ -240,9 +234,10 @@
           if (!url) { alert(`Payment link for "${plan}" is not set.`); return; }
 
           try {
-            const ref = (document.cookie.match(/(?:^|; )oe_ref=([^;]+)/)||[])[1];
+            const m = document.cookie.match(/(?:^|; )oe_ref=([^;]+)/);
+            const ref = m ? decodeURIComponent(m[1]) : null;
             if (ref && currentUser?.email) {
-              await fetch(`/api/rpc?action=attach-referral&friendEmail=${encodeURIComponent(currentUser.email)}&ref=${encodeURIComponent(decodeURIComponent(ref))}`);
+              await fetch(`/api/rpc?action=attach-referral&friendEmail=${encodeURIComponent(currentUser.email)}&ref=${encodeURIComponent(ref)}`);
             }
           } catch {}
 
@@ -287,8 +282,8 @@
       } catch {}
     })();
   </script>
-  <!-- Shared navbar auth module -->
-<script type="module" src="/auth.js"></script>
 
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
 </body>
 </html>

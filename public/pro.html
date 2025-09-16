@@ -22,30 +22,10 @@
     gtag('config', 'G-88C4MQ3EF8');
   </script>
 
+  <!-- Minimal local helpers that aren't in style.css -->
   <style>
     .grid-2 { display:grid; grid-template-columns:1fr auto; gap:.75rem; align-items:center; }
     .muted-sm { opacity:.7; font-size:.9rem; }
-    .pill { font-size:.75rem; padding:.1rem .5rem; border:1px solid #e5e7eb; border-radius:999px; }
-    .row { padding:.75rem 1rem; border:1px solid #eee; border-radius:12px; margin:.5rem 0; }
-    .marketbox { background:#fafafa; padding:.5rem .75rem; border-radius:10px; margin-top:.5rem; border:1px dashed #e5e7eb; }
-    select.market { padding:.4rem .6rem; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
-    .group { margin:1.25rem 0; }
-    .group > h3 { margin:.5rem 0; }
-    .hero-card { padding:1rem; border:1px solid #eee; border-radius:12px; }
-    .badge-pro { background:#eef6ff; border:1px solid #cfe4ff; color:#1d4ed8; }
-
-    /* Stronger team names */
-    .teams .team{ font-weight:800; letter-spacing:.2px; font-size:1.02rem; color:#0f172a; }
-    .teams .sep{ opacity:.55; padding:0 .15rem; }
-
-    /* Grouped board */
-    .country-block { margin:1.25rem 0; }
-    .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; }
-    .flag { width:18px; height:12px; object-fit:cover; border-radius:2px; }
-    .league-title { font-weight:600; margin:.25rem 0 .25rem; opacity:.9; }
-    .fixture-row { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.6rem .8rem; border:1px solid #eee; border-radius:12px; margin:.25rem 0; }
-    .teams { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
-    .teams img.logo { width:18px; height:18px; object-fit:contain; }
     .market-controls { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
   </style>
 </head>
@@ -53,9 +33,9 @@
   <header class="site-header">
     <nav class="nav">
       <a class="logo brand" href="/" aria-label="OverEdge">
-  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-  <span class="sr-only">OverEdge</span>
-</a>
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
 
       <div class="links">
         <a href="/free-picks">Free Picks</a>
@@ -87,13 +67,13 @@
       <h1>Pro Board</h1>
       <p class="muted">Hero Bet of the Day and full team stats (5/10/15). Filters for Over/Under, BTTS, Cards, Corners, Shots, Goals.</p>
 
-      <section class="section">
+      <section class="section" style="padding-top:.5rem">
         <h2>Hero Bet of the Day</h2>
-        <div id="hero" class="hero-card">Loading…</div>
+        <div id="hero" class="card" style="padding:1rem">Loading…</div>
         <p class="muted" style="margin-top:.5rem">Top-5 (and UEFA/FIFA) scope; youth leagues are excluded.</p>
       </section>
 
-      <section class="section">
+      <section class="section" style="padding-top:.5rem">
         <div class="grid-2" style="margin-bottom:.5rem">
           <h2 style="margin:0">Pro Board</h2>
           <div class="market-controls">
@@ -107,7 +87,8 @@
             </select>
           </div>
         </div>
-        <div id="board">Loading…</div>
+        <!-- Important: pro-board class enables the new card styles -->
+        <div id="board" class="pro-board">Loading…</div>
       </section>
     </section>
   </main>
@@ -166,11 +147,9 @@
           const cache = JSON.parse(localStorage.getItem("oe.user") || "null");
           if (cache?.pro) {
             navPlan.textContent = cache.plan ? cache.plan : "Pro";
-            navPlan.classList.add("badge-pro");
             navPlan.style.display="inline-block";
           } else {
             navPlan.textContent = "Free";
-            navPlan.classList.remove("badge-pro");
             navPlan.style.display="inline-block";
           }
         } catch { navPlan.style.display="none"; }
@@ -228,7 +207,7 @@
             <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
           </div>
           <div style="text-align:right">
-            <span class="pill">Confidence ${p.confidencePct}%</span>
+            <span class="badge pill conf">Confidence ${p.confidencePct}%</span>
           </div>
         </div>
         <div style="margin-top:.5rem; white-space:pre-wrap">${p.reasoning || ""}</div>

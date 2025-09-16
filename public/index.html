@@ -24,18 +24,19 @@
 
   <style>
     .lead { font-size: clamp(1.1rem, 1.7vw, 1.2rem); opacity:.8; margin-top:.25rem; }
+    .muted-sm{opacity:.7;font-size:.95rem}
   </style>
 </head>
 <body>
   <header class="site-header">
     <nav class="nav">
       <a class="logo brand" href="/" aria-label="OverEdge">
-  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-  <span class="sr-only">OverEdge</span>
-</a>
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
 
       <div class="links">
-        <a href="/free-picks" aria-current="page">Free Picks</a>
+        <a href="/free-picks">Free Picks</a>
         <a href="/pro">Pro</a>
         <a href="/pricing">Pricing</a>
         <a href="/FAQ">FAQ</a>
@@ -43,17 +44,17 @@
       </div>
       <div class="auth" style="display:flex;align-items:center;gap:.5rem">
         <span id="nav-plan" class="badge pill" style="display:none"></span>
-        <a class="btn small secondary" href="/account">Sign In</a>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
       </div>
     </nav>
   </header>
 
   <main class="section" style="max-width:900px">
-  <h1>Today’s Free Picks (preview)</h1>
-  <div id="home-free-picks" class="lead">Loading…</div>
-  <p><a class="btn" href="/free-picks">View full details →</a></p>
-</main>
-
+    <h1>Today’s Free Picks (preview)</h1>
+    <p class="lead">Two highest-confidence O/U 2.5 selections, with confidence %, odds (when available), and a quick reasoning line.</p>
+    <div id="home-free-picks" class="lead">Loading…</div>
+    <p><a class="btn" href="/free-picks">View full details →</a></p>
+  </main>
 
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
@@ -68,47 +69,60 @@
 
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
-  </script>
-  <script>
-  // Year (if you have a footer year element elsewhere)
-  const yEl = document.getElementById('y');
-  if (yEl) yEl.textContent = new Date().getFullYear();
 
-  function tzGuess(){
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
-    catch { return "Europe/Sofia"; }
-  }
-
-  async function loadPreview() {
-    const el = document.getElementById('home-free-picks');
-    if (!el) return;
-    el.textContent = 'Loading…';
-    try {
-      const res = await fetch(`/api/rpc?action=free-picks&tz=${encodeURIComponent(tzGuess())}&minConf=75`);
-      const data = await res.json();
-      if (!data.picks || data.picks.length === 0) {
-        el.innerHTML = '<p class="lead">No confident picks available yet today.</p>';
-        return;
-      }
-      el.innerHTML = data.picks.map(p => `
-        <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-          <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
-          <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
-          <div style="margin:.5rem 0">
-            <span style="font-weight:600">${p.market}</span>
-            <span style="margin-left:.5rem">(${p.confidencePct}% confidence)</span>
-            ${p.odds ? `<span style="margin-left:1rem">Odds: ${p.odds}</span>` : ``}
-          </div>
-          <div style="font-size:.95rem">${p.reasoning || ""}</div>
-        </div>
-      `).join('');
-    } catch (e) {
-      el.innerHTML = '<p class="lead">Could not load picks.</p>';
+    function tzGuess(){
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
+      catch { return "Europe/Sofia"; }
     }
-  }
 
-  document.addEventListener('DOMContentLoaded', loadPreview);
-</script>
+    function reasonSnippet(html){
+      if (!html) return "";
+      // convert <br> to spaces, strip tags, grab first sentence
+      const txt = html.replace(/<br\s*\/?>/gi, " ").replace(/<\/?[^>]+(>|$)/g, "");
+      const first = txt.split(/[.?!]\s/)[0];
+      return first ? first.trim().replace(/\.$/,"") + "." : "";
+    }
 
+    function pickPreviewCard(p){
+      const league = [p.country, p.league].filter(Boolean).join(" — ");
+      const odds = (p.odds && !isNaN(Number(p.odds))) ? `<span class="badge odds" style="margin-left:.4rem">Odds ${Number(p.odds).toFixed(2)}</span>` : "";
+      const snippet = reasonSnippet(p.reasoning || "");
+      return `
+        <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
+          <div style="font-weight:700">${league}</div>
+          <div class="muted" style="margin:.15rem 0 .35rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+            <strong>${p.market}</strong>
+            <span class="badge pill conf">Confidence ${p.confidencePct}%</span>
+            ${odds}
+          </div>
+          ${snippet ? `<div class="muted-sm" style="margin-top:.45rem">${snippet}</div>` : ""}
+        </div>
+      `;
+    }
+
+    async function loadPreview() {
+      const el = document.getElementById('home-free-picks');
+      if (!el) return;
+      el.textContent = 'Loading…';
+      try {
+        const res = await fetch(`/api/rpc?action=free-picks&tz=${encodeURIComponent(tzGuess())}&minConf=75`);
+        const data = await res.json();
+        const picks = Array.isArray(data?.picks) ? data.picks : [];
+        if (!picks.length) {
+          el.innerHTML = '<p class="lead">No confident picks available yet today.</p>';
+          return;
+        }
+        el.innerHTML = picks.map(pickPreviewCard).join('');
+      } catch (e) {
+        el.innerHTML = '<p class="lead">Could not load picks.</p>';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadPreview);
+  </script>
+
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
 </body>
 </html>

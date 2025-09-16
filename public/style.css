@@ -162,6 +162,14 @@ h3{ font-weight: 700; font-size: clamp(1.1rem, 1.6vw, 1.3rem); }
 
 /* ---------- Utilities ---------- */
 .muted{ color: var(--muted); }
+
+/* (added) Small muted helper used in multiple pages */
+.muted-sm{
+  color: var(--muted);
+  opacity: .85;
+  font-size: .95rem;
+}
+
 .badge{
   display: inline-block; padding: .22rem .55rem;
   border-radius: 999px; font-size: .8rem; font-weight: 700;
@@ -313,6 +321,16 @@ details[open]{ box-shadow: var(--shadow); }
   opacity:.75; font-weight:700; margin:0 .25rem;
 }
 
+/* Align digits nicely across UI */
+.reasoning,
+.pick-card,
+.marketbox,
+.badge,
+.teams,
+body {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Select / Segmented control polish ---------- */
 select.market{
   appearance: none;
@@ -326,3 +344,46 @@ select.market:focus{ outline:none; border-color:#b9c4d9; box-shadow:0 0 0 3px rg
 
 /* ---------- Center helper ---------- */
 .center, .text-center { text-align: center; }
+
+/* ===========================
+   Free Picks card + helpers
+   =========================== */
+
+/* Generic pill (e.g., Confidence) – keeps visual parity with header chip */
+.pill{
+  display:inline-block;
+  padding:.22rem .55rem;
+  border-radius:999px;
+  font-size:.8rem;
+  font-weight:700;
+  background:#f8fafc;
+  color:var(--text);
+  border:1px solid var(--border);
+}
+
+/* Free Picks card container */
+.pick-card{
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  margin: .6rem 0;
+  transition: box-shadow .2s ease, transform .12s ease;
+}
+.pick-card:hover{
+  box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 16px 30px rgba(12,18,32,.12);
+  transform: translateY(-1px);
+}
+
+/* Colored left edge based on market */
+.pick-card.over::before,
+.pick-card.under::before{
+  content:"";
+  position:absolute;
+  left:-1px; top:-1px; bottom:-1px;
+  width:4px; border-radius:12px 0 0 12px;
+}
+.pick-card.over::before  { background:#16a34a; } /* Over = green */
+.pick-card.under::before { background:#dc2626; } /* Under = red */

@@ -21,14 +21,6 @@
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
-
-  <style>
-    .muted-sm{opacity:.7;font-size:.95rem}
-    .pill{font-size:.75rem;padding:.1rem .5rem;border:1px solid #e5e7eb;border-radius:999px}
-    .pick-card{padding:1rem;border:1px solid #eee;border-radius:14px;margin:.6rem 0}
-    .league-line{font-weight:600}
-    .reasoning{white-space:pre-wrap}
-  </style>
 </head>
 <body>
 <header class="site-header">
@@ -81,20 +73,24 @@
 
   function pickCard(p){
     const league = [p.country, p.league].filter(Boolean).join(" — ");
-    const odds = (p.odds && !isNaN(Number(p.odds))) ? ` · <span class="muted-sm">Odds: ${Number(p.odds).toFixed(2)}</span>` : "";
+    const pickClass = (p.market || "").toLowerCase().startsWith("over") ? "over" : "under";
+    const odds = (p.odds && !isNaN(Number(p.odds))) ? `<span class="badge odds">Odds ${Number(p.odds).toFixed(2)}</span>` : "";
+
     return `
-      <div class="pick-card">
+      <div class="pick-card ${pickClass}">
         <div class="league-line">${league}</div>
-        <div class="muted-sm" style="margin:.15rem 0 .35rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+        <div class="muted-sm" style="margin:.15rem 0 .35rem">
+          ${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong>
+        </div>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
           <strong>${p.market}</strong>
-          <span class="pill">Confidence ${p.confidencePct}%</span>
+          <span class="pill conf">Confidence ${p.confidencePct}%</span>
           ${odds}
         </div>
         <div class="muted-sm reasoning" style="margin-top:.5rem">${p.reasoning || ""}</div>
       </div>
     `;
-  }
+    }
 
   async function loadPicks(){
     const tgt = document.getElementById('list');

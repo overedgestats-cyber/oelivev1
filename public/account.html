@@ -19,45 +19,44 @@
 <body>
   <header class="site-header">
     <nav class="nav">
-  <a class="logo brand" href="/" aria-label="OverEdge">
-    <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-    <span class="sr-only">OverEdge</span>
-  </a>
+      <a class="logo brand" href="/" aria-label="OverEdge">
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
 
-  <div class="links">
-    <a href="/free-picks">Free Picks</a>
-    <a href="/pro">Pro</a>
-    <a href="/pricing">Pricing</a>
-    <a href="/FAQ">FAQ</a>
-    <a href="/account">Account</a>
-  </div>
+      <div class="links">
+        <a href="/free-picks">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/FAQ">FAQ</a>
+        <a href="/account" aria-current="page">Account</a>
+      </div>
 
-  <!-- Global auth controls (like Free Picks / Pro) -->
-  <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-    <span id="nav-plan" class="badge" style="display:none"></span>
-    <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
-  </div>
-</nav>
-
+      <!-- Global auth controls (shared with /auth.js) -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge pill" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
+    </nav>
   </header>
 
   <main>
     <section class="section">
       <h1 class="center">Your Account</h1>
 
-      <div class="card" style="padding:1rem;border:1px solid #eee;border-radius:12px">
+      <div class="card" style="padding:1rem">
         <p><strong>Status:</strong> <span id="status">Checking…</span></p>
-        <p style="margin-top:.75rem">
+        <p style="margin-top:.75rem; display:flex; gap:.5rem; flex-wrap:wrap">
           <button id="googleBtn" class="btn">Continue with Google</button>
           <button id="logoutBtn" class="btn secondary" style="display:none">Sign Out</button>
         </p>
         <p class="muted">You must be signed in before subscribing.</p>
       </div>
 
-      <div id="sub" class="card" style="margin-top:1rem;padding:1rem;border:1px solid #eee;border-radius:12px;display:none">
+      <div id="sub" class="card" style="margin-top:1rem; padding:1rem; display:none">
         <h3>Subscription</h3>
         <p id="subDetails"></p>
-        <p>
+        <p style="display:flex; gap:.5rem; flex-wrap:wrap">
           <button id="refreshBtn" class="btn small" type="button">Refresh status</button>
           <a class="btn secondary small" href="/pricing">Manage / Upgrade</a>
         </p>
@@ -84,10 +83,10 @@
 
     document.getElementById('y').textContent = new Date().getFullYear();
 
-    const statusEl  = document.getElementById('status');
-    const googleBtn = document.getElementById('googleBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const subCard   = document.getElementById('sub');
+    const statusEl   = document.getElementById('status');
+    const googleBtn  = document.getElementById('googleBtn');
+    const logoutBtn  = document.getElementById('logoutBtn');
+    const subCard    = document.getElementById('sub');
     const subDetails = document.getElementById('subDetails');
     const refreshBtn = document.getElementById('refreshBtn');
 
@@ -166,8 +165,8 @@
       });
     })();
   </script>
-  <!-- Shared navbar auth module -->
-<script type="module" src="/auth.js"></script>
 
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
 </body>
 </html>
