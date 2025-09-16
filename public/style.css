@@ -1,17 +1,37 @@
-/* OverEdge — light theme base styles */
+/* OverEdge — Sportsbook Pro theme
+   - Dark, glossy header
+   - Clean, sportsbook-style cards
+   - Bold team names / compact spacing
+   - Works with existing HTML (Free Picks, Pro, Pricing, FAQ, Account)
+*/
+
+/* --- Font (optional, safe fallback) --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
 /* ---------- CSS Variables ---------- */
 :root{
+  /* Base */
   --bg: #ffffff;
   --text: #0f172a;        /* slate-900 */
-  --muted: #64748b;       /* slate-500 */
-  --border: #e5e7eb;      /* gray-200 */
+  --muted: #5b6b82;       /* sporty slate */
+  --border: #e6e8ee;
   --card: #ffffff;
+
+  /* Brand */
   --brand: #2563eb;       /* blue-600 */
   --brand-600: #1d4ed8;   /* blue-700 */
   --accent: #16a34a;      /* green-600 */
   --warn: #b45309;        /* amber-700 */
-  --shadow: 0 1px 2px rgba(15,23,42,.06), 0 6px 24px rgba(15,23,42,.06);
+
+  /* Header (dark) */
+  --header-bg: linear-gradient(180deg, #0b1223 0%, #101b33 100%);
+  --header-text: #e7eefc;
+  --header-muted: #b9c4d9;
+  --header-chip: rgba(255,255,255,.08);
+  --header-hover: rgba(255,255,255,.06);
+
+  /* Elevation */
+  --shadow: 0 1px 2px rgba(12,18,32,.06), 0 12px 38px rgba(12,18,32,.10);
 }
 
 /* ---------- Reset / Base ---------- */
@@ -21,8 +41,8 @@ main{ display:block; }
 
 body{
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
-  line-height: 1.5;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+  line-height: 1.55;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -33,62 +53,82 @@ img{ max-width: 100%; display: block; }
 a{ color: var(--brand); text-decoration: none; }
 a:hover{ text-decoration: underline; }
 p{ margin: .5rem 0 1rem; }
-h1,h2,h3{ margin: 0 0 .5rem; line-height: 1.2; }
-h1{ font-size: clamp(1.75rem, 3vw, 2.25rem); }
-h2{ font-size: clamp(1.25rem, 2.2vw, 1.6rem); }
-h3{ font-size: clamp(1.1rem, 1.8vw, 1.3rem); }
+h1,h2,h3{ margin: 0 0 .5rem; line-height: 1.2; letter-spacing: .1px; }
+h1{ font-weight: 800; font-size: clamp(1.85rem, 2.2vw, 2.5rem); }
+h2{ font-weight: 800; font-size: clamp(1.3rem, 1.8vw, 1.7rem); }
+h3{ font-weight: 700; font-size: clamp(1.1rem, 1.6vw, 1.3rem); }
 
-/* ---------- Layout ---------- */
+/* ---------- Header / Nav ---------- */
 .site-header{
   position: sticky; top: 0; z-index: 40;
-  background: rgba(255,255,255,.85);
-  backdrop-filter: saturate(180%) blur(8px);
-  border-bottom: 1px solid var(--border);
+  background: var(--header-bg);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  box-shadow: 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter: saturate(160%) blur(8px);
 }
 .nav{
   max-width: 1100px; margin: 0 auto;
   display: flex; align-items: center; justify-content: space-between;
   padding: .75rem 1rem;
+  color: var(--header-text);
 }
 
-/* Old text-only logo (still supported) */
-.logo{
-  font-weight: 800; letter-spacing: .2px; color: var(--text);
-  font-size: 1.05rem;
+/* Brand logo (image + wordmark) */
+.logo.brand{
+  display: inline-flex; align-items: center; gap: .5rem;
+  color: var(--header-text);
 }
+.logo.brand .brand-img{
+  height: 28px; width: auto; display: block;
+}
+@media (min-width: 700px){
+  .logo.brand .brand-img{ height: 32px; }
+}
+.logo.brand:hover{ text-decoration: none; opacity: .95; }
 
-/* New image + wordmark logo */
-.brandmark{
-  display:flex; align-items:center; gap:.5rem;
-  color: var(--text);
-  font-weight:800;
-  text-decoration:none;
-}
-.brandmark img{
-  width:28px; height:28px; object-fit:contain;
-}
-.brandmark span{
-  font-size:1.05rem; letter-spacing:.2px;
-}
-
+/* Nav links */
 .links{ display: flex; gap: .9rem; align-items: center; }
-.links a{ color: var(--text); padding: .25rem .35rem; border-radius: .5rem; }
-.links a:hover{ background: #f8fafc; text-decoration: none; }
+.links a{
+  color: var(--header-text);
+  opacity: .85;
+  padding: .35rem .55rem;
+  border-radius: .5rem;
+  text-decoration: none;
+}
+.links a:hover{
+  background: var(--header-hover);
+  opacity: 1;
+}
 .links a[aria-current="page"]{
-  color: var(--brand);
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
+  position: relative;
+  color: #dff8e7;
+  background: transparent;
+  border: 0;
+}
+.links a[aria-current="page"]::after{
+  content:"";
+  position:absolute; left:.45rem; right:.45rem; bottom:-.4rem;
+  height:3px; border-radius:3px;
+  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
 }
 
+/* Auth chip inside header */
+.badge.pill,
+#nav-plan.badge{
+  background: var(--header-chip);
+  color: var(--header-text);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+/* ---------- Layout ---------- */
 .section{
   max-width: 1000px;
   margin: 0 auto;
   padding: 1.25rem 1rem;
 }
-
 .hero{
   max-width: 1100px; margin: 0 auto;
-  padding: 2.25rem 1rem 1.25rem;
+  padding: 2.1rem 1rem 1.1rem;
   text-align: center;
 }
 .hero p{ max-width: 800px; margin: .5rem auto 0; }
@@ -105,27 +145,26 @@ h3{ font-size: clamp(1.1rem, 1.8vw, 1.3rem); }
 .btn{
   display: inline-flex; align-items: center; justify-content: center;
   gap: .5rem;
-  padding: .65rem 1rem;
-  background: var(--brand);
+  padding: .62rem 1rem;
+  background: linear-gradient(180deg, var(--brand) 0%, var(--brand-600) 100%);
   color: #fff; border: 0; border-radius: 12px;
-  font-weight: 600;
-  transition: transform .08s ease, box-shadow .2s ease, background .2s ease;
-  box-shadow: 0 6px 16px rgba(37,99,235,.18);
+  font-weight: 700; letter-spacing:.2px;
+  transition: transform .08s ease, box-shadow .2s ease, filter .15s ease;
+  box-shadow: 0 10px 22px rgba(29,78,216,.22);
 }
-.btn:hover{ text-decoration: none; background: var(--brand-600); transform: translateY(-1px); }
+.btn:hover{ text-decoration: none; transform: translateY(-1px); filter: brightness(1.03); }
 .btn:active{ transform: translateY(0); }
 .btn.secondary{
-  background: #fff; color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: none;
+  background: #0f172a; color: #e6edf7;
+  border: 1px solid #1e293b; box-shadow: none;
 }
 .btn.small{ padding: .45rem .7rem; border-radius: 10px; font-size: .9rem; }
 
 /* ---------- Utilities ---------- */
 .muted{ color: var(--muted); }
 .badge{
-  display: inline-block; padding: .2rem .5rem;
-  border-radius: 999px; font-size: .8rem; font-weight: 600;
+  display: inline-block; padding: .22rem .55rem;
+  border-radius: 999px; font-size: .8rem; font-weight: 700;
   background: #f1f5f9; color: var(--text);
 }
 hr{ border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
@@ -137,7 +176,7 @@ hr{ border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
   gap: 1rem;
 }
 .plan .price{
-  font-size: 1.6rem; font-weight: 800; margin: .25rem 0 .5rem;
+  font-size: 1.7rem; font-weight: 800; margin: .25rem 0 .5rem;
 }
 .plan ul{ padding-left: 1.1rem; margin: .25rem 0 .5rem; }
 .plan li{ margin: .25rem 0; }
@@ -180,44 +219,50 @@ details[open]{ box-shadow: var(--shadow); }
   .hero{ padding: 3rem 1rem 1.5rem; }
 }
 
-/* ---------- Odds pill ---------- */
+/* ---------- Odds / Confidence pills ---------- */
 .badge.odds{
   background:#eef2ff;
   color:#1e3a8a;
   border:1px solid #dbeafe;
-  font-weight:700;
-  padding:.15rem .5rem;
+  font-weight:800;
+  padding:.18rem .55rem;
   border-radius:999px;
 }
-
-/* ---------- Generic team emphasis (used in /pro grouped rows) ---------- */
-.teams{
-  display:flex; align-items:center; gap:.4rem; flex-wrap:wrap;
-}
-.teams img.logo{
-  width:18px; height:18px; object-fit:contain;
-}
-.teams .team{
+.pill.conf{
+  background:#e8f8ee;
+  color:#166534;
+  border:1px solid #cbead8;
   font-weight:800;
+}
+
+/* (Optional) simple bar if you add <div class="conf-bar" style="--pct:67"></div> */
+.conf-bar{
+  --pct: 70;
+  height: 6px; border-radius: 999px; overflow: hidden;
+  background:#eef2f7; margin-top:.45rem;
+  position: relative;
+}
+.conf-bar::after{
+  content:"";
+  position:absolute; inset:0; width: calc(var(--pct) * 1%); border-radius:999px;
+  background: linear-gradient(90deg, #22c55e 0%, #16a34a 50%, #0ea5e9 100%);
+}
+
+/* ---------- Free Picks specific ---------- */
+.reasoning{ white-space: pre-wrap; }
+.league-line{ font-weight:800; }
+
+/* ---------- Generic team emphasis (used in Pro grouped rows) ---------- */
+.teams{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.teams img.logo{ width:18px; height:18px; object-fit:contain; }
+.teams .team{
+  font-weight:900;
   letter-spacing:.02em;
   font-size:1.02rem;
   color:var(--text);
   line-height:1.25;
 }
-/* ---- Header brand logo (fix size) ---- */
-.logo.brand{
-  display: inline-flex;
-  align-items: center;
-  gap: .4rem;
-}
-.logo.brand .brand-img{
-  height: 28px;      /* desktop becomes 32px below */
-  width: auto;
-  display: block;
-}
-@media (min-width: 700px){
-  .logo.brand .brand-img{ height: 32px; }
-}
+.teams .sep{ opacity:.55; padding:0 .15rem; }
 
 /* Accessible hidden text used beside the logo */
 .sr-only{
@@ -228,19 +273,25 @@ details[open]{ box-shadow: var(--shadow); }
   white-space: nowrap; border: 0;
 }
 
-.teams .sep{
-  opacity:.55;
-  padding:0 .15rem;
+/* ---------- Pro Board: stronger fixture presentation ---------- */
+.pro-board .fixture-row{
+  display:flex; align-items:center; justify-content:space-between; gap:.8rem;
+  padding:.7rem .9rem; margin:.28rem 0;
+  background:#fff; border:1px solid var(--border);
+  border-radius:14px; box-shadow: var(--shadow);
 }
-/* Alignment helpers */
-.center, .text-center { text-align: center; }
+.pro-board .fixture-row:hover{
+  box-shadow: 0 6px 22px rgba(10,15,30,.08);
+}
+.pro-board .fixture-row .marketbox{
+  background:#f8fafc; border:1px dashed #e2e8f0;
+  padding:.5rem .75rem; border-radius:10px;
+}
+.pro-board .fixture-row .muted-sm{ color:var(--muted); }
 
-/* ---------- Pro Board: make team names pop (robust selectors) ---------- */
 .pro-board .fixture-card .club,
 .pro-board .fixture .club{
-  display:flex;
-  align-items:center;
-  gap:.5rem;
+  display:flex; align-items:center; gap:.55rem;
 }
 .pro-board .fixture-card .club img,
 .pro-board .fixture .club img,
@@ -253,15 +304,25 @@ details[open]{ box-shadow: var(--shadow); }
 .pro-board .fixture .teams .name,
 .pro-board .fixture .teams .home,
 .pro-board .fixture .teams .away{
-  font-weight:800;
+  font-weight:900;
   font-size: clamp(1.05rem, 0.9rem + 0.6vw, 1.35rem);
-  line-height:1.25;
-  color:var(--text);
-  letter-spacing:.02em;
+  line-height:1.25; color:var(--text); letter-spacing:.02em;
 }
 .pro-board .fixture-card .vs,
 .pro-board .fixture .vs{
-  opacity:.75;
-  font-weight:600;
-  margin:0 .25rem;
+  opacity:.75; font-weight:700; margin:0 .25rem;
 }
+
+/* ---------- Select / Segmented control polish ---------- */
+select.market{
+  appearance: none;
+  padding:.45rem .9rem;
+  border:1px solid #d6dbe6;
+  border-radius:10px;
+  background:#fff url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%2357607a' d='M5.25 7.5L10 12.25 14.75 7.5z'/%3E%3C/svg%3E") no-repeat right .6rem center/16px;
+  font-weight:700; color:#0f172a;
+}
+select.market:focus{ outline:none; border-color:#b9c4d9; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+
+/* ---------- Center helper ---------- */
+.center, .text-center { text-align: center; }
