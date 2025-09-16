@@ -4,10 +4,10 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Free Picks · OverEdge</title>
-  <meta name="description" content="Two free football picks every day with confidence and reasoning."/>
+  <meta name="description" content="Two highest-confidence Over/Under 2.5 Goals selections each day."/>
   <link rel="stylesheet" href="/style.css"/>
 
-  <!-- Favicons / icons -->
+  <!-- Favicons -->
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
@@ -21,82 +21,101 @@
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
+
+  <style>
+    .muted-sm{opacity:.7;font-size:.95rem}
+    .pill{font-size:.75rem;padding:.1rem .5rem;border:1px solid #e5e7eb;border-radius:999px}
+    .pick-card{padding:1rem;border:1px solid #eee;border-radius:14px;margin:.6rem 0}
+    .league-line{font-weight:600}
+    .reasoning{white-space:pre-wrap}
+  </style>
 </head>
 <body>
-  <header class="site-header">
-    <nav class="nav">
-      <a class="logo brand" href="/" aria-label="OverEdge">
-  <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-  <span class="sr-only">OverEdge</span>
-</a>
-
-      <div class="links">
-        <a href="/free-picks" aria-current="page">Free Picks</a>
-        <a href="/pro">Pro</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/FAQ">FAQ</a>
-        <a href="/account">Account</a>
-      </div>
-      <!-- Global auth controls -->
-      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-        <span id="nav-plan" class="badge" style="display:none"></span>
-        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
-      </div>
-    </nav>
-  </header>
-
-  <main>
-    <section class="section">
-      <h1>Today’s Free Picks</h1>
-      <p class="muted">Updated daily. We post the two highest-confidence Over/Under 2.5 Goals selections — backed by precise research and data, not gut.</p>
-      <div id="free-picks"></div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
-    <div class="contact">
-      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
-      &nbsp;·&nbsp;
-      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
-      &nbsp;·&nbsp;
-      <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
+<header class="site-header">
+  <nav class="nav">
+    <a class="logo brand" href="/" aria-label="OverEdge">
+      <img class="brand-img" src="/img/overedge-logo.png" alt="">
+      <span class="sr-only">OverEdge</span>
+    </a>
+    <div class="links">
+      <a href="/free-picks" aria-current="page">Free Picks</a>
+      <a href="/pro">Pro</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/FAQ">FAQ</a>
+      <a href="/account">Account</a>
     </div>
-  </footer>
+    <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+      <span id="nav-plan" class="badge pill" style="display:none"></span>
+      <a class="btn small secondary" href="/account">Sign In</a>
+    </div>
+  </nav>
+</header>
 
-  <script>
-    document.getElementById('y').textContent = new Date().getFullYear();
+<main>
+  <section class="section">
+    <h1>Today’s Free Picks</h1>
+    <p class="muted">Updated daily. We post the two highest-confidence Over/Under 2.5 selections — backed by precise research and data, not gut.</p>
 
-    async function renderFreePicks() {
-      const el = document.getElementById('free-picks');
-      el.innerHTML = 'Loading…';
-      try {
-        const res = await fetch('/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75');
-        const data = await res.json();
-        if (!data.picks || data.picks.length === 0) {
-          el.innerHTML = '<p>No confident picks available today.</p>';
-          return;
-        }
-        el.innerHTML = data.picks.map(p => `
-          <div class="card" style="margin:.75rem 0;padding:1rem;border:1px solid #eee;border-radius:12px">
-            <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
-            <div style="opacity:.7">${p.matchTime} — ${p.home} vs ${p.away}</div>
-            <div style="margin:.5rem 0">
-              <span style="font-weight:600">${p.market}</span>
-              <span style="margin-left:.5rem">(${p.confidencePct}% confidence)</span>
-              ${p.odds ? `<span style="margin-left:1rem">Odds: ${p.odds}</span>` : ``}
-            </div>
-            <div style="font-size:.95rem">${p.reasoning}</div>
-          </div>
-        `).join('');
-      } catch (e) {
-        el.innerHTML = '<p>Could not load picks.</p>';
+    <div id="list">Loading…</div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+  <div class="contact">
+    <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('y').textContent = new Date().getFullYear();
+
+  function tzGuess(){
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
+    catch { return "Europe/Sofia"; }
+  }
+
+  function pickCard(p){
+    const league = [p.country, p.league].filter(Boolean).join(" — ");
+    const odds = (p.odds && !isNaN(Number(p.odds))) ? ` · <span class="muted-sm">Odds: ${Number(p.odds).toFixed(2)}</span>` : "";
+    return `
+      <div class="pick-card">
+        <div class="league-line">${league}</div>
+        <div class="muted-sm" style="margin:.15rem 0 .35rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <strong>${p.market}</strong>
+          <span class="pill">Confidence ${p.confidencePct}%</span>
+          ${odds}
+        </div>
+        <div class="muted-sm reasoning" style="margin-top:.5rem">${p.reasoning || ""}</div>
+      </div>
+    `;
+  }
+
+  async function loadPicks(){
+    const tgt = document.getElementById('list');
+    try{
+      tgt.textContent = "Loading…";
+      const url = `/api/rpc?action=free-picks&tz=${encodeURIComponent(tzGuess())}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const picks = Array.isArray(data?.picks) ? data.picks : [];
+      if(!picks.length){
+        tgt.innerHTML = `<p class="muted">No confident picks available yet today.</p>`;
+        return;
       }
+      tgt.innerHTML = picks.map(pickCard).join("");
+    }catch{
+      document.getElementById('list').innerHTML = "<p>Could not load free picks.</p>";
     }
-    document.addEventListener('DOMContentLoaded', renderFreePicks);
-  </script>
+  }
 
-  <!-- Shared navbar auth module -->
-  <script type="module" src="/auth.js"></script>
+  loadPicks();
+</script>
+
 </body>
 </html>

@@ -231,7 +231,7 @@
             <span class="pill">Confidence ${p.confidencePct}%</span>
           </div>
         </div>
-        <div style="margin-top:.5rem">${p.reasoning || ""}</div>
+        <div style="margin-top:.5rem; white-space:pre-wrap">${p.reasoning || ""}</div>
       `;
     }
 
@@ -291,7 +291,7 @@
                 <div class="muted-sm">${fx.time || ""}</div>
                 <div class="marketbox" style="margin-top:.35rem">
                   <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt}
-                  ${fx.reasoning ? `<br/><span class="muted-sm">${fx.reasoning}</span>` : ""}
+                  ${fx.reasoning ? `<br/><span class="muted-sm" style="white-space:pre-wrap">${fx.reasoning}</span>` : ""}
                 </div>
               </div>
             `;
@@ -310,7 +310,7 @@
       try {
         boardEl.innerHTML = "Loading…";
         const market = boardMarketSel.value;
-        const res = await fetch(`/api/rpc?action=pro-board-grouped&market=${encodeURIComponent(market)}&tz=${encodeURIComponent(tzGuess())}`);
+        const res = await fetch(`/api/rpc?action=pro-board-grouped&market=${encodeURIComponent(market)}&tz=${encodeURIComponent(tzGuess())}&refresh=1`);
         const data = await res.json();
         renderGroupedBoard(data);
       } catch {
