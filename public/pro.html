@@ -22,11 +22,67 @@
     gtag('config', 'G-88C4MQ3EF8');
   </script>
 
-  <!-- Minimal local helpers that aren't in style.css -->
+  <!-- Local helpers (layout tweaks specific to the Pro page) -->
   <style>
     .grid-2 { display:grid; grid-template-columns:1fr auto; gap:.75rem; align-items:center; }
     .muted-sm { opacity:.7; font-size:.9rem; }
     .market-controls { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+
+    /* Country / league headings */
+    .country-block { margin:1.25rem 0; }
+    .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; }
+    /* Force small flags regardless of intrinsic SVG sizes */
+    .country-header img.flag{
+      width:16px !important;
+      height:12px !important;
+      max-width:none !important;
+      object-fit:cover;
+      border:1px solid #e2e8f0;
+      border-radius:2px;
+      box-shadow:0 1px 0 rgba(0,0,0,.05);
+      flex:0 0 16px;
+      image-rendering:-webkit-optimize-contrast;
+    }
+    .league-title { font-weight:600; margin:.25rem 0 .25rem; opacity:.9; }
+
+    /* Teams row */
+    .teams { display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
+    .teams img.logo { width:18px; height:18px; object-fit:contain; }
+    .teams .team { font-weight:900; letter-spacing:.02em; font-size:1.03rem; color:#0f172a; line-height:1.25; }
+    .teams .sep { opacity:.55; padding:0 .15rem; }
+
+    /* Sleek sportsbook fixture row */
+    .fixture-row{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      align-items:center;
+      gap:.75rem;
+      padding:.7rem .9rem;
+      margin:.35rem 0;
+      background:#fff;
+      border:1px solid #e6e8ee;
+      border-radius:14px;
+      box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
+    }
+    .fixture-meta{ text-align:right; min-width:220px }
+    .badge-pick{
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.22rem .6rem; border-radius:999px;
+      font-weight:800; letter-spacing:.02em;
+      background:#eff6ff; border:1px solid #cfe4ff; color:#1d4ed8;
+    }
+    .badge-conf{
+      display:inline-block; margin-left:.35rem;
+      padding:.18rem .5rem; border-radius:999px;
+      font-weight:800; background:#e8f8ee; border:1px solid #cbead8; color:#166534;
+    }
+    .reason{
+      grid-column:1 / -1;
+      margin-top:.35rem;
+      font-size:.92rem;
+      color:#5b6b82;
+      white-space:pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -87,7 +143,7 @@
             </select>
           </div>
         </div>
-        <!-- Important: pro-board class enables the new card styles -->
+        <!-- pro-board class enables the theme styles -->
         <div id="board" class="pro-board">Loading…</div>
       </section>
     </section>
@@ -245,7 +301,7 @@
           </div>
         `;
 
-        group.leagues.forEach(L => {
+        (group.leagues || []).forEach(L => {
           const leagueTitle = document.createElement('div');
           leagueTitle.className = 'league-title';
           leagueTitle.textContent = L.leagueName || 'League';
@@ -255,8 +311,8 @@
             const row = document.createElement('div');
             row.className = 'fixture-row';
             const rec = fx.recommendation;
-            const pickTxt = rec ? `${rec.pick || ""}` : "";
-            const confTxt = rec ? ` · ${rec.confidencePct ?? "-"}%` : "";
+            const pickLabel = rec ? `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}` : "";
+            const confTxt = rec?.confidencePct != null ? `${rec.confidencePct}%` : "";
 
             row.innerHTML = `
               <div class="teams">
@@ -266,13 +322,18 @@
                 ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}
                 <span class="team">${fx.away?.name || ""}</span>
               </div>
-              <div style="text-align:right">
+
+              <div class="fixture-meta">
                 <div class="muted-sm">${fx.time || ""}</div>
-                <div class="marketbox" style="margin-top:.35rem">
-                  <strong>${rec?.market || ""}${pickTxt ? ` — ${pickTxt}` : ""}</strong>${confTxt}
-                  ${fx.reasoning ? `<br/><span class="muted-sm" style="white-space:pre-wrap">${fx.reasoning}</span>` : ""}
-                </div>
+                ${rec ? `
+                  <div style="margin-top:.35rem">
+                    <span class="badge-pick">${pickLabel}</span>
+                    ${confTxt ? `<span class="badge-conf">${confTxt}</span>` : ``}
+                  </div>
+                ` : ``}
               </div>
+
+              ${fx.reasoning ? `<div class="reason">${fx.reasoning}</div>` : ``}
             `;
             countryWrap.appendChild(row);
           });
