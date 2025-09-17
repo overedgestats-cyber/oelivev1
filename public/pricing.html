@@ -90,6 +90,16 @@ document.addEventListener('click', (e) => {
   try{ fbq('track','InitiateCheckout',{value:0,currency:'EUR',content_name:plan}); }catch(e){}
 }, true);
 </script>
+<script>
+  // already have buttons with [data-plan]
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-plan]');
+    if (!el || typeof fbq !== 'function') return;
+    const plan = el.getAttribute('data-plan');
+    const price = { weekly:6.99, monthly:17.99, quarterly:44.99, yearly:146.99 }[plan] || 0;
+    fbq('track', 'InitiateCheckout', { value: price, currency: 'EUR', plan });
+  });
+</script>
 
 <body>
   <header class="site-header">

@@ -191,5 +191,17 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
   <!-- Shared navbar auth module -->
   <script type="module" src="/auth.js"></script>
+  <script>
+  function fireSubscribeOnce(plan){
+    try{
+      if (localStorage.getItem('fb_subscribed') === '1') return;
+      if (typeof fbq === 'function') fbq('track', 'Subscribe', { plan });
+      localStorage.setItem('fb_subscribed','1');
+    }catch{}
+  }
+  // Call this right after you render a user with sub.pro === true
+  // renderUser(user, sub) { ... if(sub.pro) fireSubscribeOnce(sub.plan); ... }
+</script>
+
 </body>
 </html>
