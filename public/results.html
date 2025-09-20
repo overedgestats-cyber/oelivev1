@@ -82,46 +82,46 @@
 
   <script>document.getElementById('y').textContent=new Date().getFullYear();</script>
 
-  <!-- Firebase (read-only) -->
-  <script type="module">
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-    import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+  <!-- Hardcoded data -->
+  <script>
+    // All set to the same date for display; change if you want them split by day.
+    const DEFAULT_DATE = "2025-02-12";
+
+    const rows = [
+      { date: DEFAULT_DATE, home: "Ogre United", away: "Riga Mariners", market: "Over 2.5", confidencePct: null, odds: 1.65, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "1899 Hoffenheim", away: "Bayern München", market: "Over 2.5", confidencePct: null, odds: 1.35, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Tonbridge Angels", away: "Steyning Town", market: "Over 2.5", confidencePct: null, odds: 1.67, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Rylands", away: "Ashton United", market: "Under 2.5", confidencePct: null, odds: 1.80, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Sharjah FC", away: "Al-Gharafa", market: "Over 2.5", confidencePct: null, odds: 1.70, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Pitea W", away: "Brommapojkarna W", market: "Over 2.5", confidencePct: null, odds: 1.69, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Marupe", away: "JDFS Alberts", market: "Over 2.5", confidencePct: null, odds: 1.47, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Cham", away: "Vevey Sports", market: "Over 2.5", confidencePct: null, odds: 1.54, status: "win",  finalScore: "", country: "", league: "", matchTime: "" },
+      { date: DEFAULT_DATE, home: "Rothis", away: "Sturm Graz", market: "Over 2.5", confidencePct: null, odds: 1.20, status: "lose", finalScore: "", country: "", league: "", matchTime: "" },
+    ];
 
     const fmtPct = (x)=> `${(x*100).toFixed(1)}%`;
     const el = (id)=> document.getElementById(id);
 
-    async function boot(){
-      const cfg = await fetch('/api/rpc?action=public-config').then(r=>r.json()).then(d=>d.firebase||{});
-      if(!getApps().length) initializeApp(cfg);
-      const db = getFirestore();
-
-      // Pull up to last 200 picks (newest first)
-      const q = query(collection(db,'free_results'), orderBy('date','desc'), limit(200));
-      const snap = await getDocs(q);
-      const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-
+    function render() {
       // Stats
       let wins=0, losses=0, push=0, settled=0, total=rows.length;
-      let roiStake=0, roiProfit=0; // stake 1 per pick when odds known
+      let roiStake=0, roiProfit=0;
       rows.forEach(r=>{
         const s=(r.status||'pending').toLowerCase();
         if (s==='win'){ wins++; settled++; if(r.odds){ roiStake+=1; roiProfit+=Number(r.odds||0)-1; } }
         else if (s==='lose'){ losses++; settled++; if(r.odds){ roiStake+=1; roiProfit-=1; } }
-        else if (s==='push'){ push++; /* no change */ }
+        else if (s==='push'){ push++; }
       });
-      el('s-total').textContent = total;
-      el('s-wins').textContent  = wins;
-      el('s-losses').textContent= losses;
-      el('s-push').textContent  = push;
+      el('s-total').textContent   = total;
+      el('s-wins').textContent    = wins;
+      el('s-losses').textContent  = losses;
+      el('s-push').textContent    = push;
       el('s-winrate').textContent = settled ? fmtPct(wins/settled) : '—';
       el('s-roi').textContent     = roiStake>0 ? `${((roiProfit/roiStake)*100).toFixed(1)}%` : '—';
 
       // Group by date
       const byDate = {};
-      rows.forEach(r=>{
-        const d = r.date || 'Unknown';
-        (byDate[d] ||= []).push(r);
-      });
+      rows.forEach(r => { (byDate[r.date || 'Unknown'] ||= []).push(r); });
 
       // Render
       const host = document.getElementById('list');
@@ -146,15 +146,17 @@
                     wl==='push' ? `<span class="wl-pill wl-push">PUSH</span>` :
                                   `<span class="wl-pill">PENDING</span>`;
                   const league = [p.country,p.league].filter(Boolean).join(' — ');
+                  const confStr = Number.isFinite(p.confidencePct) ? `${p.confidencePct}%` : '—';
+                  const oddsStr = (typeof p.odds === 'number' && !isNaN(p.odds)) ? Number(p.odds).toFixed(2) : '—';
                   return `
                     <tr>
                       <td>
                         <div><strong>${p.home||''}</strong> vs <strong>${p.away||''}</strong></div>
-                        <div class="muted-sm">${league} · ${p.matchTime||''}${p.finalScore?` · FT ${p.finalScore}`:''}</div>
+                        <div class="muted-sm">${league || ''}${p.matchTime?` · ${p.matchTime}`:''}${p.finalScore?` · FT ${p.finalScore}`:''}</div>
                       </td>
                       <td><strong>${p.market||''}</strong></td>
-                      <td>${p.confidencePct??''}%</td>
-                      <td>${p.odds?Number(p.odds).toFixed(2):'—'}</td>
+                      <td>${confStr}</td>
+                      <td>${oddsStr}</td>
                       <td>${wlHtml}</td>
                       <td class="muted-sm">${p.reasoning||''}</td>
                     </tr>
@@ -166,7 +168,10 @@
         host.appendChild(wrap);
       });
     }
-    boot().catch(()=>{ document.getElementById('list').innerHTML='<p>Could not load results.</p>'; });
+
+    try { render(); } catch {
+      document.getElementById('list').innerHTML='<p>Could not load results.</p>';
+    }
   </script>
 
   <!-- Shared navbar auth (optional) -->
