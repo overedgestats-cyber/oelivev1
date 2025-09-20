@@ -13,6 +13,8 @@
   "crons": [
     { "path": "/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75&refresh=1", "schedule": "0 6 * * *" },
     { "path": "/api/rpc?action=pro-pick&tz=Europe/Sofia&refresh=1",               "schedule": "5 6 * * *" },
-    { "path": "/api/rpc?action=pro-board&tz=Europe/Sofia&refresh=1",              "schedule": "7 6 * * *" }
+    { "path": "/api/rpc?action=pro-board&tz=Europe/Sofia&refresh=1",              "schedule": "7 6 * * *" },
+    { "path": "/api/rpc?action=free-picks&tz=Europe/Sofia&refresh=1",             "schedule": "0 8 * * *" },
+    { "path": "/api/rpc?action=cron-settle-free-picks&tz=Europe/Sofia&token=f29103927eeb4e0bbb6c47a097d2e762", "schedule": "0 23 * * *" }
   ]
 }
