@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Results · OverEdge</title>
+  <meta name="description" content="W/L results for OverEdge Free Picks with success rate and details."/>
+  <link rel="stylesheet" href="/style.css"/>
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
+
+  <style>
+    .results-summary{display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1rem}
+    .results-summary .card{padding:.75rem 1rem}
+    .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
+    .wl-win{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
+    .wl-lose{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .wl-push{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
+    .tbl{width:100%;border-collapse:separate;border-spacing:0}
+    .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top}
+    .tbl th{text-align:left;font-weight:800;opacity:.8}
+    .date-head{margin-top:1.2rem;font-weight:800}
+    .muted-sm{opacity:.75;font-size:.92rem}
+  </style>
+
+  <!-- Google tag -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);} gtag('js',new Date()); gtag('config','G-88C4MQ3EF8');</script>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="logo brand" href="/" aria-label="OverEdge">
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
+      <div class="links">
+        <a href="/free-picks">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/FAQ">FAQ</a>
+        <a href="/results" aria-current="page">Results</a>
+        <a href="/account">Account</a>
+      </div>
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge pill" style="display:none"></span>
+        <a class="btn small secondary" href="/account">Sign In</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="section" style="max-width:1000px">
+    <h1>Free Picks — Results</h1>
+    <p class="muted">Transparent record of outcomes. We calculate Win% from settled picks (Push excluded). ROI is computed only when odds are available.</p>
+
+    <div id="summary" class="results-summary">
+      <div class="card"><div><strong>Total</strong></div><div id="s-total">—</div></div>
+      <div class="card"><div><strong>Wins</strong></div><div id="s-wins">—</div></div>
+      <div class="card"><div><strong>Losses</strong></div><div id="s-losses">—</div></div>
+      <div class="card"><div><strong>Push</strong></div><div id="s-push">—</div></div>
+      <div class="card"><div><strong>Win %</strong></div><div id="s-winrate">—</div></div>
+      <div class="card"><div><strong>ROI</strong></div><div id="s-roi">—</div></div>
+    </div>
+
+    <div id="list">Loading…</div>
+  </main>
+
+  <footer class="site-footer">
+    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+    <div class="contact">
+      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
+    </div>
+  </footer>
+
+  <script>document.getElementById('y').textContent=new Date().getFullYear();</script>
+
+  <!-- Firebase (read-only) -->
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+    const fmtPct = (x)=> `${(x*100).toFixed(1)}%`;
+    const el = (id)=> document.getElementById(id);
+
+    async function boot(){
+      const cfg = await fetch('/api/rpc?action=public-config').then(r=>r.json()).then(d=>d.firebase||{});
+      if(!getApps().length) initializeApp(cfg);
+      const db = getFirestore();
+
+      // Pull up to last 200 picks (newest first)
+      const q = query(collection(db,'free_results'), orderBy('date','desc'), limit(200));
+      const snap = await getDocs(q);
+      const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+      // Stats
+      let wins=0, losses=0, push=0, settled=0, total=rows.length;
+      let roiStake=0, roiProfit=0; // stake 1 per pick when odds known
+      rows.forEach(r=>{
+        const s=(r.status||'pending').toLowerCase();
+        if (s==='win'){ wins++; settled++; if(r.odds){ roiStake+=1; roiProfit+=Number(r.odds||0)-1; } }
+        else if (s==='lose'){ losses++; settled++; if(r.odds){ roiStake+=1; roiProfit-=1; } }
+        else if (s==='push'){ push++; /* no change */ }
+      });
+      el('s-total').textContent = total;
+      el('s-wins').textContent  = wins;
+      el('s-losses').textContent= losses;
+      el('s-push').textContent  = push;
+      el('s-winrate').textContent = settled ? fmtPct(wins/settled) : '—';
+      el('s-roi').textContent     = roiStake>0 ? `${((roiProfit/roiStake)*100).toFixed(1)}%` : '—';
+
+      // Group by date
+      const byDate = {};
+      rows.forEach(r=>{
+        const d = r.date || 'Unknown';
+        (byDate[d] ||= []).push(r);
+      });
+
+      // Render
+      const host = document.getElementById('list');
+      host.innerHTML = '';
+      Object.keys(byDate).sort((a,b)=> b.localeCompare(a)).forEach(date=>{
+        const day = byDate[date];
+        const wrap = document.createElement('section');
+        wrap.innerHTML = `<div class="date-head">${date}</div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Match</th><th>Market</th><th>Conf.</th><th>Odds</th><th>Result</th><th class="muted-sm">Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                day.map(p=>{
+                  const wl = (p.status||'pending').toLowerCase();
+                  const wlHtml =
+                    wl==='win'  ? `<span class="wl-pill wl-win">WIN</span>` :
+                    wl==='lose' ? `<span class="wl-pill wl-lose">LOSE</span>` :
+                    wl==='push' ? `<span class="wl-pill wl-push">PUSH</span>` :
+                                  `<span class="wl-pill">PENDING</span>`;
+                  const league = [p.country,p.league].filter(Boolean).join(' — ');
+                  return `
+                    <tr>
+                      <td>
+                        <div><strong>${p.home||''}</strong> vs <strong>${p.away||''}</strong></div>
+                        <div class="muted-sm">${league} · ${p.matchTime||''}${p.finalScore?` · FT ${p.finalScore}`:''}</div>
+                      </td>
+                      <td><strong>${p.market||''}</strong></td>
+                      <td>${p.confidencePct??''}%</td>
+                      <td>${p.odds?Number(p.odds).toFixed(2):'—'}</td>
+                      <td>${wlHtml}</td>
+                      <td class="muted-sm">${p.reasoning||''}</td>
+                    </tr>
+                  `;
+                }).join('')
+              }
+            </tbody>
+          </table>`;
+        host.appendChild(wrap);
+      });
+    }
+    boot().catch(()=>{ document.getElementById('list').innerHTML='<p>Could not load results.</p>'; });
+  </script>
+
+  <!-- Shared navbar auth (optional) -->
+  <script type="module" src="/auth.js"></script>
+</body>
+</html>
