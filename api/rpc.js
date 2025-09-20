@@ -8,33 +8,8 @@
 //  - pro-board           (flat list; strict allowed comps)
 //  - pro-board-grouped   (grouped by country with flag; strict allowed comps)
 //  - verify-sub
-//  - cron-settle-free-picks   (NEW)
 
 const API_BASE = "https://v3.football.api-sports.io";
-
-/* ================== NEW: Firestore (Admin) bootstrap ================== */
-import admin from "firebase-admin";
-
-let db = null;
-(() => {
-  try {
-    if (!admin.apps.length) {
-      const svc = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
-        : null;
-      if (svc) {
-        admin.initializeApp({ credential: admin.credential.cert(svc) });
-        db = admin.firestore();
-      }
-    } else {
-      db = admin.firestore();
-    }
-  } catch (e) {
-    console.error("Failed to init Firebase Admin (will no-op):", e);
-    db = null;
-  }
-})();
-/* ===================================================================== */
 
 /* --------------------------- Generic Helpers --------------------------- */
 function ymd(d = new Date()) { return new Date(d).toISOString().slice(0, 10); }
@@ -237,7 +212,8 @@ function reason1X2Rich(fx, H, A, pick, confPct) {
   const lines = [
     `${pick} — Confidence ${confPct}%`,
     `${hN}: PPG ${fmtN(H.ppg,2)} · GD/Match ${fmtN(hGD,2)} · W-D-L ${pct(H.winRate)}/${pct(H.drawRate)}/${pct(H.lossRate)}`,
-    `${aN}: PPG ${fmtN(A.ppg,2)} · GD/Match ${fmtN(aGD,2)} · W-D-L ${pct(A.winRate)}/${pct(A.drawRate)}/${pct(A.lossRate)}`
+    `${aN}: PPG ${fmtN(A.ppg,2)} · GD/Match ${fmtN(aGD,2)} · W-D-L ${pct(A.winRate)}/${pct(A.drawRate)}/${pct(A.lossRate)}`,
+    `Edge drivers: venue boost (+0.20), recent differential, and GF/GA balance.`
   ];
   const tail = pick === "Home"
     ? "Hosts carry form + venue edge."
@@ -317,6 +293,8 @@ async function teamLastN(teamId, n = 12) {
 
   // Venue splits for O2.5
   let homeG = 0, awayG = 0, o25Home = 0, o25Away = 0;
+  // (Optional) Venue PPG (not exposed, but can be added later)
+  // let ppgHomePts = 0, ppgAwayPts = 0;
 
   for (const r of rows) {
     const gh = r?.goals?.home ?? 0, ga = r?.goals?.away ?? 0, total = gh + ga;
@@ -332,13 +310,15 @@ async function teamLastN(teamId, n = 12) {
     if (total <= 2) under25 += 1;
     if (gh > 0 && ga > 0) btts += 1;
 
-    if (tf > ta) { wins += 1; }
-    else if (tf === ta) { draws += 1; }
+    // Outcomes
+    if (tf > ta) { wins += 1; /* if (isHome) ppgHomePts += 3; else ppgAwayPts += 3; */ }
+    else if (tf === ta) { draws += 1; /* if (isHome) ppgHomePts += 1; else ppgAwayPts += 1; */ }
     else { losses += 1; }
 
     if (ta === 0) cs += 1;
     if (tf === 0) fts += 1;
 
+    // Venue splits for O2.5
     if (isHome) { homeG += 1; if (total >= 3) o25Home += 1; }
     else { awayG += 1; if (total >= 3) o25Away += 1; }
   }
@@ -353,6 +333,7 @@ async function teamLastN(teamId, n = 12) {
     under25Rate: gp ? under25 / gp : 0,
     bttsRate: gp ? btts / gp : 0,
 
+    // Rich metrics
     ppg,
     winRate:   gp ? wins  / gp : 0,
     drawRate:  gp ? draws / gp : 0,
@@ -360,6 +341,7 @@ async function teamLastN(teamId, n = 12) {
     cleanSheetRate:  gp ? cs  / gp : 0,
     failToScoreRate: gp ? fts / gp : 0,
 
+    // Venue split for O2.5
     o25HomeRate: homeG ? o25Home / homeG : 0,
     o25AwayRate: awayG ? o25Away / awayG : 0,
   };
@@ -441,6 +423,7 @@ async function scoreFixtureForOU25(fx) {
     away: fx?.teams?.away?.name,
     market: pick,
     confidencePct: confPct,
+    // Keep odds for Free Picks only
     odds: odds ? odds[pick === "Over 2.5" ? "over25" : "under25"] : null,
     reasoning: reasonOURich(fx, home, away, pick, confPct),
   };
@@ -467,124 +450,6 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
   out.sort((a, b) => (b.confidencePct - a.confidencePct) || ((a.fixtureId || 0) - (b.fixtureId || 0)));
   return { date, timezone: tz, picks: out.slice(0, 2) };
 }
-
-/* ===================== NEW: Persistence + Settlement ================== */
-// helper to compute W/L for O/U 2.5 lines
-function resultForOverUnder25(totalGoals, market) {
-  const isOver = /over/i.test(market);
-  return isOver ? (totalGoals > 2.5 ? "win" : "loss")
-                : (totalGoals < 2.5 ? "win" : "loss");
-}
-
-// save today's two picks as "pending" (idempotent)
-async function persistDailyPicks(rawPicks, dateISO) {
-  if (!db || !Array.isArray(rawPicks) || !rawPicks.length) return;
-  const docRef = db.collection("free_picks_results").doc(dateISO);
-  const snap = await docRef.get();
-
-  const now = admin.firestore.Timestamp.now();
-  const incoming = rawPicks.map(p => ({
-    fixtureId: p.fixtureId || null,
-    home: p.home, away: p.away,
-    market: p.market,
-    odds: Number(p.odds) || null,
-    status: "pending",
-    postedAt: now
-  }));
-
-  const key = x => (x.fixtureId ? `fx#${x.fixtureId}` : `${(x.home||"").toLowerCase()}#${(x.away||"").toLowerCase()}#${(x.market||"").toLowerCase()}`);
-
-  if (!snap.exists) {
-    await docRef.set({ date: dateISO, picks: incoming });
-    return;
-  }
-
-  const current = Array.isArray(snap.data().picks) ? snap.data().picks : [];
-  const have = new Set(current.map(key));
-  const toAdd = incoming.filter(p => !have.has(key(p)));
-  if (toAdd.length) {
-    await docRef.update({ picks: current.concat(toAdd) });
-  }
-}
-
-// get final score by fixtureId (preferred)
-async function fetchScoreByFixtureId(fixtureId) {
-  try {
-    const rows = await apiGet("/fixtures", { id: fixtureId });
-    const fx = rows?.[0];
-    if (!fx) return null;
-    const status = fx?.fixture?.status?.short || "";
-    const gh = fx?.goals?.home ?? null;
-    const ga = fx?.goals?.away ?? null;
-
-    // Finished states: FT, AET, PEN (API-Football)
-    const done = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
-    if (done.has(status) && Number.isFinite(gh) && Number.isFinite(ga)) {
-      return { homeGoals: Number(gh), awayGoals: Number(ga) };
-    }
-    return null;
-  } catch { return null; }
-}
-
-// fallback: match by names on date
-function norm(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,""); }
-async function fetchScoreByNamesOnDate(home, away, dateISO, tz="Europe/Sofia") {
-  try {
-    const rows = await apiGet("/fixtures", { date: dateISO, timezone: tz });
-    const H = norm(home), A = norm(away);
-    for (const r of rows) {
-      if (norm(r?.teams?.home?.name) === H && norm(r?.teams?.away?.name) === A) {
-        const status = r?.fixture?.status?.short || "";
-        const gh = r?.goals?.home ?? null;
-        const ga = r?.goals?.away ?? null;
-        const done = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
-        if (done.has(status) && Number.isFinite(gh) && Number.isFinite(ga)) {
-          return { homeGoals: Number(gh), awayGoals: Number(ga) };
-        }
-      }
-    }
-    return null;
-  } catch { return null; }
-}
-
-async function settleFreePicksForDate(dateISO, tz="Europe/Sofia") {
-  if (!db) return { dateISO, updated: 0, pendingLeft: 0 };
-  const docRef = db.collection("free_picks_results").doc(dateISO);
-  const snap = await docRef.get();
-  if (!snap.exists) return { dateISO, updated: 0, pendingLeft: 0 };
-
-  const data = snap.data() || {};
-  const picks = Array.isArray(data.picks) ? data.picks : [];
-  let updated = 0, pendingLeft = 0;
-  const now = admin.firestore.Timestamp.now();
-
-  const next = [];
-  for (const p of picks) {
-    if (p.status && p.status !== "pending") { next.push(p); continue; }
-
-    let score = null;
-    if (p.fixtureId) score = await fetchScoreByFixtureId(p.fixtureId);
-    if (!score)      score = await fetchScoreByNamesOnDate(p.home, p.away, dateISO, tz);
-
-    if (!score) {
-      pendingLeft++; next.push(p); continue;
-    }
-
-    const total = Number(score.homeGoals) + Number(score.awayGoals);
-    const status = resultForOverUnder25(total, p.market);
-    next.push({
-      ...p,
-      status,
-      finalScore: `${score.homeGoals}-${score.awayGoals}`,
-      settledAt: now
-    });
-    updated++;
-  }
-
-  await docRef.set({ date: dateISO, picks: next }, { merge: true });
-  return { dateISO, updated, pendingLeft };
-}
-/* ===================================================================== */
 
 /* ------------------------- Hero Bet (value) -------------------------- */
 function onex2Lean(home, away) {
@@ -656,6 +521,7 @@ async function scoreHeroCandidates(fx) {
     selection: c.selection,
     market: c.market,
     confidencePct: pct(c.conf),
+    // no odds exposed
     valueScore: Number((c.valueScore || 0).toFixed(4)),
     reasoning: c.reasoning,
   }));
@@ -853,20 +719,15 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
     } catch {}
   }
 
-    const groups = Array.from(byCountry.values())
-    .sort((a, b) => a.country.localeCompare(b.country))
-    .map((c) => ({
-      country: c.country,
-      flag: c.flag,
-      leagues: Array.from(c.leagues.values()).sort((a, b) =>
-        (a.leagueName || "").localeCompare(b.leagueName || "")
-      ),
+  const groups = Array.from(byCountry.values())
+    .sort((a,b)=> a.country.localeCompare(b.country))
+    .map(c => ({
+      country: c.country, flag: c.flag,
+      leagues: Array.from(c.leagues.values()).sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))
     }));
 
   return { date, timezone: tz, groups };
-} // <-- add this
-
-
+}
 
 /* ----------------- Stripe verify + Pro override merge ---------------- */
 async function verifyStripeByEmail(email) {
@@ -900,17 +761,13 @@ async function verifyStripeByEmail(email) {
 
   const item = best.items?.data?.[0] || {};
   const price = item.price || {};
-  const nickname = price.nickname || null;
+  theNickname = price.nickname || null;
+  const nickname = theNickname;
   const interval = price.recurring?.interval || null;
   const amount = typeof price.unit_amount === "number" ? (price.unit_amount / 100).toFixed(2) : null;
   const currency = price.currency ? price.currency.toUpperCase() : null;
 
-  const plan =
-  nickname ||
-  (interval
-    ? (amount ? `${interval} ${amount} ${currency}` : `${interval}`)
-    : (price.id || null));
-
+  const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
   return { pro: isPro, plan, status: best.status };
 }
 async function getProOverride(email) {
@@ -1047,10 +904,6 @@ export default async function handler(req, res) {
       }
 
       const payload = await pickFreePicks({ date, tz, minConf });
-
-      // NEW: persist today's two picks as "pending" (idempotent)
-      try { await persistDailyPicks(payload.picks, date); } catch (e) { console.error("persistDailyPicks failed:", e); }
-
       putCached(key, payload);
       await fpSet(date, tz, minConf, payload);
       return res.status(200).json(payload);
@@ -1152,31 +1005,6 @@ export default async function handler(req, res) {
         overrideUntil: hasOverride ? new Date(overrideSec * 1000).toISOString() : null,
       });
     }
-
-    /* ===================== NEW: Cron settlement route ================== */
-    if (action === "cron-settle-free-picks") {
-      const token = (req.query.token || "").toString();
-      const secret = process.env.CRON_SECRET || "";
-      if (secret && token !== secret) {
-        return res.status(401).json({ error: "unauthorized" });
-      }
-      const tz = req.query.tz || "Europe/Sofia";
-      const results = [];
-      const now = new Date();
-      for (let i = 0; i < 5; i++) {
-        const d = new Date(now);
-        d.setUTCDate(d.getUTCDate() - i);
-        const dateISO = ymd(d);
-        // Ensure today's picks are written (no-op if exists)
-        try {
-          // touching persist not required here; they are saved at free-picks action time
-        } catch {}
-        const r = await settleFreePicksForDate(dateISO, tz);
-        results.push(r);
-      }
-      return res.status(200).json({ ok: true, results });
-    }
-    /* =================================================================== */
 
     return res.status(404).json({ error: "Unknown action" });
   } catch (err) {
