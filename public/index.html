@@ -20,11 +20,8 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>OverEdge — Data beats gut</title>
-  <meta name="description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
-  <meta property="og:title" content="OverEdge — Data beats gut"/>
-  <meta property="og:description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
-  <meta property="og:type" content="website"/>
+  <title>OverEdge — Free Picks</title>
+  <meta name="description" content="Transparent football picks with clear confidence and reasoning."/>
   <link rel="stylesheet" href="/style.css"/>
 
   <!-- Favicons / icons -->
@@ -37,12 +34,25 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
+    function gtag(){ dataLayer.push(arguments); }
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
+
+  <style>
+    .lead { font-size: clamp(1.1rem, 1.7vw, 1.2rem); opacity:.8; margin-top:.25rem; }
+    .muted-sm{opacity:.7;font-size:.95rem}
+  </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
+<script>
+  (function(){
+    try{
+      const u=new URL(location.href); const c=u.searchParams.get('fbclid');
+      if(c) document.cookie="fbclid="+encodeURIComponent(c)+"; Max-Age="+60*60*24*90+"; Path=/; SameSite=Lax";
+    }catch{}
+  })();
+</script>
 
 <body>
   <header class="site-header">
@@ -60,29 +70,18 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         <a href="/results">Results</a>
         <a href="/account">Account</a>
       </div>
-      <!-- Global auth controls -->
       <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-        <span id="nav-plan" class="badge" style="display:none"></span>
+        <span id="nav-plan" class="badge pill" style="display:none"></span>
         <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
       </div>
     </nav>
   </header>
 
-  <main>
-    <section class="hero">
-      <h1>Data beats gut.</h1>
-      <p>Daily football picks powered by real stats. Two free picks every day, plus the Pro Board and a Hero Bet for value hunters.</p>
-      <p>
-        <a class="btn" href="/free-picks">See Today’s Free Picks</a>
-        <a class="btn secondary" href="/pricing">Go Pro</a>
-      </p>
-    </section>
-
-    <section class="section">
-      <h2>Today’s Free Picks (preview)</h2>
-      <div id="home-free-picks"></div>
-      <p style="margin-top:.6rem"><a class="btn small" href="/free-picks">View full details →</a></p>
-    </section>
+  <main class="section" style="max-width:900px">
+    <h1>Today’s Free Picks (preview)</h1>
+    <p class="lead">Two highest-confidence O/U 2.5 selections, with confidence %, odds (when available), and a quick reasoning line.</p>
+    <div id="home-free-picks" class="lead">Loading…</div>
+    <p><a class="btn" href="/free-picks">View full details →</a></p>
   </main>
 
   <footer class="site-footer">
@@ -97,7 +96,6 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
   </footer>
 
   <script>
-    // Year
     document.getElementById('y').textContent = new Date().getFullYear();
 
     function tzGuess(){
@@ -107,7 +105,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
     function reasonSnippet(html){
       if (!html) return "";
-      // Strip tags + collapse line breaks into spaces
+      // convert <br> to spaces, strip tags, grab first sentence
       const txt = html.replace(/<br\s*\/?>/gi, " ").replace(/<\/?[^>]+(>|$)/g, "");
       const first = txt.split(/[.?!]\s/)[0];
       return first ? first.trim().replace(/\.$/,"") + "." : "";
@@ -120,34 +118,35 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       return `
         <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
           <div style="font-weight:700">${league}</div>
-          <div class="muted" style="margin:.15rem 0 .4rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
-          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.2rem 0 .35rem">
+          <div class="muted" style="margin:.15rem 0 .35rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
             <strong>${p.market}</strong>
             <span class="badge pill conf">Confidence ${p.confidencePct}%</span>
             ${odds}
           </div>
-          ${snippet ? `<div class="muted" style="font-size:.95rem">${snippet}</div>` : ""}
+          ${snippet ? `<div class="muted-sm" style="margin-top:.45rem">${snippet}</div>` : ""}
         </div>
       `;
     }
 
-    // Preview two picks
     async function loadPreview() {
       const el = document.getElementById('home-free-picks');
-      el.innerHTML = 'Loading…';
+      if (!el) return;
+      el.textContent = 'Loading…';
       try {
         const res = await fetch(`/api/rpc?action=free-picks&tz=${encodeURIComponent(tzGuess())}&minConf=75`);
         const data = await res.json();
         const picks = Array.isArray(data?.picks) ? data.picks : [];
         if (!picks.length) {
-          el.innerHTML = '<p class="muted">No confident picks available yet today.</p>';
+          el.innerHTML = '<p class="lead">No confident picks available yet today.</p>';
           return;
         }
         el.innerHTML = picks.map(pickPreviewCard).join('');
       } catch (e) {
-        el.innerHTML = '<p>Could not load picks.</p>';
+        el.innerHTML = '<p class="lead">Could not load picks.</p>';
       }
     }
+
     document.addEventListener('DOMContentLoaded', loadPreview);
   </script>
 
