@@ -48,7 +48,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     /* Country / league headings */
     .country-block { margin:1.25rem 0; }
     .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; }
-    /* Force small flags regardless of intrinsic SVG sizes */
+    /* Flag size + subtle border */
     .country-header img.flag{
       width:16px !important;
       height:12px !important;
@@ -100,6 +100,13 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       color:#5b6b82;
       white-space:pre-wrap;
     }
+
+    /* NEW: collapse/expand countries */
+    .country-header{ cursor:pointer; }
+    .country-block .country-header::after{ content:"▾"; margin-left:.25rem; opacity:.6; }
+    .country-block.collapsed .country-header::after{ content:"▸"; }
+    .country-block.collapsed .league-title,
+    .country-block.collapsed .fixture-row{ display:none; }
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -316,10 +323,14 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         countryWrap.className = 'country-block';
         countryWrap.innerHTML = `
           <div class="country-header">
-            ${group.flag ? `<img class="flag" src="${group.flag}" alt="">` : ""}
+            ${group.flag ? `<img class="flag" src="${group.flag}" alt="${group.country} flag" loading="lazy" onerror="this.style.display='none'">` : ""}
             <span>${group.country}</span>
           </div>
         `;
+
+        /* NEW: toggle collapse on header click */
+        const hdr = countryWrap.querySelector('.country-header');
+        hdr.addEventListener('click', () => countryWrap.classList.toggle('collapsed'));
 
         (group.leagues || []).forEach(L => {
           const leagueTitle = document.createElement('div');

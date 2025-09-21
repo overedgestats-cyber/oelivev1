@@ -873,6 +873,19 @@ export default async function handler(req, res) {
     if (action === "health") {
       return res.status(200).json({ ok: true, env: process.env.NODE_ENV || "unknown" });
     }
+// FREE PICKS — RESULTS (read from Firestore)
+if (action === "free-picks-results") {
+  try {
+    const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+    const to    = (req.query.to    || "").toString().slice(0, 10) || null;
+    const limit = Number(req.query.limit || 60);
+    const payload = await listFreePickResults({ from, to, limit });
+    return res.status(200).json(payload);
+  } catch (e) {
+    console.error("free-picks-results error:", e);
+    return res.status(500).json({ error: "Results read error" });
+  }
+}
 
     if (action === "public-config") {
       return res.status(200).json({
@@ -1005,6 +1018,62 @@ export default async function handler(req, res) {
         overrideUntil: hasOverride ? new Date(overrideSec * 1000).toISOString() : null,
       });
     }
+// ===================== READ: Free Picks results ======================
+async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) {
+  if (!db) return { days: [], summary: null };
+
+  let q = db.collection("free_picks_results");
+  if (from) q = q.where("date", ">=", from);
+  if (to)   q = q.where("date", "<=", to);
+  // NOTE: Firestore requires an orderBy on the same field used in range filters
+  q = q.orderBy("date", "desc").limit(limit);
+
+  const snap = await q.get();
+
+  const days = [];
+  let wins = 0, losses = 0, push = 0;
+  let staked = 0, pnl = 0;
+
+  snap.forEach((doc) => {
+    const d = doc.data() || {};
+    const picks = Array.isArray(d.picks) ? d.picks : [];
+
+    picks.forEach((p) => {
+      const st = (p.status || "").toLowerCase();
+      if (st && st !== "pending") {
+        if (st === "win") wins += 1;
+        else if (st === "loss") losses += 1;
+        else push += 1;
+
+        const o = Number(p.odds);
+        if (Number.isFinite(o) && o > 1) {
+          staked += 1;
+          pnl += (st === "win") ? (o - 1) : -1; // unit stake ROI
+        }
+      }
+    });
+
+    days.push({
+      date: d.date,
+      picks: picks.map(p => ({
+        home: p.home, away: p.away, market: p.market,
+        odds: p.odds ?? null, status: p.status || "pending",
+        finalScore: p.finalScore || null
+      }))
+    });
+  });
+
+  const settled = wins + losses; // push excluded
+  const winRate = settled ? Math.round((wins / settled) * 100) : null;
+  const roiPct  = staked ? Math.round((pnl / staked) * 100) : null;
+
+  const total = days.reduce((acc, d) => acc + (d.picks?.length || 0), 0);
+
+  return {
+    days, // [{date, picks:[...]}, ...] newest first
+    summary: { total, wins, losses, push, winRate, roiPct }
+  };
+}
 
     return res.status(404).json({ error: "Unknown action" });
   } catch (err) {
