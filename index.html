@@ -1,11 +1,157 @@
-<!-- index.html -->
 <!doctype html>
 <html lang="en">
-  <meta charset="utf-8">
-  <title>OverEdge</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=/home">
-  <link rel="canonical" href="/home">
-  <script>location.replace('/home');</script>
-  <noscript>Redirecting to <a href="/home">/home</a>…</noscript>
+  <!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1135930111808538');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OverEdge — Data beats gut</title>
+  <meta name="description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
+  <meta property="og:title" content="OverEdge — Data beats gut"/>
+  <meta property="og:description" content="AI-powered football picks: Free Picks, Pro Board, and Hero Bet."/>
+  <meta property="og:type" content="website"/>
+  <link rel="stylesheet" href="/style.css"/>
+
+  <!-- Favicons / icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-88C4MQ3EF8');
+  </script>
+</head>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+
+<body>
+  <header class="site-header">
+    <nav class="nav">
+      <a class="logo brand" href="/" aria-label="OverEdge">
+        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
+        <span class="sr-only">OverEdge</span>
+      </a>
+
+      <div class="links">
+        <a href="/free-picks">Free Picks</a>
+        <a href="/pro">Pro</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/FAQ">FAQ</a>
+        <a href="/results">Results</a>
+        <a href="/account">Account</a>
+      </div>
+      <!-- Global auth controls -->
+      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
+        <span id="nav-plan" class="badge" style="display:none"></span>
+        <button id="nav-auth" class="btn small secondary" type="button">Sign In</button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Data beats gut.</h1>
+      <p>Daily football picks powered by real stats. Two free picks every day, plus the Pro Board and a Hero Bet for value hunters.</p>
+      <p>
+        <a class="btn" href="/free-picks">See Today’s Free Picks</a>
+        <a class="btn secondary" href="/pricing">Go Pro</a>
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>Today’s Free Picks (preview)</h2>
+      <div id="home-free-picks"></div>
+      <p style="margin-top:.6rem"><a class="btn small" href="/free-picks">View full details →</a></p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
+    <div class="contact">
+      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
+    </div>
+  </footer>
+
+  <script>
+    // Year
+    document.getElementById('y').textContent = new Date().getFullYear();
+
+    function tzGuess(){
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
+      catch { return "Europe/Sofia"; }
+    }
+
+    function reasonSnippet(html){
+      if (!html) return "";
+      // Strip tags + collapse line breaks into spaces
+      const txt = html.replace(/<br\s*\/?>/gi, " ").replace(/<\/?[^>]+(>|$)/g, "");
+      const first = txt.split(/[.?!]\s/)[0];
+      return first ? first.trim().replace(/\.$/,"") + "." : "";
+    }
+
+    function pickPreviewCard(p){
+      const league = [p.country, p.league].filter(Boolean).join(" — ");
+      const odds = (p.odds && !isNaN(Number(p.odds))) ? `<span class="badge odds" style="margin-left:.4rem">Odds ${Number(p.odds).toFixed(2)}</span>` : "";
+      const snippet = reasonSnippet(p.reasoning || "");
+      return `
+        <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
+          <div style="font-weight:700">${league}</div>
+          <div class="muted" style="margin:.15rem 0 .4rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.2rem 0 .35rem">
+            <strong>${p.market}</strong>
+            <span class="badge pill conf">Confidence ${p.confidencePct}%</span>
+            ${odds}
+          </div>
+          ${snippet ? `<div class="muted" style="font-size:.95rem">${snippet}</div>` : ""}
+        </div>
+      `;
+    }
+
+    // Preview two picks
+    async function loadPreview() {
+      const el = document.getElementById('home-free-picks');
+      el.innerHTML = 'Loading…';
+      try {
+        const res = await fetch(`/api/rpc?action=free-picks&tz=${encodeURIComponent(tzGuess())}&minConf=75`);
+        const data = await res.json();
+        const picks = Array.isArray(data?.picks) ? data.picks : [];
+        if (!picks.length) {
+          el.innerHTML = '<p class="muted">No confident picks available yet today.</p>';
+          return;
+        }
+        el.innerHTML = picks.map(pickPreviewCard).join('');
+      } catch (e) {
+        el.innerHTML = '<p>Could not load picks.</p>';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', loadPreview);
+  </script>
+
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
+</body>
 </html>
