@@ -2,16 +2,23 @@
   "version": 2,
   "cleanUrls": true,
   "rewrites": [
-  { "source": "/home",       "destination": "/" },
-  { "source": "/free-picks", "destination": "/public/free-picks.html" },
-  { "source": "/pricing",    "destination": "/public/pricing.html" },
-  { "source": "/pro",        "destination": "/public/pro.html" },
-  { "source": "/faq",        "destination": "/public/FAQ.html" },
-  { "source": "/account",    "destination": "/public/account.html" },
-  { "source": "/results",    "destination": "/public/results.html" },
-  { "source": "/api/:match*", "destination": "/api/:match*" }
-],
+    { "source": "/",              "destination": "/index.html" },
 
+    { "source": "/home",          "destination": "/" },
+
+    { "source": "/free-picks",    "destination": "/public/free-picks.html" },
+    { "source": "/pricing",       "destination": "/public/pricing.html" },
+    { "source": "/pro",           "destination": "/public/pro.html" },
+    { "source": "/faq",           "destination": "/public/FAQ.html" },
+    { "source": "/account",       "destination": "/public/account.html" },
+    { "source": "/results",       "destination": "/public/results.html" },
+
+  
+    { "source": "/style.css",     "destination": "/public/style.css" },
+    { "source": "/img/:path*",    "destination": "/public/img/:path*" },
+
+    { "source": "/api/:match*",   "destination": "/api/:match*" }
+  ],
   "crons": [
     { "path": "/api/rpc?action=free-picks&tz=Europe/Sofia&minConf=75&refresh=1", "schedule": "0 6 * * *" },
     { "path": "/api/rpc?action=pro-pick&tz=Europe/Sofia&refresh=1",               "schedule": "5 6 * * *" },
