@@ -2,7 +2,7 @@
   "version": 2,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/",            "destination": "/public/home.html" },
+    { "source": "/",            "destination": "/index.html" },
     { "source": "/free-picks",  "destination": "/public/free-picks.html" },
     { "source": "/pricing",     "destination": "/public/pricing.html" },
     { "source": "/pro",         "destination": "/public/pro.html" },
@@ -19,4 +19,5 @@
     { "path": "/api/rpc?action=cron-settle-free-picks&tz=Europe/Sofia&token=f29103927eeb4e0bbb6c47a097d2e762", "schedule": "0 23 * * *" }
   ]
 }
+
 
