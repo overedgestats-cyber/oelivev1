@@ -13,26 +13,30 @@
 //  - pro-board-results   (read Pro Board daily summaries from Firestore)
 
 const API_BASE = "https://v3.football.api-sports.io";
-// --- Firebase Admin (server) ---
-import * as admin from "firebase-admin";
-
+/* --------------------- Firestore (Admin) init --------------------- */
 let db = null;
+
 try {
+  // Lazy import to avoid bundling issues in edge runtimes
+  const admin = require("firebase-admin");
+
+  // Only init once (important for hot reload)
   if (!admin.apps.length) {
+    const pk = (process.env.FB_PRIVATE_KEY || "").replace(/\\n/g, "\n");
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId: process.env.FB_PROJECT_ID,
         clientEmail: process.env.FB_CLIENT_EMAIL,
-        // Important: replace \n in the private key for Vercel env
-        privateKey: (process.env.FB_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+        privateKey: pk,
       }),
     });
   }
-  db = admin.firestore();
+  db = require("firebase-admin").firestore();
 } catch (e) {
-  console.error("Firebase admin init error:", e);
-  db = null; // keeps API alive; results endpoints will return empty
+  console.error("Firestore init error:", e?.message || e);
+  db = null; // keep server alive even if Firestore is not configured
 }
+
 
 /* --------------------------- Generic Helpers --------------------------- */
 function ymd(d = new Date()) { return new Date(d).toISOString().slice(0, 10); }
