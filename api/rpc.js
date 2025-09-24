@@ -13,6 +13,26 @@
 //  - pro-board-results   (read Pro Board daily summaries from Firestore)
 
 const API_BASE = "https://v3.football.api-sports.io";
+// --- Firebase Admin (server) ---
+import * as admin from "firebase-admin";
+
+let db = null;
+try {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FB_PROJECT_ID,
+        clientEmail: process.env.FB_CLIENT_EMAIL,
+        // Important: replace \n in the private key for Vercel env
+        privateKey: (process.env.FB_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+      }),
+    });
+  }
+  db = admin.firestore();
+} catch (e) {
+  console.error("Firebase admin init error:", e);
+  db = null; // keeps API alive; results endpoints will return empty
+}
 
 /* --------------------------- Generic Helpers --------------------------- */
 function ymd(d = new Date()) { return new Date(d).toISOString().slice(0, 10); }
