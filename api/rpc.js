@@ -761,8 +761,7 @@ async function verifyStripeByEmail(email) {
 
   const item = best.items?.data?.[0] || {};
   const price = item.price || {};
-  theNickname = price.nickname || null;
-  const nickname = theNickname;
+  const nickname = price.nickname || null;
   const interval = price.recurring?.interval || null;
   const amount = typeof price.unit_amount === "number" ? (price.unit_amount / 100).toFixed(2) : null;
   const currency = price.currency ? price.currency.toUpperCase() : null;
