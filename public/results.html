@@ -54,7 +54,7 @@
 
   <main class="section" style="max-width:1000px">
     <h1>Free Picks — Results</h1>
-    <p class="muted">Transparent record of outcomes. We calculate Win% from settled picks (Push excluded). ROI is computed only when odds are available.</p>
+    <p class="muted">Transparent record of outcomes. We calculate Win% from settled picks (Push excluded). ROI assumes 1u flat staking when odds are present.</p>
 
     <div id="summary" class="results-summary">
       <div class="card"><div><strong>Total</strong></div><div id="s-total">—</div></div>
@@ -81,107 +81,147 @@
   <script>
     document.getElementById('y').textContent=new Date().getFullYear();
 
-    // === EDIT HERE (if you need to tweak dates later) ===
-    // date format: YYYY-MM-DD
-    const RESULTS = [
-      // --- Added 24.09.2025 ---
-      { date:"2025-09-24", home:"VfL Wolfsburg W", away:"Werder Bremen W",   market:"Over 2.5",  odds:1.57, status:"win" },
-      { date:"2025-09-24", home:"Kabel Novi Sad",  away:"Semendrija 1924",   market:"Under 2.5", odds:1.44, status:"lose" },
-
-      // --- Added 23.09.2025 ---
-      { date:"2025-09-23", home:"Miedź Legnica II", away:"Świt Skolwin", market:"Over 2.5", odds:1.55, status:"win" },
-      { date:"2025-09-23", home:"Cagliari",        away:"Frosinone",     market:"Under 2.5", odds:1.80, status:"lose" },
-
-      // --- Added 22.09.2025 ---
-      { date:"2025-09-22", home:"Barcelona Atlètic", away:"Castellón B", market:"Over 2.5", odds:1.60, status:"win" },
-
-      // --- Added 21.09.2025 (with odds) ---
-      { date:"2025-09-21", home:"Rēzekne FA", away:"Skanste",      market:"Over 2.5", odds:1.45, status:"win" },
-      { date:"2025-09-21", home:"Häcken W",   away:"Rosengård W",  market:"Over 2.5", odds:1.73, status:"win" },
-
-      // --- Existing historical records ---
-      { date:"2024-09-20", home:"1899 Hoffenheim", away:"Bayern München",  market:"Over 2.5", odds:1.35, status:"win" },
-      { date:"2024-09-16", home:"Tonbridge Angels", away:"Steyning Town",  market:"Over 2.5", odds:1.67, status:"win" },
-      { date:"2024-09-14", home:"Pitea W",          away:"Brommapojkarna W", market:"Over 2.5", odds:1.69, status:"win" },
-      { date:"2024-09-17", home:"Cham",             away:"Vevey Sports",    market:"Over 2.5", odds:1.54, status:"win" },
-      { date:"2024-09-16", home:"Rylands",          away:"Ashton United",   market:"Under 2.5", odds:1.80, status:"win" },
-      { date:"2024-09-20", home:"Ogre United",      away:"Riga Mariners",   market:"Over 2.5", odds:1.65, status:"win" },
-      { date:"2024-09-14", home:"Marupe",           away:"JDFS Alberts",    market:"Over 2.5", odds:1.47, status:"win" },
-      { date:"2024-09-16", home:"Sharjah FC",       away:"Al-Gharafa",      market:"Over 2.5", odds:1.70, status:"win" },
-      { date:"2024-09-17", home:"Rothis",           away:"Sturm Graz",      market:"Over 2.5", odds:1.20, status:"lose" },
-    ];
-    // =====================================================
-
-    const el = (id)=>document.getElementById(id);
-
-    function render(){
-      const rows = RESULTS.slice();
-
-      // Stats
-      const total = rows.length;
-      const wins  = rows.filter(r=>r.status==='win').length;
-      const losses= rows.filter(r=>r.status==='lose').length;
-      const settled = wins + losses;
-      const winrate = settled ? (wins/settled*100).toFixed(1)+'%' : '—';
-
-      // ROI (stake 1 per pick when odds present)
-      let stake=0, profit=0;
-      rows.forEach(r=>{
-        if (typeof r.odds === 'number') {
-          stake += 1;
-          if (r.status==='win') profit += (r.odds - 1);
-          else if (r.status==='lose') profit -= 1;
-        }
-      });
-      const roi = stake ? ((profit/stake)*100).toFixed(1)+'%' : '—';
-
-      el('s-total').textContent  = total;
-      el('s-wins').textContent   = wins;
-      el('s-losses').textContent = losses;
-      el('s-winrate').textContent= winrate;
-      el('s-roi').textContent    = roi;
-
-      // Group by date (desc)
-      const byDate = {};
-      rows.forEach(r => { (byDate[r.date] ||= []).push(r); });
-      const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
-
-      // Render sections
-      const host = el('list');
-      host.innerHTML = '';
-      dates.forEach(date => {
-        const day = byDate[date];
-        const wrap = document.createElement('section');
-        wrap.innerHTML = `
-          <div class="date-head">${date}</div>
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>Match</th><th>Market</th><th>Odds</th><th>Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${day.map(p=>{
-                const wl = p.status==='win' ? '<span class="wl-pill wl-win">WIN</span>'
-                          : p.status==='lose' ? '<span class="wl-pill wl-lose">LOSE</span>'
-                          : '—';
-                return `
-                  <tr>
-                    <td><strong>${p.home}</strong> vs <strong>${p.away}</strong></td>
-                    <td><strong>${p.market}</strong></td>
-                    <td>${typeof p.odds==='number' ? p.odds.toFixed(2) : '—'}</td>
-                    <td>${wl}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        `;
-        host.appendChild(wrap);
-      });
+    // --- helpers ---
+    function ymd(d=new Date()){ return new Date(d).toISOString().slice(0,10); }
+    function monthKey(dateStr){ return (dateStr||'').slice(0,7); } // "YYYY-MM"
+    function monthLabel(key){
+      const [y,m] = key.split('-').map(Number);
+      const d = new Date(y, m-1, 1);
+      return d.toLocaleDateString(undefined, { year:'numeric', month:'long' });
+    }
+    function wlPill(status){
+      const s = String(status||'').toLowerCase();
+      if (s === 'win') return '<span class="wl-pill wl-win">WIN</span>';
+      if (s === 'loss' || s === 'lose') return '<span class="wl-pill wl-lose">LOSE</span>';
+      return '—';
     }
 
-    render();
+    async function loadResults({from=null, to=null, limit=365} = {}){
+      const q = new URLSearchParams();
+      if (from) q.set('from', from);
+      if (to)   q.set('to', to);
+      q.set('limit', String(limit)); // grab up to a year
+      const r = await fetch(`/api/rpc?action=free-picks-results&${q.toString()}`, { cache:'no-store' });
+      if (!r.ok) throw new Error('Results fetch failed');
+      return r.json();
+    }
+
+    function computeStats(picks){
+      let wins=0, losses=0, stake=0, pnl=0;
+      for (const p of picks){
+        const s = String(p.status||'').toLowerCase();
+        if (s === 'win') wins++;
+        else if (s === 'lose' || s === 'loss') losses++;
+        if (typeof p.odds === 'number'){
+          stake += 1;
+          if (s === 'win') pnl += (p.odds - 1);
+          else if (s === 'lose' || s === 'loss') pnl -= 1;
+        }
+      }
+      const settled = wins + losses;
+      const winRate = settled ? Math.round((wins/settled)*100) : null;
+      const roiPct  = stake ? Math.round((pnl/stake)*100) : null;
+      return { wins, losses, settled, winRate, roiPct, stake, pnl };
+    }
+
+    function renderSummary(summary){
+      const el = id => document.getElementById(id);
+      const { total, wins, losses, winRate, roiPct } = summary || {};
+      el('s-total').textContent   = total ?? '—';
+      el('s-wins').textContent    = wins  ?? '—';
+      el('s-losses').textContent  = losses?? '—';
+      el('s-winrate').textContent = (winRate!=null ? `${winRate}%` : '—');
+      el('s-roi').textContent     = (roiPct!=null ? `${roiPct}%` : '—');
+    }
+
+    function renderMonthly(monthMap, ytd){
+      const host = document.getElementById('list');
+      host.innerHTML = '';
+
+      // YTD block
+      const ytdBlock = document.createElement('section');
+      ytdBlock.className = 'card';
+      ytdBlock.style.padding = '.9rem 1rem';
+      ytdBlock.innerHTML = `
+        <div style="font-weight:800;margin-bottom:.35rem">Year-to-Date</div>
+        <div class="muted-sm">
+          Picks: <strong>${ytd.settled}</strong> &nbsp;·&nbsp;
+          Wins: <strong>${ytd.wins}</strong> &nbsp;·&nbsp;
+          Losses: <strong>${ytd.losses}</strong> &nbsp;·&nbsp;
+          Win%: <strong>${ytd.winRate!=null?ytd.winRate+'%':'—'}</strong> &nbsp;·&nbsp;
+          ROI: <strong>${ytd.roiPct!=null?ytd.roiPct+'%':'—'}</strong>
+        </div>
+      `;
+      host.appendChild(ytdBlock);
+
+      const months = Array.from(monthMap.keys()).sort().reverse();
+      for (const key of months){
+        const monthData = monthMap.get(key);
+        const allPicks = monthData.days.flatMap(d => d.picks || []);
+        const mStats = computeStats(allPicks);
+
+        const wrap = document.createElement('section');
+        wrap.innerHTML = `
+          <div class="date-head" style="display:flex;justify-content:space-between;align-items:baseline">
+            <span>${monthLabel(key)}</span>
+            <span class="muted-sm">
+              Picks: <strong>${mStats.settled}</strong> &nbsp;·&nbsp;
+              Win%: <strong>${mStats.winRate!=null?mStats.winRate+'%':'—'}</strong> &nbsp;·&nbsp;
+              ROI: <strong>${mStats.roiPct!=null?mStats.roiPct+'%':'—'}</strong>
+            </span>
+          </div>
+        `;
+        monthData.days.forEach(d => {
+          const table = document.createElement('div');
+          table.innerHTML = `
+            <div class="muted-sm" style="margin:.35rem 0 .2rem;"><strong>${d.date}</strong></div>
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Match</th><th>Market</th><th>Odds</th><th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(d.picks||[]).map(p => `
+                  <tr>
+                    <td><strong>${p.home||''}</strong> vs <strong>${p.away||''}</strong>${p.finalScore?` <span class="muted-sm">(${p.finalScore})</span>`:''}</td>
+                    <td><strong>${p.market||''}</strong></td>
+                    <td>${(typeof p.odds==='number') ? Number(p.odds).toFixed(2) : '—'}</td>
+                    <td>${wlPill(p.status)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+          wrap.appendChild(table);
+        });
+
+        host.appendChild(wrap);
+      }
+    }
+
+    (async () => {
+      try {
+        const today = ymd();
+        const { days, summary } = await loadResults({ to: today, limit: 365 });
+        renderSummary(summary);
+
+        const monthMap = new Map();
+        for (const d of (days || [])){
+          const key = monthKey(d.date);
+          if (!monthMap.has(key)) monthMap.set(key, { days: [] });
+          monthMap.get(key).days.push(d);
+        }
+
+        const ytdPicks = (days || []).flatMap(d => d.picks || []);
+        const ytd = computeStats(ytdPicks);
+
+        renderMonthly(monthMap, ytd);
+      } catch (e) {
+        document.getElementById('list').innerHTML = '<p>Could not load results right now.</p>';
+        console.error(e);
+      }
+    })();
   </script>
 </body>
 </html>

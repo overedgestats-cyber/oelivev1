@@ -8,6 +8,9 @@
 //  - pro-board           (flat list; strict allowed comps)
 //  - pro-board-grouped   (grouped by country with flag; strict allowed comps)
 //  - verify-sub
+//  - free-picks-results  (read Free Picks outcomes from Firestore)
+//  - hero-bet-results    (read Hero Bet outcomes from Firestore)
+//  - pro-board-results   (read Pro Board daily summaries from Firestore)
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -291,10 +294,7 @@ async function teamLastN(teamId, n = 12) {
   let gp = 0, goalsFor = 0, goalsAg = 0, over25 = 0, under25 = 0, btts = 0;
   let wins = 0, draws = 0, losses = 0, cs = 0, fts = 0;
 
-  // Venue splits for O2.5
   let homeG = 0, awayG = 0, o25Home = 0, o25Away = 0;
-  // (Optional) Venue PPG (not exposed, but can be added later)
-  // let ppgHomePts = 0, ppgAwayPts = 0;
 
   for (const r of rows) {
     const gh = r?.goals?.home ?? 0, ga = r?.goals?.away ?? 0, total = gh + ga;
@@ -310,15 +310,13 @@ async function teamLastN(teamId, n = 12) {
     if (total <= 2) under25 += 1;
     if (gh > 0 && ga > 0) btts += 1;
 
-    // Outcomes
-    if (tf > ta) { wins += 1; /* if (isHome) ppgHomePts += 3; else ppgAwayPts += 3; */ }
-    else if (tf === ta) { draws += 1; /* if (isHome) ppgHomePts += 1; else ppgAwayPts += 1; */ }
+    if (tf > ta) { wins += 1; }
+    else if (tf === ta) { draws += 1; }
     else { losses += 1; }
 
     if (ta === 0) cs += 1;
     if (tf === 0) fts += 1;
 
-    // Venue splits for O2.5
     if (isHome) { homeG += 1; if (total >= 3) o25Home += 1; }
     else { awayG += 1; if (total >= 3) o25Away += 1; }
   }
@@ -333,7 +331,6 @@ async function teamLastN(teamId, n = 12) {
     under25Rate: gp ? under25 / gp : 0,
     bttsRate: gp ? btts / gp : 0,
 
-    // Rich metrics
     ppg,
     winRate:   gp ? wins  / gp : 0,
     drawRate:  gp ? draws / gp : 0,
@@ -341,16 +338,13 @@ async function teamLastN(teamId, n = 12) {
     cleanSheetRate:  gp ? cs  / gp : 0,
     failToScoreRate: gp ? fts / gp : 0,
 
-    // Venue split for O2.5
     o25HomeRate: homeG ? o25Home / homeG : 0,
     o25AwayRate: awayG ? o25Away / awayG : 0,
   };
 }
 
-// Prefer this bookmaker id (Bet365 = 8 in API-Football)
 const PREFERRED_BOOKMAKER_ID = Number(process.env.PREFERRED_BOOKMAKER_ID || 8) || null;
 
-// Odds helper — internal only (kept for free-picks and value calc), hidden elsewhere
 async function getOddsMap(fixtureId) {
   try {
     const rows = await apiGet("/odds", { fixture: fixtureId });
@@ -423,14 +417,12 @@ async function scoreFixtureForOU25(fx) {
     away: fx?.teams?.away?.name,
     market: pick,
     confidencePct: confPct,
-    // Keep odds for Free Picks only
     odds: odds ? odds[pick === "Over 2.5" ? "over25" : "under25"] : null,
     reasoning: reasonOURich(fx, home, away, pick, confPct),
   };
 }
 
-// In-memory daily cache (sticky for the day unless refresh=1)
-const FREEPICKS_CACHE = new Map(); // key -> { payload, exp }
+const FREEPICKS_CACHE = new Map();
 function cacheKey(date, tz, minConf) { return `fp|${date}|${tz}|${minConf}`; }
 function getCached(key) { const e = FREEPICKS_CACHE.get(key); if (e && e.exp > Date.now()) return e.payload; if (e) FREEPICKS_CACHE.delete(key); return null; }
 function putCached(key, payload) { const ttlMs = 22 * 60 * 60 * 1000; FREEPICKS_CACHE.set(key, { payload, exp: Date.now() + ttlMs }); }
@@ -464,7 +456,7 @@ async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
   const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
-  const odds = await getOddsMap(fx?.fixture?.id); // used internally only (no exposure)
+  const odds = await getOddsMap(fx?.fixture?.id);
   const time = clockFromISO(fx?.fixture?.date);
   const candidates = [];
 
@@ -521,7 +513,6 @@ async function scoreHeroCandidates(fx) {
     selection: c.selection,
     market: c.market,
     confidencePct: pct(c.conf),
-    // no odds exposed
     valueScore: Number((c.valueScore || 0).toFixed(4)),
     reasoning: c.reasoning,
   }));
@@ -857,8 +848,9 @@ async function pbSet(date, tz, payload){
 
 function pbgRedisKey(date, tz, market){ return `proboardg:${date}:${tz}:${market}`; }
 async function pbgGet(date, tz, market){
-  try { const v = await kvGet(pbgRedisKey(date, tz, market)); if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result); }
-  catch {} return null;
+  try { const v = await kvGet(pbgRedisKey(date, tz, market)); 
+    if  (v && typeof v.result === "string" && v.result) return JSON.parse(v.result);
+} catch {} return null;
 }
 async function pbgSet(date, tz, market, payload){
   try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
@@ -872,19 +864,48 @@ export default async function handler(req, res) {
     if (action === "health") {
       return res.status(200).json({ ok: true, env: process.env.NODE_ENV || "unknown" });
     }
-// FREE PICKS — RESULTS (read from Firestore)
-if (action === "free-picks-results") {
-  try {
-    const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
-    const to    = (req.query.to    || "").toString().slice(0, 10) || null;
-    const limit = Number(req.query.limit || 60);
-    const payload = await listFreePickResults({ from, to, limit });
-    return res.status(200).json(payload);
-  } catch (e) {
-    console.error("free-picks-results error:", e);
-    return res.status(500).json({ error: "Results read error" });
-  }
-}
+
+    // FREE PICKS — RESULTS (read from Firestore)
+    if (action === "free-picks-results") {
+      try {
+        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+        const to    = (req.query.to    || "").toString().slice(0, 10) || null;
+        const limit = Number(req.query.limit || 60);
+        const payload = await listFreePickResults({ from, to, limit });
+        return res.status(200).json(payload);
+      } catch (e) {
+        console.error("free-picks-results error:", e);
+        return res.status(500).json({ error: "Results read error" });
+      }
+    }
+
+    // HERO BET — RESULTS (read from Firestore)
+    if (action === "hero-bet-results") {
+      try {
+        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+        const to    = (req.query.to    || "").toString().slice(0, 10) || null;
+        const limit = Number(req.query.limit || 60);
+        const payload = await listHeroBetResults({ from, to, limit });
+        return res.status(200).json(payload);
+      } catch (e) {
+        console.error("hero-bet-results error:", e);
+        return res.status(500).json({ error: "Hero results read error" });
+      }
+    }
+
+    // PRO BOARD — DAILY SUMMARIES (read from Firestore; aggregates by market)
+    if (action === "pro-board-results") {
+      try {
+        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+        const to    = (req.query.to    || "").toString().slice(0, 10) || null;
+        const limit = Number(req.query.limit || 60);
+        const payload = await listProBoardSummaries({ from, to, limit });
+        return res.status(200).json(payload);
+      } catch (e) {
+        console.error("pro-board-results error:", e);
+        return res.status(500).json({ error: "Pro board results read error" });
+      }
+    }
 
     if (action === "public-config") {
       return res.status(200).json({
@@ -1017,14 +1038,141 @@ if (action === "free-picks-results") {
         overrideUntil: hasOverride ? new Date(overrideSec * 1000).toISOString() : null,
       });
     }
-// ===================== READ: Free Picks results ======================
+
+    return res.status(404).json({ error: "Unknown action" });
+  } catch (err) {
+    console.error("RPC error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+/* ===================== READ: Hero Bet results ====================== */
+// Firestore collection: hero_bet_results
+// Doc example:
+// { date:"YYYY-MM-DD", fixtureId, league, country, home, away,
+//   market:"Over 2.5", selection:"Over 2.5", confidencePct:83,
+//   odds:1.57, status:"win|loss|push|pending", finalScore:"3-0" }
+async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
+  if (typeof db === "undefined" || !db) return { days: [], summary: null };
+
+  let q = db.collection("hero_bet_results");
+  if (from) q = q.where("date", ">=", from);
+  if (to)   q = q.where("date", "<=", to);
+  q = q.orderBy("date", "desc").limit(limit);
+
+  const snap = await q.get();
+
+  const days = [];
+  let wins = 0, losses = 0, push = 0;
+  let staked = 0, pnl = 0;
+
+  snap.forEach((doc) => {
+    const d = doc.data() || {};
+    const p = {
+      home: d.home, away: d.away,
+      market: d.market || d.selection || "",
+      odds: (typeof d.odds === "number" ? d.odds : null),
+      status: d.status || "pending",
+      finalScore: d.finalScore || null
+    };
+
+    const st = (p.status || "").toLowerCase();
+    if (st && st !== "pending") {
+      if (st === "win") wins += 1;
+      else if (st === "loss" || st === "lose") losses += 1;
+      else push += 1;
+
+      if (typeof p.odds === "number" && p.odds > 1) {
+        staked += 1;
+        pnl += (st === "win") ? (p.odds - 1) : -1; // 1u staking
+      }
+    }
+
+    days.push({ date: d.date, picks: [p] }); // one hero pick per day
+  });
+
+  const settled = wins + losses;
+  const winRate = settled ? Math.round((wins / settled) * 100) : null;
+  const roiPct  = staked ? Math.round((pnl / staked) * 100) : null;
+  const total   = days.length;
+
+  return { days, summary: { total, wins, losses, push, winRate, roiPct } };
+}
+
+/* ===================== READ: Pro Board daily summaries ====================== */
+// Firestore collection: pro_board_results (one doc per date)
+// Minimal doc shape (recommended):
+// { date:"YYYY-MM-DD",
+//   totals: {
+//     ou_goals:{wins:7, losses:3, push:0},
+//     btts:{wins:5, losses:4, push:1},
+//     one_x_two:{wins:6, losses:6, push:0},
+//     ou_cards:{wins:3, losses:4, push:1},        // optional
+//     ou_corners:{wins:2, losses:3, push:0}       // optional
+//   }
+// }
+async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}) {
+  if (typeof db === "undefined" || !db) return { days: [], summary: null };
+
+  let q = db.collection("pro_board_results");
+  if (from) q = q.where("date", ">=", from);
+  if (to)   q = q.where("date", "<=", to);
+  q = q.orderBy("date", "desc").limit(limit);
+
+  const snap = await q.get();
+
+  const days = [];
+  let Gwins = 0, Glosses = 0, Gpush = 0;
+
+  snap.forEach((doc) => {
+    const d = doc.data() || {};
+    const T = d.totals || {};
+    const markets = Object.keys(T);
+
+    let dayWins = 0, dayLosses = 0, dayPush = 0;
+
+    markets.forEach(m => {
+      const row = T[m] || {};
+      const w = Number(row.wins  || 0);
+      const l = Number(row.losses|| 0);
+      const p = Number(row.push  || 0);
+      dayWins   += w; dayLosses += l; dayPush += p;
+    });
+
+    Gwins  += dayWins;
+    Glosses+= dayLosses;
+    Gpush  += dayPush;
+
+    days.push({
+      date: d.date,
+      totals: T,
+      combined: { wins: dayWins, losses: dayLosses, push: dayPush }
+    });
+  });
+
+  const settled = Gwins + Glosses;
+  const winRate = settled ? Math.round((Gwins / settled) * 100) : null;
+
+  const summary = {
+    totalDays: days.length,
+    wins: Gwins,
+    losses: Glosses,
+    push: Gpush,
+    winRate,
+    roiPct: null // odds not tracked for board by default
+  };
+
+  return { days, summary };
+}
+
+/* ===================== READ: Free Picks results ====================== */
 async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) {
-  if (!db) return { days: [], summary: null };
+  if (typeof db === "undefined" || !db) return { days: [], summary: null };
 
   let q = db.collection("free_picks_results");
   if (from) q = q.where("date", ">=", from);
   if (to)   q = q.where("date", "<=", to);
-  // NOTE: Firestore requires an orderBy on the same field used in range filters
+  // Firestore needs orderBy on the same field used in range filters
   q = q.orderBy("date", "desc").limit(limit);
 
   const snap = await q.get();
@@ -1047,7 +1195,7 @@ async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) 
         const o = Number(p.odds);
         if (Number.isFinite(o) && o > 1) {
           staked += 1;
-          pnl += (st === "win") ? (o - 1) : -1; // unit stake ROI
+          pnl += (st === "win") ? (o - 1) : -1; // 1u ROI calc
         }
       }
     });
@@ -1072,11 +1220,4 @@ async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) 
     days, // [{date, picks:[...]}, ...] newest first
     summary: { total, wins, losses, push, winRate, roiPct }
   };
-}
-
-    return res.status(404).json({ error: "Unknown action" });
-  } catch (err) {
-    console.error("RPC error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
 }
