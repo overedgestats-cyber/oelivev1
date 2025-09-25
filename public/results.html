@@ -108,6 +108,7 @@
       { date:"2025-09-21", home:"Rēzekne FA",       away:"Skanste",          market:"Over 2.5", odds:1.45, status:"win" },
       { date:"2025-09-21", home:"Häcken W",         away:"Rosengård W",      market:"Over 2.5", odds:1.73, status:"win" },
 
+      /* Keep older data in file if you want, but it will be hidden by the MIN_MONTH filter below
       // 2024-09-20
       { date:"2024-09-20", home:"1899 Hoffenheim",  away:"Bayern München",   market:"Over 2.5", odds:1.35, status:"win" },
       { date:"2024-09-20", home:"Ogre United",      away:"Riga Mariners",    market:"Over 2.5", odds:1.65, status:"win" },
@@ -124,6 +125,7 @@
       // 2024-09-14
       { date:"2024-09-14", home:"Pitea W",          away:"Brommapojkarna W", market:"Over 2.5", odds:1.69, status:"win" },
       { date:"2024-09-14", home:"Marupe",           away:"JDFS Alberts",     market:"Over 2.5", odds:1.47, status:"win" },
+      */
     ];
 
     // --- helpers ---
@@ -158,9 +160,15 @@
       return { wins, losses, settled, winRate, roiPct, stake, pnl };
     }
 
-    // Build month groups
+    // ---- Hide months older than launch (remove Sep 2024 etc.)
+    const MIN_MONTH = '2025-09';
+
+    // Filtered list used for UI (dropdown, list, and "All months")
+    const ALLOWED_RESULTS = RESULTS.filter(r => monthKey(r.date) >= MIN_MONTH);
+
+    // Build month groups (allowed only)
     const byMonth = new Map();
-    RESULTS.forEach(r => {
+    ALLOWED_RESULTS.forEach(r => {
       const k = monthKey(r.date);
       if (!byMonth.has(k)) byMonth.set(k, []);
       byMonth.get(k).push(r);
@@ -168,9 +176,15 @@
 
     // Populate month dropdown (descending), prepend "All"
     const monthSelect = el('monthSelect');
-    const months = Array.from(byMonth.keys()).sort((a,b)=> b.localeCompare(a));
-    const allOpt = document.createElement('option'); allOpt.value = 'all'; allOpt.textContent = 'All months';
+    const months = Array.from(byMonth.keys())
+      .filter(k => k >= MIN_MONTH)
+      .sort((a,b)=> b.localeCompare(a));
+
+    const allOpt = document.createElement('option');
+    allOpt.value = 'all';
+    allOpt.textContent = 'All months';
     monthSelect.appendChild(allOpt);
+
     months.forEach(k=>{
       const opt = document.createElement('option');
       opt.value = k; opt.textContent = monthLabel(k);
@@ -178,9 +192,9 @@
     });
     monthSelect.value = months[0] || 'all';
 
-    // Top summaries
-    const allStats = computeStats(RESULTS);
-    el('s-total').textContent   = RESULTS.length;
+    // Top summaries (use ALLOWED so the page totals match visible data)
+    const allStats = computeStats(ALLOWED_RESULTS);
+    el('s-total').textContent   = ALLOWED_RESULTS.length;
     el('s-wins').textContent    = allStats.wins;
     el('s-losses').textContent  = allStats.losses;
     el('s-winrate').textContent = (allStats.winRate!=null? allStats.winRate.toFixed(1)+'%':'—');
@@ -188,15 +202,15 @@
 
     // Yearly (current calendar year)
     const currentYear = new Date().getFullYear();
-    const yearPicks = RESULTS.filter(r => (r.date||'').startsWith(String(currentYear)));
-    const yStats = computeStats(yearPicks.length ? yearPicks : RESULTS); // fallback to all if no data in year
+    const yearPicks = ALLOWED_RESULTS.filter(r => (r.date||'').startsWith(String(currentYear)));
+    const yStats = computeStats(yearPicks.length ? yearPicks : ALLOWED_RESULTS);
     el('s-ywin').textContent = (yStats.winRate!=null? yStats.winRate.toFixed(1)+'%':'—');
     el('s-yroi').textContent = (yStats.roiPct!=null? yStats.roiPct.toFixed(1)+'%':'—');
 
     // Monthly stats line next to dropdown
     function showMonthStats(key){
       let picks;
-      if (key==='all') picks = RESULTS;
+      if (key==='all') picks = ALLOWED_RESULTS;
       else picks = byMonth.get(key) || [];
       const s = computeStats(picks);
       el('monthStats').innerHTML =
@@ -207,12 +221,15 @@
     showMonthStats(monthSelect.value);
     monthSelect.addEventListener('change', e=> showMonthStats(e.target.value));
 
-    // Render full list grouped by date within each month (desc)
+    // Render full list grouped by date within each (allowed) month (desc)
     function renderAllMonths(){
       const host = el('list');
       host.innerHTML = '';
 
-      const monthKeys = Array.from(byMonth.keys()).sort((a,b)=> b.localeCompare(a));
+      const monthKeys = Array.from(byMonth.keys())
+        .filter(k => k >= MIN_MONTH)
+        .sort((a,b)=> b.localeCompare(a));
+
       monthKeys.forEach(k=>{
         const list = byMonth.get(k) || [];
         // group by date
