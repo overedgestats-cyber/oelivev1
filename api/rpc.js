@@ -13,14 +13,11 @@
 //  - pro-board-results   (read Pro Board daily summaries from Firestore)
 
 const API_BASE = "https://v3.football.api-sports.io";
+
 /* --------------------- Firestore (Admin) init --------------------- */
 let db = null;
-
 try {
-  // Lazy import to avoid bundling issues in edge runtimes
   const admin = require("firebase-admin");
-
-  // Only init once (important for hot reload)
   if (!admin.apps.length) {
     const pk = (process.env.FB_PRIVATE_KEY || "").replace(/\\n/g, "\n");
     admin.initializeApp({
@@ -34,9 +31,8 @@ try {
   db = require("firebase-admin").firestore();
 } catch (e) {
   console.error("Firestore init error:", e?.message || e);
-  db = null; // keep server alive even if Firestore is not configured
+  db = null;
 }
-
 
 /* --------------------------- Generic Helpers --------------------------- */
 function ymd(d = new Date()) { return new Date(d).toISOString().slice(0, 10); }
@@ -71,6 +67,12 @@ function stableSortFixtures(fixtures = []) {
     const bd = b?.fixture?.date || "";
     return ad.localeCompare(bd);
   });
+}
+
+/* ---- NEW: ensure no CDN/edge caching of API responses (avoid stale by region) --- */
+function setNoEdgeCache(res) {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
 }
 
 /* ---------------------------- Flags helper ---------------------------- */
@@ -448,7 +450,7 @@ async function scoreFixtureForOU25(fx) {
 
 const FREEPICKS_CACHE = new Map();
 function cacheKey(date, tz, minConf) { return `fp|${date}|${tz}|${minConf}`; }
-function getCached(key) { const e = FREEPICKS_CACHE.get(key); if (e && e.exp > Date.now()) return e.payload; if (e) FREEPICKS_CACHE.delete(key); return null; }
+function getCached(key) { const e = FREEPICKS_CACHE.get(key); if (e && e.exp > Date.now()) return e.payload; if (e) FREEPICKS_CACHE.delete(e); return null; }
 function putCached(key, payload) { const ttlMs = 22 * 60 * 60 * 1000; FREEPICKS_CACHE.set(key, { payload, exp: Date.now() + ttlMs }); }
 
 async function pickFreePicks({ date, tz, minConf = 75 }) {
@@ -738,8 +740,8 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
     .sort((a,b)=> a.country.localeCompare(b.country))
     .map(c => ({
       country: c.country, flag: c.flag,
-      leagues: Array.from(c.leagues.values()).sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))
-    }));
+      leagues: Array.from(c.leagues.values()).sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))}
+    ));
 
   return { date, timezone: tz, groups };
 }
@@ -883,6 +885,7 @@ async function pbgSet(date, tz, market, payload){
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
   try {
+    setNoEdgeCache(res); // <-- prevent CDN caching differences by region
     const { action = "health" } = req.query;
 
     if (action === "health") {
@@ -951,7 +954,7 @@ export default async function handler(req, res) {
       const date = req.query.date || ymd();
       const minConf = Number(req.query.minConf || 75);
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
-      const key = `fp|${date}|${tz}|${minConf}`;
+      const key = cacheKey(date, tz, minConf);
 
       if (!refresh) {
         const persisted = await fpGet(date, tz, minConf);
@@ -1071,11 +1074,6 @@ export default async function handler(req, res) {
 }
 
 /* ===================== READ: Hero Bet results ====================== */
-// Firestore collection: hero_bet_results
-// Doc example:
-// { date:"YYYY-MM-DD", fixtureId, league, country, home, away,
-//   market:"Over 2.5", selection:"Over 2.5", confidencePct:83,
-//   odds:1.57, status:"win|loss|push|pending", finalScore:"3-0" }
 async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
   if (typeof db === "undefined" || !db) return { days: [], summary: null };
 
@@ -1124,17 +1122,6 @@ async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
 }
 
 /* ===================== READ: Pro Board daily summaries ====================== */
-// Firestore collection: pro_board_results (one doc per date)
-// Minimal doc shape (recommended):
-// { date:"YYYY-MM-DD",
-//   totals: {
-//     ou_goals:{wins:7, losses:3, push:0},
-//     btts:{wins:5, losses:4, push:1},
-//     one_x_two:{wins:6, losses:6, push:0},
-//     ou_cards:{wins:3, losses:4, push:1},        // optional
-//     ou_corners:{wins:2, losses:3, push:0}       // optional
-//   }
-// }
 async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}) {
   if (typeof db === "undefined" || !db) return { days: [], summary: null };
 
@@ -1183,7 +1170,7 @@ async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}
     losses: Glosses,
     push: Gpush,
     winRate,
-    roiPct: null // odds not tracked for board by default
+    roiPct: null
   };
 
   return { days, summary };
@@ -1196,7 +1183,6 @@ async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) 
   let q = db.collection("free_picks_results");
   if (from) q = q.where("date", ">=", from);
   if (to)   q = q.where("date", "<=", to);
-  // Firestore needs orderBy on the same field used in range filters
   q = q.orderBy("date", "desc").limit(limit);
 
   const snap = await q.get();
@@ -1234,14 +1220,14 @@ async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) 
     });
   });
 
-  const settled = wins + losses; // push excluded
+  const settled = wins + losses;
   const winRate = settled ? Math.round((wins / settled) * 100) : null;
   const roiPct  = staked ? Math.round((pnl / staked) * 100) : null;
 
   const total = days.reduce((acc, d) => acc + (d.picks?.length || 0), 0);
 
   return {
-    days, // [{date, picks:[...]}, ...] newest first
+    days,
     summary: { total, wins, losses, push, winRate, roiPct }
   };
 }
