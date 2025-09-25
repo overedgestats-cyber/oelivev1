@@ -14,8 +14,44 @@
   <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
 
   <style>
-    .results-summary{display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1rem}
-    .results-summary .card{padding:.75rem 1rem}
+    /* ===== Summary KPI boxes — new look (style-only change) ===== */
+    .results-summary{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap:14px;
+      margin:.5rem 0 1rem;
+    }
+    .results-summary .card{
+      background:#ffffff;
+      border:1px solid #e5e7eb;
+      border-radius:16px;
+      padding:14px 16px;
+      box-shadow: 0 6px 18px rgba(17,24,39,.06), inset 0 1px 0 #ffffffcc;
+      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+    .results-summary .card:hover{
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(17,24,39,.10);
+      border-color:#d1d5db;
+    }
+    /* Title (e.g., Total, Wins) */
+    .results-summary .card > div:first-child{
+      font-size:.78rem;
+      text-transform:uppercase;
+      letter-spacing:.03em;
+      color:#6b7280;
+      font-weight:800;
+    }
+    /* Value (e.g., 18, 83.3%) */
+    .results-summary .card > div:last-child{
+      margin-top:2px;
+      font-size:1.6rem;
+      line-height:1;
+      font-weight:900;
+      color:#111827;
+    }
+
+    /* ===== Pills, table, misc (unchanged) ===== */
     .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
     .wl-win{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
     .wl-lose{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
