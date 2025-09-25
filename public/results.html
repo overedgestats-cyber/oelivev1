@@ -91,42 +91,44 @@
   <script>
     document.getElementById('y').textContent=new Date().getFullYear();
 
-    // ===== MANUAL RESULTS (edit when you add history) =====
     // ===== MANUAL RESULTS (all in Sep 2025) =====
-const RESULTS = [
-  // 2025-09-24
-  { date:"2025-09-24", home:"VfL Wolfsburg W", away:"Werder Bremen W",   market:"Over 2.5",  odds:1.57, status:"win" },
-  { date:"2025-09-24", home:"Kabel Novi Sad",   away:"Semendrija 1924",  market:"Under 2.5", odds:1.44, status:"lose" },
+    const RESULTS = [
+      // 2025-09-25 (both picks WON)
+      { date:"2025-09-25", home:"Johor Darul Takzim FC", away:"Bangkok United", market:"Over 2.5", odds:1.44, status:"win" },
+      { date:"2025-09-25", home:"Nam Dinh",              away:"Svay Rieng",     market:"Over 2.5", odds:1.90, status:"win" },
 
-  // 2025-09-23
-  { date:"2025-09-23", home:"Miedź Legnica II", away:"Świt Skolwin",     market:"Over 2.5",  odds:1.55, status:"win" },
-  { date:"2025-09-23", home:"Cagliari",         away:"Frosinone",        market:"Under 2.5", odds:1.80, status:"lose" },
+      // 2025-09-24
+      { date:"2025-09-24", home:"VfL Wolfsburg W", away:"Werder Bremen W",   market:"Over 2.5",  odds:1.57, status:"win" },
+      { date:"2025-09-24", home:"Kabel Novi Sad",   away:"Semendrija 1924",  market:"Under 2.5", odds:1.44, status:"lose" },
 
-  // 2025-09-22
-  { date:"2025-09-22", home:"Barcelona Atlètic", away:"Castellón B",     market:"Over 2.5",  odds:1.60, status:"win" },
+      // 2025-09-23
+      { date:"2025-09-23", home:"Miedź Legnica II", away:"Świt Skolwin",     market:"Over 2.5",  odds:1.55, status:"win" },
+      { date:"2025-09-23", home:"Cagliari",         away:"Frosinone",        market:"Under 2.5", odds:1.80, status:"lose" },
 
-  // 2025-09-21
-  { date:"2025-09-21", home:"Rēzekne FA",       away:"Skanste",          market:"Over 2.5",  odds:1.45, status:"win" },
-  { date:"2025-09-21", home:"Häcken W",         away:"Rosengård W",      market:"Over 2.5",  odds:1.73, status:"win" },
+      // 2025-09-22
+      { date:"2025-09-22", home:"Barcelona Atlètic", away:"Castellón B",     market:"Over 2.5",  odds:1.60, status:"win" },
 
-  // 2025-09-20
-  { date:"2025-09-20", home:"1899 Hoffenheim",  away:"Bayern München",   market:"Over 2.5",  odds:1.35, status:"win" },
-  { date:"2025-09-20", home:"Ogre United",      away:"Riga Mariners",    market:"Over 2.5",  odds:1.65, status:"win" },
+      // 2025-09-21
+      { date:"2025-09-21", home:"Rēzekne FA",       away:"Skanste",          market:"Over 2.5",  odds:1.45, status:"win" },
+      { date:"2025-09-21", home:"Häcken W",         away:"Rosengård W",      market:"Over 2.5",  odds:1.73, status:"win" },
 
-  // 2025-09-17
-  { date:"2025-09-17", home:"Cham",             away:"Vevey Sports",     market:"Over 2.5",  odds:1.54, status:"win" },
-  { date:"2025-09-17", home:"Rothis",           away:"Sturm Graz",       market:"Over 2.5",  odds:1.20, status:"lose" },
+      // 2025-09-20
+      { date:"2025-09-20", home:"1899 Hoffenheim",  away:"Bayern München",   market:"Over 2.5",  odds:1.35, status:"win" },
+      { date:"2025-09-20", home:"Ogre United",      away:"Riga Mariners",    market:"Over 2.5",  odds:1.65, status:"win" },
 
-  // 2025-09-16
-  { date:"2025-09-16", home:"Tonbridge Angels", away:"Steyning Town",    market:"Over 2.5",  odds:1.67, status:"win" },
-  { date:"2025-09-16", home:"Rylands",          away:"Ashton United",    market:"Under 2.5", odds:1.80, status:"win" },
-  { date:"2025-09-16", home:"Sharjah FC",       away:"Al-Gharafa",       market:"Over 2.5",  odds:1.70, status:"win" },
+      // 2025-09-17
+      { date:"2025-09-17", home:"Cham",             away:"Vevey Sports",     market:"Over 2.5",  odds:1.54, status:"win" },
+      { date:"2025-09-17", home:"Rothis",           away:"Sturm Graz",       market:"Over 2.5",  odds:1.20, status:"lose" },
 
-  // 2025-09-14
-  { date:"2025-09-14", home:"Pitea W",          away:"Brommapojkarna W", market:"Over 2.5",  odds:1.69, status:"win" },
-  { date:"2025-09-14", home:"Marupe",           away:"JDFS Alberts",     market:"Over 2.5",  odds:1.47, status:"win" },
-];
+      // 2025-09-16
+      { date:"2025-09-16", home:"Tonbridge Angels", away:"Steyning Town",    market:"Over 2.5",  odds:1.67, status:"win" },
+      { date:"2025-09-16", home:"Rylands",          away:"Ashton United",    market:"Under 2.5", odds:1.80, status:"win" },
+      { date:"2025-09-16", home:"Sharjah FC",       away:"Al-Gharafa",       market:"Over 2.5",  odds:1.70, status:"win" },
 
+      // 2025-09-14
+      { date:"2025-09-14", home:"Pitea W",          away:"Brommapojkarna W", market:"Over 2.5",  odds:1.69, status:"win" },
+      { date:"2025-09-14", home:"Marupe",           away:"JDFS Alberts",     market:"Over 2.5",  odds:1.47, status:"win" },
+    ];
 
     // --- helpers ---
     const el = id => document.getElementById(id);
@@ -160,7 +162,7 @@ const RESULTS = [
       return { wins, losses, settled, winRate, roiPct, stake, pnl };
     }
 
-    // ---- Hide months older than launch (remove Sep 2024 etc.)
+    // ---- Hide months older than launch
     const MIN_MONTH = '2025-09';
 
     // Filtered list used for UI (dropdown, list, and "All months")
@@ -192,7 +194,7 @@ const RESULTS = [
     });
     monthSelect.value = months[0] || 'all';
 
-    // Top summaries (use ALLOWED so the page totals match visible data)
+    // Top summaries
     const allStats = computeStats(ALLOWED_RESULTS);
     el('s-total').textContent   = ALLOWED_RESULTS.length;
     el('s-wins').textContent    = allStats.wins;
