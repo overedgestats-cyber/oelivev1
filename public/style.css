@@ -422,3 +422,19 @@ select.market:focus{ outline:none; border-color:#b9c4d9; box-shadow:0 0 0 3px rg
 .site-footer .cookie-link:hover{
   border-bottom-color: currentColor;
 }
+
+/* --- BIG social buttons in footer --- */
+.footer-social{
+  display:flex; justify-content:center; gap:.6rem; flex-wrap:wrap;
+  margin:.25rem 0 .4rem;
+}
+.btn-social{
+  display:inline-flex; align-items:center; gap:.5rem;
+  padding:.5rem .85rem; border-radius:12px; font-weight:800; text-decoration:none;
+  border:1px solid transparent; box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+.btn-social svg{ width:18px; height:18px }
+.btn-social.fb{ background:#1877F2; color:#fff; }
+.btn-social.fb:hover{ filter:brightness(1.05); }
+.btn-social.ig{ background:#fff; color:#0f172a; border-color:#e5e7eb; }
+.btn-social.ig:hover{ box-shadow:0 6px 18px rgba(0,0,0,.12); }
