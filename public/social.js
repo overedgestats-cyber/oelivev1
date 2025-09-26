@@ -51,3 +51,11 @@
     bar.remove();
   });
 })();
+
+/* --- Consent shim so footer "Cookie settings" works everywhere --- */
+window.oeConsent = window.oeConsent || {};
+if (typeof window.oeConsent.revoke !== 'function') {
+  window.oeConsent.revoke = function () {
+    alert('Cookie settings coming soon.');
+  };
+}
