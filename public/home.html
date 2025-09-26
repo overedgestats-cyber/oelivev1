@@ -106,7 +106,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       <p style="margin-top:.6rem"><a class="btn small" href="/free-picks">View full details →</a></p>
     </section>
 
-    <!-- NEW: Hero Bet teaser (blurred for Free users, reveals for Pro) -->
+    <!-- Hero Bet teaser (blurred for Free users, reveals for Pro) -->
     <section class="section" id="hero-teaser" style="display:none">
       <h2>Hero Bet (teaser)</h2>
       <div class="card" style="padding:1rem;border-radius:12px;position:relative">
@@ -120,7 +120,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     </section>
   </main>
 
-  <!-- Unified footer with trust badges, big social buttons, and cookie link -->
+  <!-- UPDATED FOOTER WITH TRUST + COOKIE LINK -->
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
 
@@ -130,23 +130,12 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       <span class="tb"><i class="icon">🔒</i> 256-bit SSL</span>
     </div>
 
-    <div class="footer-social">
-      <a class="btn-social fb" href="https://www.facebook.com/overedgefootball" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.07C22 6.48 17.52 2 11.93 2S2 6.48 2 12.07c0 5.02 3.66 9.19 8.44 9.93v-7.02H7.9v-2.9h2.54V9.41c0-2.5 1.5-3.88 3.79-3.88 1.1 0 2.25.2 2.25.2v2.47h-1.27c-1.25 0-1.64.78-1.64 1.58v1.9h2.79l-.45 2.9h-2.34V22c4.78-.74 8.44-4.91 8.44-9.93z"/></svg>
-        <span>Facebook</span>
-      </a>
-      <a class="btn-social ig" href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm5 3.5A5.5 5.5 0 1 1 6.5 13 5.5 5.5 0 0 1 12 7.5Zm0 2A3.5 3.5 0 1 0 15.5 13 3.5 3.5 0 0 0 12 9.5Zm5.75-3.25a.75.75 0 1 1-.75.75.75.75 0 0 1 .75-.75Z"/></svg>
-        <span>Instagram</span>
-      </a>
-    </div>
-
     <a href="#" class="cookie-link" onclick="oeConsent.revoke();return false;">Cookie settings</a>
 
-    <div class="contact" style="margin-top:.5rem">
+    <div class="contact" style="margin-top:6px">
       <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
       &nbsp;·&nbsp;
-      <a href="https://www.facebook.com/overedgefootball" target="_blank" rel="noopener">Facebook</a>
+      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
       &nbsp;·&nbsp;
       <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
     </div>
@@ -161,33 +150,20 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       catch { return "Europe/Sofia"; }
     }
 
-    function reasonSnippet(html){
-      if (!html) return "";
-      // Strip tags + collapse line breaks into spaces
-      const txt = html.replace(/<br\s*\/?>/gi, " ").replace(/<\/?[^>]+(>|$)/g, "");
-      const first = txt.split(/[.?!]\s/)[0];
-      return first ? first.trim().replace(/\.$/,"") + "." : "";
-    }
-
+    // Render ONLY fixture info (league + time + teams), no bet/odds/reasoning
     function pickPreviewCard(p){
       const league = [p.country, p.league].filter(Boolean).join(" — ");
-      const odds = (p.odds && !isNaN(Number(p.odds))) ? `<span class="badge odds" style="margin-left:.4rem">Odds ${Number(p.odds).toFixed(2)}</span>` : "";
-      const snippet = reasonSnippet(p.reasoning || "");
       return `
         <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
           <div style="font-weight:700">${league}</div>
-          <div class="muted" style="margin:.15rem 0 .4rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
-          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.2rem 0 .35rem">
-            <strong>${p.market}</strong>
-            <span class="badge pill conf">Confidence ${p.confidencePct}%</span>
-            ${odds}
+          <div class="muted" style="margin:.15rem 0 .2rem">
+            ${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong>
           </div>
-          ${snippet ? `<div class="muted" style="font-size:.95rem">${snippet}</div>` : ""}
         </div>
       `;
     }
 
-    // Preview two picks
+    // Preview two picks (fixture-only)
     async function loadPreview() {
       const el = document.getElementById('home-free-picks');
       el.innerHTML = 'Loading…';
@@ -266,7 +242,6 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         document.getElementById('hb-line').textContent = line;
         document.getElementById('hb-pick').textContent = `${heroBet.market}: ${heroBet.selection}`;
 
-        // Reasoning: flatten simple <br> tags to spaces and strip other tags
         const why = String(heroBet.reasoning || '')
           .replace(/<br\s*\/?>/gi, ' ')
           .replace(/<\/?[^>]+(>|$)/g, '');
@@ -296,14 +271,6 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         obs.observe(plan, { childList:true, subtree:true, characterData:true });
       }
     })();
-  </script>
-
-  <!-- Cookie settings shim so the footer link always works -->
-  <script>
-    window.oeConsent = window.oeConsent || {};
-    if (typeof window.oeConsent.revoke !== 'function') {
-      window.oeConsent.revoke = function(){ alert('Cookie settings coming soon.'); };
-    }
   </script>
 
   <!-- Shared navbar auth module -->
