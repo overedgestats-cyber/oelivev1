@@ -48,6 +48,8 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     .win30 .w-row{display:flex;justify-content:space-between;align-items:center}
     .win30 .w-pill{background:#e6f7ec;border-radius:999px;padding:4px 10px;font-weight:700}
     .win30 .w-sub{opacity:.8;margin-top:6px;font-size:14px}
+    /* minimal fixture preview */
+    .fixture-preview .meta{color:var(--muted);margin:.15rem 0 .15rem}
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -106,7 +108,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       <p style="margin-top:.6rem"><a class="btn small" href="/free-picks">View full details →</a></p>
     </section>
 
-    <!-- Hero Bet teaser (blurred for Free users, reveals for Pro) -->
+    <!-- Blurred Hero Bet teaser -->
     <section class="section" id="hero-teaser" style="display:none">
       <h2>Hero Bet (teaser)</h2>
       <div class="card" style="padding:1rem;border-radius:12px;position:relative">
@@ -150,15 +152,13 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       catch { return "Europe/Sofia"; }
     }
 
-    // Render ONLY fixture info (league + time + teams), no bet/odds/reasoning
+    // --- MINIMAL preview card: league + time + teams only ---
     function pickPreviewCard(p){
       const league = [p.country, p.league].filter(Boolean).join(" — ");
       return `
-        <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
+        <div class="card fixture-preview" style="margin:.75rem 0;padding:1rem;border-radius:12px">
           <div style="font-weight:700">${league}</div>
-          <div class="muted" style="margin:.15rem 0 .2rem">
-            ${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong>
-          </div>
+          <div class="meta">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
         </div>
       `;
     }
@@ -193,7 +193,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
       const today = new Date();
       const start = new Date(today);
-      start.setDate(start.getDate() - 29); // inclusive window: today-29 .. today
+      start.setDate(start.getDate() - 29);
 
       function ymd(d){ return d.toISOString().slice(0,10); }
       const startYMD = ymd(start);
@@ -204,10 +204,8 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         const data = await r.json(); // { days, summary }
         const days = Array.isArray(data?.days) ? data.days : [];
 
-        // Filter to last 30 calendar days (inclusive)
         const recent = days.filter(d => typeof d.date === 'string' && d.date >= startYMD && d.date <= endYMD);
 
-        // Count wins/losses (exclude pending)
         let wins = 0, losses = 0;
         for (const d of recent) {
           const picks = Array.isArray(d.picks) ? d.picks : [];
@@ -249,13 +247,13 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       }catch(e){}
     })();
 
-    // Reveal the pick if the user is Pro (auth.js fills #nav-plan for Pro)
+    // Reveal Hero Bet if Pro (auth.js sets #nav-plan)
     (function(){
       function isPro(){
         const planEl = document.getElementById('nav-plan');
         if (!planEl) return false;
         const t = (planEl.textContent || '').trim();
-        return !!t; // any non-empty plan label indicates Pro/override per your auth.js
+        return !!t;
       }
       function revealIfPro(){
         if (!isPro()) return;
