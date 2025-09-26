@@ -387,3 +387,19 @@ select.market:focus{ outline:none; border-color:#b9c4d9; box-shadow:0 0 0 3px rg
 }
 .pick-card.over::before  { background:#16a34a; } /* Over = green */
 .pick-card.under::before { background:#dc2626; } /* Under = red */
+
+/* === Trust badges + Cookie settings link (footer) === */
+.site-footer .trust{
+  display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
+  margin:8px 0 4px;
+}
+.tb{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border-radius:8px; background:#f3f5f8;
+  border:1px solid rgba(0,0,0,.06); font-weight:600; font-size:13px;
+}
+.tb .icon{ font-style:normal; opacity:.9 }
+.cookie-link{
+  display:block; text-align:center; margin-top:6px; opacity:.85;
+}
+.cookie-link:hover{ opacity:1 }
