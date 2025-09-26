@@ -1,22 +1,22 @@
 <!doctype html>
 <html lang="en">
   <!-- Meta Pixel Code -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1135930111808538');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
-/></noscript>
-<!-- End Meta Pixel Code -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '1135930111808538');
+  fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+  src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -41,7 +41,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
   <style>
     .lead { font-size: clamp(1.1rem, 1.7vw, 1.2rem); opacity:.8; margin-top:.25rem; }
-    .fixture-preview .meta{color:var(--muted);margin:.15rem 0 .15rem}
+    .muted-sm{opacity:.7;font-size:.95rem}
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -82,8 +82,23 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
   <main class="section" style="max-width:900px">
     <h1>Today’s Free Picks (preview)</h1>
     <p class="lead">Two fixtures for today — open the Free Picks page to see the bets and reasoning.</p>
+
+    <!-- 2-fixture preview (just league/time/teams) -->
     <div id="home-free-picks" class="lead">Loading…</div>
     <p><a class="btn" href="/free-picks">View full details →</a></p>
+
+    <!-- Hero Bet teaser (blurred for Free; auto-reveals for Pro) -->
+    <section class="section" id="hero-teaser" style="padding-top:.75rem;display:none;max-width:900px;margin:0 auto">
+      <h2>Hero Bet (teaser)</h2>
+      <div class="card" style="padding:1rem;border-radius:12px;position:relative">
+        <div id="hb-line" class="muted"></div>
+        <div id="hb-pick" style="margin-top:.4rem;font-weight:800;font-size:1.1rem;filter:blur(6px)"></div>
+        <div id="hb-why" class="muted" style="margin-top:.35rem;max-width:70ch"></div>
+        <div id="hb-upgrade" style="margin-top:.6rem">
+          <a class="btn small" href="/pricing">Go Pro to reveal</a>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -105,13 +120,13 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       catch { return "Europe/Sofia"; }
     }
 
-    // Minimal fixture preview (no bet, no reasoning)
-    function pickPreviewCard(p){
+    // --- PREVIEW: show fixtures only (no bet/odds/reasoning) ---
+    function fixtureCard(p){
       const league = [p.country, p.league].filter(Boolean).join(" — ");
       return `
-        <div class="card fixture-preview" style="margin:.75rem 0;padding:1rem;border-radius:12px">
+        <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
           <div style="font-weight:700">${league}</div>
-          <div class="meta">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+          <div class="muted" style="margin:.15rem 0 .2rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
         </div>
       `;
     }
@@ -128,11 +143,53 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
           el.innerHTML = '<p class="lead">No confident picks available yet today.</p>';
           return;
         }
-        el.innerHTML = picks.map(pickPreviewCard).join('');
+        el.innerHTML = picks.map(fixtureCard).join('');
       } catch (e) {
         el.innerHTML = '<p class="lead">Could not load picks.</p>';
       }
     }
+
+    // --- HERO BET teaser (blur for Free; reveal for Pro) ---
+    (async function loadHeroTeaser(){
+      try{
+        const r = await fetch(`/api/rpc?action=pro-pick&market=auto`, { cache: 'no-store' });
+        const data = await r.json();
+        const heroBet = data && data.heroBet;
+        if (!heroBet) return;
+
+        document.getElementById('hero-teaser').style.display = '';
+
+        const line = `${heroBet.matchTime} — ${heroBet.home} vs ${heroBet.away} (${heroBet.country} — ${heroBet.league || 'League'})`;
+        document.getElementById('hb-line').textContent = line;
+        document.getElementById('hb-pick').textContent = `${heroBet.market}: ${heroBet.selection}`;
+
+        const why = String(heroBet.reasoning || '')
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/<\/?[^>]+(>|$)/g, '');
+        document.getElementById('hb-why').textContent = why;
+      }catch(e){}
+    })();
+
+    (function revealIfPro(){
+      function isPro(){
+        const planEl = document.getElementById('nav-plan');
+        if (!planEl) return false;
+        return !!(planEl.textContent || '').trim(); // any plan label means signed & plan resolved
+      }
+      function tryReveal(){
+        if (!isPro()) return;
+        const pickEl = document.getElementById('hb-pick');
+        if (pickEl) pickEl.style.filter = 'none';
+        const upEl = document.getElementById('hb-upgrade');
+        if (upEl) upEl.style.display = 'none';
+      }
+      document.addEventListener('DOMContentLoaded', tryReveal);
+      const plan = document.getElementById('nav-plan');
+      if (plan){
+        const obs = new MutationObserver(tryReveal);
+        obs.observe(plan, { childList:true, subtree:true, characterData:true });
+      }
+    })();
 
     document.addEventListener('DOMContentLoaded', loadPreview);
   </script>
