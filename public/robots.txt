@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
-Disallow: /account
 
 Sitemap: https://overedge.info/sitemap.xml
