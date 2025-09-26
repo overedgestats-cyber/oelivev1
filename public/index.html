@@ -1,22 +1,22 @@
 <!doctype html>
 <html lang="en">
   <!-- Meta Pixel Code -->
-  <script>
-  !function(f,b,e,v,n,t,s)
-  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-  n.queue=[];t=b.createElement(e);t.async=!0;
-  t.src=v;s=b.getElementsByTagName(e)[0];
-  s.parentNode.insertBefore(t,s)}(window, document,'script',
-  'https://connect.facebook.net/en_US/fbevents.js');
-  fbq('init', '1135930111808538');
-  fbq('track', 'PageView');
-  </script>
-  <noscript><img height="1" width="1" style="display:none"
-  src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
-  /></noscript>
-  <!-- End Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1135930111808538');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -42,6 +42,10 @@
   <style>
     .lead { font-size: clamp(1.1rem, 1.7vw, 1.2rem); opacity:.8; margin-top:.25rem; }
     .muted-sm{opacity:.7;font-size:.95rem}
+    /* blur helper for Hero Bet teaser */
+    .hb-blur{filter:blur(7px);-webkit-filter:blur(7px);pointer-events:none;user-select:none}
+    /* simple fixture preview style (same as home) */
+    .fixture-preview .meta{color:var(--muted);margin:.15rem 0 .15rem}
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -83,22 +87,24 @@
     <h1>Today’s Free Picks (preview)</h1>
     <p class="lead">Two fixtures for today — open the Free Picks page to see the bets and reasoning.</p>
 
-    <!-- 2-fixture preview (just league/time/teams) -->
     <div id="home-free-picks" class="lead">Loading…</div>
-    <p><a class="btn" href="/free-picks">View full details →</a></p>
 
-    <!-- Hero Bet teaser (blurred for Free; auto-reveals for Pro) -->
-    <section class="section" id="hero-teaser" style="padding-top:.75rem;display:none;max-width:900px;margin:0 auto">
+    <!-- Blurred Hero Bet teaser -->
+    <section class="section" id="hero-teaser" style="display:none;padding-left:0;padding-right:0">
       <h2>Hero Bet (teaser)</h2>
       <div class="card" style="padding:1rem;border-radius:12px;position:relative">
-        <div id="hb-line" class="muted"></div>
-        <div id="hb-pick" style="margin-top:.4rem;font-weight:800;font-size:1.1rem;filter:blur(6px)"></div>
-        <div id="hb-why" class="muted" style="margin-top:.35rem;max-width:70ch"></div>
+        <div id="hb-content" class="hb-blur">
+          <div id="hb-line" class="muted"></div>
+          <div id="hb-pick" style="margin-top:.4rem;font-weight:800;font-size:1.1rem"></div>
+          <div id="hb-why" class="muted" style="margin-top:.35rem;max-width:70ch"></div>
+        </div>
         <div id="hb-upgrade" style="margin-top:.6rem">
           <a class="btn small" href="/pricing">Go Pro to reveal</a>
         </div>
       </div>
     </section>
+
+    <p><a class="btn" href="/free-picks">View full details →</a></p>
   </main>
 
   <footer class="site-footer">
@@ -120,13 +126,13 @@
       catch { return "Europe/Sofia"; }
     }
 
-    // --- PREVIEW: show fixtures only (no bet/odds/reasoning) ---
-    function fixtureCard(p){
+    // same minimal preview as home
+    function pickPreviewCard(p){
       const league = [p.country, p.league].filter(Boolean).join(" — ");
       return `
-        <div class="card" style="margin:.75rem 0;padding:1rem;border-radius:12px">
+        <div class="card fixture-preview" style="margin:.75rem 0;padding:1rem;border-radius:12px">
           <div style="font-weight:700">${league}</div>
-          <div class="muted" style="margin:.15rem 0 .2rem">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+          <div class="meta">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
         </div>
       `;
     }
@@ -143,13 +149,14 @@
           el.innerHTML = '<p class="lead">No confident picks available yet today.</p>';
           return;
         }
-        el.innerHTML = picks.map(fixtureCard).join('');
+        el.innerHTML = picks.map(pickPreviewCard).join('');
       } catch (e) {
         el.innerHTML = '<p class="lead">Could not load picks.</p>';
       }
     }
+    document.addEventListener('DOMContentLoaded', loadPreview);
 
-    // --- HERO BET teaser (blur for Free; reveal for Pro) ---
+    /* === Hero Bet teaser loader (blur for Free, reveal for Pro) === */
     (async function loadHeroTeaser(){
       try{
         const r = await fetch(`/api/rpc?action=pro-pick&market=auto`, { cache: 'no-store' });
@@ -170,28 +177,28 @@
       }catch(e){}
     })();
 
-    (function revealIfPro(){
+    // Reveal if Pro (remove blur)
+    (function(){
       function isPro(){
         const planEl = document.getElementById('nav-plan');
         if (!planEl) return false;
-        return !!(planEl.textContent || '').trim(); // any plan label means signed & plan resolved
+        const t = (planEl.textContent || '').trim();
+        return !!t && t.toLowerCase() !== 'free';
       }
-      function tryReveal(){
+      function revealIfPro(){
         if (!isPro()) return;
-        const pickEl = document.getElementById('hb-pick');
-        if (pickEl) pickEl.style.filter = 'none';
+        const content = document.getElementById('hb-content');
+        if (content) content.classList.remove('hb-blur');
         const upEl = document.getElementById('hb-upgrade');
         if (upEl) upEl.style.display = 'none';
       }
-      document.addEventListener('DOMContentLoaded', tryReveal);
+      document.addEventListener('DOMContentLoaded', revealIfPro);
       const plan = document.getElementById('nav-plan');
       if (plan){
-        const obs = new MutationObserver(tryReveal);
+        const obs = new MutationObserver(revealIfPro);
         obs.observe(plan, { childList:true, subtree:true, characterData:true });
       }
     })();
-
-    document.addEventListener('DOMContentLoaded', loadPreview);
   </script>
 
   <!-- Shared navbar auth module -->

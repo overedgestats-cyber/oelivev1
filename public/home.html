@@ -50,6 +50,8 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     .win30 .w-sub{opacity:.8;margin-top:6px;font-size:14px}
     /* minimal fixture preview */
     .fixture-preview .meta{color:var(--muted);margin:.15rem 0 .15rem}
+    /* blur helper for Hero Bet teaser */
+    .hb-blur{filter:blur(7px);-webkit-filter:blur(7px);pointer-events:none;user-select:none}
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -112,9 +114,12 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     <section class="section" id="hero-teaser" style="display:none">
       <h2>Hero Bet (teaser)</h2>
       <div class="card" style="padding:1rem;border-radius:12px;position:relative">
-        <div id="hb-line" class="muted"></div>
-        <div id="hb-pick" style="margin-top:.4rem;font-weight:800;font-size:1.1rem;filter:blur(6px)"></div>
-        <div id="hb-why" class="muted" style="margin-top:.35rem;max-width:70ch"></div>
+        <!-- blur the entire teaser content for free users -->
+        <div id="hb-content" class="hb-blur">
+          <div id="hb-line" class="muted"></div>
+          <div id="hb-pick" style="margin-top:.4rem;font-weight:800;font-size:1.1rem"></div>
+          <div id="hb-why" class="muted" style="margin-top:.35rem;max-width:70ch"></div>
+        </div>
         <div id="hb-upgrade" style="margin-top:.6rem">
           <a class="btn small" href="/pricing">Go Pro to reveal</a>
         </div>
@@ -253,12 +258,12 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         const planEl = document.getElementById('nav-plan');
         if (!planEl) return false;
         const t = (planEl.textContent || '').trim();
-        return !!t;
+        return !!t && t.toLowerCase() !== 'free';
       }
       function revealIfPro(){
         if (!isPro()) return;
-        const pickEl = document.getElementById('hb-pick');
-        if (pickEl) pickEl.style.filter = 'none';
+        const content = document.getElementById('hb-content');
+        if (content) content.classList.remove('hb-blur');
         const upEl = document.getElementById('hb-upgrade');
         if (upEl) upEl.style.display = 'none';
       }
