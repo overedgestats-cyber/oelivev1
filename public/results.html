@@ -1,331 +1,173 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Results · OverEdge</title>
-  <meta name="description" content="W/L results for OverEdge Free Picks with success rate and details."/>
-  <link rel="stylesheet" href="/style.css"/>
+// /public/results.js
+// Results page logic: manual seed + Firestore merge, KPIs, simulator, ROI by market, monthly renderer.
 
-  <!-- Favicons -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
+(function(){
+  // Footer year (safe no-op if element missing)
+  const y = document.getElementById('y');
+  if (y) y.textContent = new Date().getFullYear();
 
-  <style>
-    /* ===== Summary KPI boxes ===== */
-    .results-summary{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap:14px;
-      margin:.5rem 0 1rem;
+  // ===== MANUAL RESULTS (seed/fallback) =====
+  // You can add 'closing' for CLV calc on a per-pick basis.
+  const MANUAL_RESULTS = [
+    // 2025-09-26
+    { date:"2025-09-26", home:"Fanalamanga", away:"Ferroviário Maputo", market:"Under 2.5", odds:1.53, status:"lose" },
+    { date:"2025-09-26", home:"Tukums II",   away:"Riga Mariners",      market:"Over 2.5",  odds:1.33, status:"win" },
+
+    // 2025-09-25 (both picks WON)
+    { date:"2025-09-25", home:"Johor Darul Takzim FC", away:"Bangkok United", market:"Over 2.5", odds:1.44, status:"win" },
+    { date:"2025-09-25", home:"Nam Dinh",              away:"Svay Rieng",     market:"Over 2.5", odds:1.90, status:"win" },
+
+    // 2025-09-24
+    { date:"2025-09-24", home:"VfL Wolfsburg W", away:"Werder Bremen W",   market:"Over 2.5",  odds:1.57, status:"win" },
+    { date:"2025-09-24", home:"Kabel Novi Sad",  away:"Semendrija 1924",   market:"Under 2.5", odds:1.44, status:"lose" },
+
+    // 2025-09-23
+    { date:"2025-09-23", home:"Miedź Legnica II", away:"Świt Skolwin",     market:"Over 2.5",  odds:1.55, status:"win" },
+    { date:"2025-09-23", home:"Cagliari",         away:"Frosinone",        market:"Under 2.5", odds:1.80, status:"lose" },
+
+    // 2025-09-22
+    { date:"2025-09-22", home:"Barcelona Atlètic", away:"Castellón B",     market:"Over 2.5",  odds:1.60, status:"win" },
+
+    // 2025-09-21
+    { date:"2025-09-21", home:"Rēzekne FA",       away:"Skanste",          market:"Over 2.5",  odds:1.45, status:"win" },
+    { date:"2025-09-21", home:"Häcken W",         away:"Rosengård W",      market:"Over 2.5",  odds:1.73, status:"win" },
+
+    // 2025-09-20
+    { date:"2025-09-20", home:"1899 Hoffenheim",  away:"Bayern München",   market:"Over 2.5",  odds:1.35, status:"win" },
+    { date:"2025-09-20", home:"Ogre United",      away:"Riga Mariners",    market:"Over 2.5",  odds:1.65, status:"win" },
+
+    // 2025-09-17
+    { date:"2025-09-17", home:"Cham",             away:"Vevey Sports",     market:"Over 2.5",  odds:1.54, status:"win" },
+    { date:"2025-09-17", home:"Rothis",           away:"Sturm Graz",       market:"Over 2.5",  odds:1.20, status:"lose" },
+
+    // 2025-09-16
+    { date:"2025-09-16", home:"Tonbridge Angels", away:"Steyning Town",    market:"Over 2.5",  odds:1.67, status:"win" },
+    { date:"2025-09-16", home:"Rylands",          away:"Ashton United",    market:"Under 2.5", odds:1.80, status:"win" },
+    { date:"2025-09-16", home:"Sharjah FC",       away:"Al-Gharafa",       market:"Over 2.5",  odds:1.70, status:"win" },
+
+    // 2025-09-14
+    { date:"2025-09-14", home:"Pitea W",          away:"Brommapojkarna W", market:"Over 2.5",  odds:1.69, status:"win" },
+    { date:"2025-09-14", home:"Marupe",           away:"JDFS Alberts",     market:"Over 2.5",  odds:1.47, status:"win" },
+  ];
+
+  // ---------- Helpers ----------
+  const el = id => document.getElementById(id);
+  function wlPill(status){
+    const s = String(status||'').toLowerCase();
+    if (s === 'win') return '<span class="wl-pill wl-win">WIN</span>';
+    if (s === 'loss' || s === 'lose') return '<span class="wl-pill wl-lose">LOSE</span>';
+    return '—';
+  }
+  function monthKey(dateStr){ return (dateStr||'').slice(0,7); } // "YYYY-MM"
+  function monthLabel(key){
+    const [y,m] = key.split('-').map(Number);
+    const d = new Date(y, m-1, 1);
+    return d.toLocaleDateString(undefined, { year:'numeric', month:'long' });
+  }
+  function computeStats(picks){
+    let wins=0, losses=0, stake=0, pnl=0;
+    for (const p of picks){
+      const s = String(p.status||'').toLowerCase();
+      if (s === 'win') wins++;
+      else if (s === 'lose' || s === 'loss') losses++;
+      if (typeof p.odds === 'number'){
+        stake += 1;
+        if (s === 'win') pnl += (p.odds - 1);
+        else if (s === 'lose' || s === 'loss') pnl -= 1;
+      }
     }
-    .results-summary .card{
-      background:#ffffff;
-      border:1px solid #e5e7eb;
-      border-radius:16px;
-      padding:14px 16px;
-      box-shadow: 0 6px 18px rgba(17,24,39,.06), inset 0 1px 0 #ffffffcc;
-      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    const settled = wins + losses;
+    const winRate = settled ? (wins/settled*100) : null;
+    const roiPct  = stake ? (pnl/stake*100) : null;
+    return { wins, losses, settled, winRate, roiPct, stake, pnl };
+  }
+  function streaks(picks){ // oldest->newest for best; newest tail for current
+    let best=0, cur=0;
+    for(const p of picks){
+      const w = String(p.status||'').toLowerCase()==='win';
+      if(w){ cur+=1; best=Math.max(best,cur); } else if(String(p.status||'').toLowerCase()==='lose'){ cur=0; }
     }
-    .results-summary .card:hover{
-      transform: translateY(-1px);
-      box-shadow: 0 10px 22px rgba(17,24,39,.10);
-      border-color:#d1d5db;
+    let curFromEnd=0;
+    for(let i=picks.length-1;i>=0;i--){
+      const s=String(picks[i].status||'').toLowerCase();
+      if(s==='win'){ if(curFromEnd>=0) curFromEnd+=1; else break; }
+      else if(s==='lose'){ if(curFromEnd<=0) curFromEnd-=1; else break; }
+      else break;
     }
-    .results-summary .card > div:first-child{
-      font-size:.78rem;
-      text-transform:uppercase;
-      letter-spacing:.03em;
-      color:#6b7280;
-      font-weight:800;
+    return { best, current: curFromEnd };
+  }
+  // Average CLV = mean((closing - open) / open) * 100
+  function clvAvg(picks){
+    const xs = [];
+    for (const p of picks){
+      if (typeof p.odds === 'number' && typeof p.closing === 'number' && p.odds>0){
+        xs.push( (p.closing - p.odds) / p.odds );
+      }
     }
-    .results-summary .card > div:last-child{
-      margin-top:2px;
-      font-size:1.6rem;
-      line-height:1;
-      font-weight:900;
-      color:#111827;
-    }
+    if (!xs.length) return null;
+    const m = xs.reduce((a,b)=>a+b,0)/xs.length;
+    return m*100;
+  }
+  function daysAgo(n){ const d = new Date(); d.setDate(d.getDate()-n); return d; }
+  function toDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+  function inLastNDays(p, n){ return toDate(p.date) >= daysAgo(n); }
 
-    /* ===== Extra KPI row (streak/trend/CLV) ===== */
-    .extras{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap:14px;
-      margin:.5rem 0 1.25rem;
-    }
-    .kpi{
-      background:#fff;
-      border:1px solid #e5e7eb;
-      border-radius:14px;
-      padding:12px 14px;
-      box-shadow: 0 4px 14px rgba(17,24,39,.06);
-    }
-    .kpi .label{ font-size:.78rem; color:#6b7280; font-weight:800; text-transform:uppercase; letter-spacing:.03em; }
-    .kpi .value{ font-size:1.3rem; font-weight:900; margin-top:2px; }
-
-    /* ===== Simulator card ===== */
-    .sim.card{
-      background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;
-      box-shadow: 0 6px 18px rgba(17,24,39,.06);
-      margin:.5rem 0 1.25rem;
-    }
-    .sim .row{ display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; margin:.35rem 0 .75rem; }
-    .sim input[type="number"], .sim select{
-      padding:.45rem .6rem; border:1px solid #e5e7eb; border-radius:8px; background:#fff; min-width:110px;
-    }
-    .sim .out{ display:flex; gap:1rem; flex-wrap:wrap; }
-    .sim .pill{ display:inline-block; padding:.22rem .55rem; border:1px solid #e5e7eb; border-radius:999px; font-weight:800; }
-
-    /* ===== ROI by market table ===== */
-    .tbl{width:100%;border-collapse:separate;border-spacing:0}
-    .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top}
-    .tbl th{text-align:left;font-weight:800;opacity:.8}
-
-    /* ===== Misc ===== */
-    .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
-    .wl-win{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
-    .wl-lose{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
-    .date-head{margin-top:1.2rem;font-weight:800}
-    .muted-sm{opacity:.75;font-size:.92rem}
-    .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
-    select{padding:.4rem .55rem;border:1px solid #e5e7eb;border-radius:.5rem;background:#fff}
-  </style>
-
-  <!-- Google tag -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);} gtag('js',new Date()); gtag('config','G-88C4MQ3EF8');</script>
-</head>
-<script src="/pixel.js" defer></script>
-<script src="/social.js" defer></script>
-
-<body>
-  <header class="site-header">
-    <nav class="nav">
-      <a class="logo brand" href="/" aria-label="OverEdge">
-        <img class="brand-img" src="/img/overedge-logo.png" alt="" />
-        <span class="sr-only">OverEdge</span>
-      </a>
-      <div class="links">
-        <a href="/free-picks">Free Picks</a>
-        <a href="/pro">Pro</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/FAQ">FAQ</a>
-        <a href="/results" aria-current="page">Results</a>
-        <a href="/account">Account</a>
-      </div>
-      <div class="auth" style="display:flex;align-items:center;gap:.5rem">
-        <span id="nav-plan" class="badge pill" style="display:none"></span>
-        <a class="btn small secondary" href="/account">Sign In</a>
-      </div>
-    </nav>
-  </header>
-
-  <main class="section" style="max-width:1000px">
-    <h1>Free Picks — Results</h1>
-    <p class="muted">Transparent record of outcomes. We calculate Win% from settled picks (Push excluded). ROI assumes 1u flat staking when odds are present.</p>
-
-    <!-- Top KPIs -->
-    <div id="summary" class="results-summary">
-      <div class="card"><div><strong>Total</strong></div><div id="s-total">—</div></div>
-      <div class="card"><div><strong>Wins</strong></div><div id="s-wins">—</div></div>
-      <div class="card"><div><strong>Losses</strong></div><div id="s-losses">—</div></div>
-      <div class="card"><div><strong>Win %</strong></div><div id="s-winrate">—</div></div>
-      <div class="card"><div><strong>ROI</strong></div><div id="s-roi">—</div></div>
-      <div class="card"><div><strong>Year Win %</strong></div><div id="s-ywin">—</div></div>
-      <div class="card"><div><strong>Year ROI</strong></div><div id="s-yroi">—</div></div>
-    </div>
-
-    <!-- New: Streak / Trend / 30d ROI / CLV -->
-    <div class="extras">
-      <div class="kpi"><div class="label">Current streak</div><div class="value" id="k-streak">—</div></div>
-      <div class="kpi"><div class="label">Best streak</div><div class="value" id="k-best">—</div></div>
-      <div class="kpi"><div class="label">Last 7 days win%</div><div class="value" id="k-7d">—</div></div>
-      <div class="kpi"><div class="label">Last 30 days ROI (1u)</div><div class="value" id="k-30roi">—</div></div>
-      <div class="kpi"><div class="label">Avg CLV (edge)</div><div class="value" id="k-clv">—</div></div>
-    </div>
-
-    <!-- New: Interactive ROI Simulator + Export -->
-    <section class="sim card">
-      <h2 style="margin:0 0 .35rem">ROI Simulator</h2>
-      <p class="muted-sm">“If I staked a flat amount on every pick in the selected period…”</p>
-      <div class="row">
-        <label><strong>Stake per pick</strong></label>
-        <input type="number" id="simStake" step="0.1" min="0" value="1">
-        <label><strong>Range</strong></label>
-        <select id="simRange">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="all">All</option>
-        </select>
-        <button class="btn small" id="simRun" type="button">Run</button>
-        <button class="btn secondary small" id="simExport" type="button">Export Bet Slip (CSV)</button>
-      </div>
-      <div class="out">
-        <span class="pill">Picks: <strong id="simPicks">—</strong></span>
-        <span class="pill">Wins: <strong id="simWins">—</strong></span>
-        <span class="pill">Losses: <strong id="simLosses">—</strong></span>
-        <span class="pill">Win%: <strong id="simWinrate">—</strong></span>
-        <span class="pill">Stake: <strong id="simStakeSum">—</strong></span>
-        <span class="pill">P/L (u): <strong id="simPnL">—</strong></span>
-        <span class="pill">ROI: <strong id="simROI">—</strong></span>
-      </div>
-    </section>
-
-    <!-- New: Historical ROI by Market -->
-    <section class="card" style="padding:14px 16px; margin:.5rem 0 1.25rem">
-      <h2 style="margin:0 0 .35rem">Historical ROI by Market</h2>
-      <p class="muted-sm">Aggregated from the results on this page (flat 1u on picks with odds).</p>
-      <table class="tbl" id="roiMarketTbl">
-        <thead><tr><th>Market</th><th>Picks</th><th>Win%</th><th>ROI</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <div class="toolbar">
-      <label for="monthSelect" class="muted-sm"><strong>Monthly view:</strong></label>
-      <select id="monthSelect"></select>
-      <span class="muted-sm" id="monthStats"></span>
-    </div>
-
-    <div id="list">Loading…</div>
-  </main>
-
-  <footer class="site-footer">
-    <span>© <span id="y"></span> OverEdge — Data beats gut</span>
-    <div class="contact">
-      <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
-      &nbsp;·&nbsp;
-      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
-      &nbsp;·&nbsp;
-      <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
-    </div>
-  </footer>
-
-  <script>
-    document.getElementById('y').textContent=new Date().getFullYear();
-
-    // ===== MANUAL RESULTS (all in Sep 2025) =====
-    // Optionally include 'closing' (closing price) to enable CLV calc on that pick.
-    const RESULTS = [
-      // 2025-09-26
-      { date:"2025-09-26", home:"Fanalamanga", away:"Ferroviário Maputo", market:"Under 2.5", odds:1.53, status:"lose" },
-      { date:"2025-09-26", home:"Tukums II",   away:"Riga Mariners",      market:"Over 2.5",  odds:1.33, status:"win" },
-
-      // 2025-09-25 (both picks WON)
-      { date:"2025-09-25", home:"Johor Darul Takzim FC", away:"Bangkok United", market:"Over 2.5", odds:1.44, status:"win" },
-      { date:"2025-09-25", home:"Nam Dinh",              away:"Svay Rieng",     market:"Over 2.5", odds:1.90, status:"win" },
-
-      // 2025-09-24
-      { date:"2025-09-24", home:"VfL Wolfsburg W", away:"Werder Bremen W",   market:"Over 2.5",  odds:1.57, status:"win" },
-      { date:"2025-09-24", home:"Kabel Novi Sad",  away:"Semendrija 1924",   market:"Under 2.5", odds:1.44, status:"lose" },
-
-      // 2025-09-23
-      { date:"2025-09-23", home:"Miedź Legnica II", away:"Świt Skolwin",     market:"Over 2.5",  odds:1.55, status:"win" },
-      { date:"2025-09-23", home:"Cagliari",         away:"Frosinone",        market:"Under 2.5", odds:1.80, status:"lose" },
-
-      // 2025-09-22
-      { date:"2025-09-22", home:"Barcelona Atlètic", away:"Castellón B",     market:"Over 2.5",  odds:1.60, status:"win" },
-
-      // 2025-09-21
-      { date:"2025-09-21", home:"Rēzekne FA",       away:"Skanste",          market:"Over 2.5",  odds:1.45, status:"win" },
-      { date:"2025-09-21", home:"Häcken W",         away:"Rosengård W",      market:"Over 2.5",  odds:1.73, status:"win" },
-
-      // 2025-09-20
-      { date:"2025-09-20", home:"1899 Hoffenheim",  away:"Bayern München",   market:"Over 2.5",  odds:1.35, status:"win" },
-      { date:"2025-09-20", home:"Ogre United",      away:"Riga Mariners",    market:"Over 2.5",  odds:1.65, status:"win" },
-
-      // 2025-09-17
-      { date:"2025-09-17", home:"Cham",             away:"Vevey Sports",     market:"Over 2.5",  odds:1.54, status:"win" },
-      { date:"2025-09-17", home:"Rothis",           away:"Sturm Graz",       market:"Over 2.5",  odds:1.20, status:"lose" },
-
-      // 2025-09-16
-      { date:"2025-09-16", home:"Tonbridge Angels", away:"Steyning Town",    market:"Over 2.5",  odds:1.67, status:"win" },
-      { date:"2025-09-16", home:"Rylands",          away:"Ashton United",    market:"Under 2.5", odds:1.80, status:"win" },
-      { date:"2025-09-16", home:"Sharjah FC",       away:"Al-Gharafa",       market:"Over 2.5",  odds:1.70, status:"win" },
-
-      // 2025-09-14
-      { date:"2025-09-14", home:"Pitea W",          away:"Brommapojkarna W", market:"Over 2.5",  odds:1.69, status:"win" },
-      { date:"2025-09-14", home:"Marupe",           away:"JDFS Alberts",     market:"Over 2.5",  odds:1.47, status:"win" },
-    ];
-
-    // --- helpers ---
-    const el = id => document.getElementById(id);
-    function wlPill(status){
-      const s = String(status||'').toLowerCase();
-      if (s === 'win') return '<span class="wl-pill wl-win">WIN</span>';
-      if (s === 'loss' || s === 'lose') return '<span class="wl-pill wl-lose">LOSE</span>';
-      return '—';
-    }
-    function monthKey(dateStr){ return (dateStr||'').slice(0,7); } // "YYYY-MM"
-    function monthLabel(key){
-      const [y,m] = key.split('-').map(Number);
-      const d = new Date(y, m-1, 1);
-      return d.toLocaleDateString(undefined, { year:'numeric', month:'long' });
-    }
-    function computeStats(picks){
-      let wins=0, losses=0, stake=0, pnl=0;
-      for (const p of picks){
-        const s = String(p.status||'').toLowerCase();
-        if (s === 'win') wins++;
-        else if (s === 'lose' || s === 'loss') losses++;
-        if (typeof p.odds === 'number'){
-          stake += 1;
-          if (s === 'win') pnl += (p.odds - 1);
-          else if (s === 'lose' || s === 'loss') pnl -= 1;
+  // ---------- Remote fetch + merge with manual seed ----------
+  async function fetchRemote(days=180){
+    try{
+      const r = await fetch(`/api/results?kind=free&days=${encodeURIComponent(days)}`, { cache:'no-store' });
+      if(!r.ok) throw new Error('net');
+      const data = await r.json(); // {days:[{date,picks:[...] }], summary:...}
+      const out = [];
+      for(const d of (data.days||[])){
+        const date = d.date;
+        for(const p of (d.picks||[])){
+          out.push({
+            date,
+            home: p.home, away: p.away,
+            market: p.market || p.selection || p.pick || '',
+            odds: (typeof p.odds==='number'? p.odds : null),
+            closing: (typeof p.closing==='number'? p.closing : null),
+            status: (p.status||'').toLowerCase() // 'win' | 'lose' | 'push' | ...
+          });
         }
       }
-      const settled = wins + losses;
-      const winRate = settled ? (wins/settled*100) : null;
-      const roiPct  = stake ? (pnl/stake*100) : null;
-      return { wins, losses, settled, winRate, roiPct, stake, pnl };
+      return out;
+    }catch{
+      return []; // fallback to manual only
     }
+  }
 
-    // Streaks
-    function streaks(picks){ // picks should be sorted oldest->newest
-      let best=0, cur=0;
-      for(const p of picks){
-        const w = String(p.status||'').toLowerCase()==='win';
-        if(w){ cur+=1; best=Math.max(best,cur); } else if(String(p.status||'').toLowerCase()==='lose'){ cur=0; }
+  function dedupeMerge(manual, remote){
+    const map = new Map();
+    const keyOf = p => `${p.date}|${p.home}|${p.away}|${p.market}`.toLowerCase();
+    for(const p of manual){ map.set(keyOf(p), p); }
+    for(const r of remote){
+      const k = keyOf(r);
+      const cur = map.get(k);
+      if(!cur){ map.set(k, r); }
+      else{
+        map.set(k, {
+          ...cur,
+          status: r.status || cur.status,
+          odds: (typeof r.odds==='number'? r.odds : cur.odds),
+          closing: (typeof r.closing==='number'? r.closing : cur.closing),
+          market: r.market || cur.market
+        });
       }
-      // current streak from the end
-      let curFromEnd=0;
-      for(let i=picks.length-1;i>=0;i--){
-        const s=String(picks[i].status||'').toLowerCase();
-        if(s==='win'){ if(curFromEnd>=0) curFromEnd+=1; else break; }
-        else if(s==='lose'){ if(curFromEnd<=0) curFromEnd-=1; else break; }
-        else break;
-      }
-      return { best, current: curFromEnd };
     }
+    return Array.from(map.values()).sort((a,b)=> a.date.localeCompare(b.date)); // oldest->newest
+  }
 
-    // CLV (average (closing - open)/open). Requires p.closing numeric.
-    function clvAvg(picks){
-      const xs = [];
-      for (const p of picks){
-        if (typeof p.odds === 'number' && typeof p.closing === 'number' && p.odds>0){
-          xs.push( (p.closing - p.odds) / p.odds );
-        }
-      }
-      if (!xs.length) return null;
-      const m = xs.reduce((a,b)=>a+b,0)/xs.length;
-      return m*100; // %
-    }
+  // ---------- Boot: merge, then render everything ----------
+  (async function boot(){
+    const remote = await fetchRemote(180);
+    const MERGED = dedupeMerge(MANUAL_RESULTS, remote);
 
-    // Date helpers
-    function daysAgo(n){ const d = new Date(); d.setDate(d.getDate()-n); return d; }
-    function toDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
-    function inLastNDays(p, n){ return toDate(p.date) >= daysAgo(n); }
-
-    // ---- Hide months older than launch
     const MIN_MONTH = '2025-09';
+    const ALLOWED_RESULTS = MERGED.filter(r => monthKey(r.date) >= MIN_MONTH);
 
-    // Filtered list used for UI (dropdown, list, and "All months")
-    const ALLOWED_RESULTS = RESULTS.filter(r => monthKey(r.date) >= MIN_MONTH).sort((a,b)=> a.date.localeCompare(b.date));
-
-    // Build month groups (allowed only)
+    // Build month groups
     const byMonth = new Map();
     ALLOWED_RESULTS.forEach(r => {
       const k = monthKey(r.date);
@@ -333,58 +175,52 @@
       byMonth.get(k).push(r);
     });
 
-    // Populate month dropdown (descending), prepend "All"
+    // Month dropdown
     const monthSelect = el('monthSelect');
-    const months = Array.from(byMonth.keys())
-      .filter(k => k >= MIN_MONTH)
-      .sort((a,b)=> b.localeCompare(a));
+    const months = Array.from(byMonth.keys()).filter(k => k >= MIN_MONTH).sort((a,b)=> b.localeCompare(a));
+    if (monthSelect){
+      const allOpt = document.createElement('option');
+      allOpt.value = 'all';
+      allOpt.textContent = 'All months';
+      monthSelect.appendChild(allOpt);
+      months.forEach(k=>{
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = monthLabel(k);
+        monthSelect.appendChild(opt);
+      });
+      monthSelect.value = months[0] || 'all';
+    }
 
-    const allOpt = document.createElement('option');
-    allOpt.value = 'all';
-    allOpt.textContent = 'All months';
-    monthSelect.appendChild(allOpt);
-
-    months.forEach(k=>{
-      const opt = document.createElement('option');
-      opt.value = k; opt.textContent = monthLabel(k);
-      monthSelect.appendChild(opt);
-    });
-    monthSelect.value = months[0] || 'all';
-
-    // Top summaries
+    // Top summaries (overall)
     const allStats = computeStats(ALLOWED_RESULTS);
-    el('s-total').textContent   = ALLOWED_RESULTS.length;
-    el('s-wins').textContent    = allStats.wins;
-    el('s-losses').textContent  = allStats.losses;
-    el('s-winrate').textContent = (allStats.winRate!=null? allStats.winRate.toFixed(1)+'%':'—');
-    el('s-roi').textContent     = (allStats.roiPct!=null? allStats.roiPct.toFixed(1)+'%':'—');
+    setText('s-total',   ALLOWED_RESULTS.length);
+    setText('s-wins',    allStats.wins);
+    setText('s-losses',  allStats.losses);
+    setText('s-winrate', (allStats.winRate!=null? allStats.winRate.toFixed(1)+'%':'—'));
+    setText('s-roi',     (allStats.roiPct!=null? allStats.roiPct.toFixed(1)+'%':'—'));
 
-    // Yearly (current calendar year)
+    // Yearly summaries (current calendar year)
     const currentYear = new Date().getFullYear();
     const yearPicks = ALLOWED_RESULTS.filter(r => (r.date||'').startsWith(String(currentYear)));
     const yStats = computeStats(yearPicks.length ? yearPicks : ALLOWED_RESULTS);
-    el('s-ywin').textContent = (yStats.winRate!=null? yStats.winRate.toFixed(1)+'%':'—');
-    el('s-yroi').textContent = (yStats.roiPct!=null? yStats.roiPct.toFixed(1)+'%':'—');
+    setText('s-ywin', (yStats.winRate!=null? yStats.winRate.toFixed(1)+'%':'—'));
+    setText('s-yroi', (yStats.roiPct!=null? yStats.roiPct.toFixed(1)+'%':'—'));
 
-    // ===== New KPIs =====
-    // Streaks
+    // ===== Extras KPIs =====
     const st = streaks(ALLOWED_RESULTS);
-    el('k-streak').textContent = st.current>0 ? `${st.current}W` : st.current<0 ? `${-st.current}L` : '—';
-    el('k-best').textContent = st.best ? `${st.best}W` : '—';
+    setText('k-streak', st.current>0 ? `${st.current}W` : st.current<0 ? `${-st.current}L` : '—');
+    setText('k-best',   st.best ? `${st.best}W` : '—');
 
-    // 7d win%
-    const last7 = ALLOWED_RESULTS.filter(p => inLastNDays(p,7));
-    const s7 = computeStats(last7);
-    el('k-7d').textContent = (s7.winRate!=null? s7.winRate.toFixed(1)+'%':'—');
+    const last7  = ALLOWED_RESULTS.filter(p => inLastNDays(p,7));
+    const s7     = computeStats(last7);
+    setText('k-7d', (s7.winRate!=null? s7.winRate.toFixed(1)+'%':'—'));
 
-    // 30d ROI (1u)
     const last30 = ALLOWED_RESULTS.filter(p => inLastNDays(p,30));
-    const s30 = computeStats(last30);
-    el('k-30roi').textContent = (s30.roiPct!=null? s30.roiPct.toFixed(1)+'%':'—');
+    const s30    = computeStats(last30);
+    setText('k-30roi', (s30.roiPct!=null? s30.roiPct.toFixed(1)+'%':'—'));
 
-    // CLV
     const clv = clvAvg(ALLOWED_RESULTS);
-    el('k-clv').textContent = (clv!=null? (clv>=0? '+' : '') + clv.toFixed(1) + '%' : '—');
+    setText('k-clv', (clv!=null? (clv>=0? '+' : '') + clv.toFixed(1) + '%' : '—'));
 
     // ===== Historical ROI by Market =====
     function computeMarketRows(picks){
@@ -402,29 +238,40 @@
       rows.sort((a,b)=> (b.roi??-1) - (a.roi??-1));
       return rows;
     }
+    renderMarketTable();
+
     function renderMarketTable(){
-      const tb = document.querySelector('#roiMarketTbl tbody');
-      tb.innerHTML = computeMarketRows(ALLOWED_RESULTS).map(r=>`
+      const tbWrap = document.querySelector('#roiMarketTbl tbody');
+      if (!tbWrap) return;
+      const rows = computeMarketRows(ALLOWED_RESULTS).map(r=>`
         <tr>
-          <td><strong>${r.market}</strong></td>
+          <td><strong>${escapeHTML(r.market)}</strong></td>
           <td>${r.picks}</td>
           <td>${r.win!=null? r.win.toFixed(1)+'%':'—'}</td>
           <td>${r.roi!=null? r.roi.toFixed(1)+'%':'—'}</td>
         </tr>
       `).join('');
+      tbWrap.innerHTML = rows;
     }
-    renderMarketTable();
 
     // ===== Simulator =====
+    const simRunBtn = el('simRun');
+    const simExportBtn = el('simExport');
+    if (simRunBtn) simRunBtn.addEventListener('click', runSimulator);
+    if (simExportBtn) simExportBtn.addEventListener('click', exportCSV);
+    runSimulator();
+
     function filterRange(range){
       if(range==='all') return ALLOWED_RESULTS;
       const n = Number(range)||30;
       return ALLOWED_RESULTS.filter(p => inLastNDays(p, n));
     }
     function runSimulator(){
-      const stake = Math.max(0, Number(el('simStake').value)||0);
-      const range = el('simRange').value;
-      const picks = filterRange(range).filter(p => typeof p.odds==='number'); // need odds for P/L
+      const stakeInput = el('simStake');
+      const rangeSel   = el('simRange');
+      const stake = Math.max(0, Number(stakeInput && stakeInput.value || 0) || 0);
+      const range = rangeSel ? rangeSel.value : '30';
+      const picks = filterRange(range).filter(p => typeof p.odds==='number');
       let wins=0, losses=0, st=0, pnl=0;
       for(const p of picks){
         const s = String(p.status||'').toLowerCase();
@@ -436,23 +283,20 @@
       const winrate = settled? (wins/settled*100): null;
       const roi = st? (pnl/st*100): null;
 
-      el('simPicks').textContent = settled;
-      el('simWins').textContent = wins;
-      el('simLosses').textContent = losses;
-      el('simWinrate').textContent = (winrate!=null? winrate.toFixed(1)+'%':'—');
-      el('simStakeSum').textContent = st.toFixed(2);
-      el('simPnL').textContent = pnl.toFixed(2);
-      el('simROI').textContent = (roi!=null? roi.toFixed(1)+'%':'—');
+      setText('simPicks', settled);
+      setText('simWins', wins);
+      setText('simLosses', losses);
+      setText('simWinrate', (winrate!=null? winrate.toFixed(1)+'%':'—'));
+      setText('simStakeSum', st.toFixed(2));
+      setText('simPnL', pnl.toFixed(2));
+      setText('simROI', (roi!=null? roi.toFixed(1)+'%':'—'));
 
-      // Keep latest picks list cached for export
       window.__simLast = { picks, stake };
     }
     function exportCSV(){
       const data = window.__simLast || { picks: [], stake: 1 };
       const stake = data.stake||1;
-      const rows = [
-        ['Date','Home','Away','Market','Odds','Result','Stake','Return']
-      ];
+      const rows = [['Date','Home','Away','Market','Odds','Result','Stake','Return']];
       for(const p of data.picks){
         const s = String(p.status||'').toLowerCase();
         const ret = s==='win' ? stake*p.odds : s==='lose'||s==='loss' ? 0 : '';
@@ -473,28 +317,29 @@
       setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
     }
 
-    el('simRun').addEventListener('click', runSimulator);
-    el('simExport').addEventListener('click', exportCSV);
-    // run once on load
-    runSimulator();
-
     // Monthly stats line next to dropdown
+    if (monthSelect){
+      showMonthStats(monthSelect.value);
+      monthSelect.addEventListener('change', e=> showMonthStats(e.target.value));
+    }
     function showMonthStats(key){
       let picks;
       if (key==='all') picks = ALLOWED_RESULTS;
       else picks = byMonth.get(key) || [];
       const s = computeStats(picks);
-      el('monthStats').innerHTML =
+      const host = el('monthStats');
+      if (!host) return;
+      host.innerHTML =
         picks.length
           ? `Picks: <strong>${s.settled}</strong> · Win%: <strong>${s.winRate!=null?s.winRate.toFixed(1)+'%':'—'}</strong> · ROI: <strong>${s.roiPct!=null?s.roiPct.toFixed(1)+'%':'—'}</strong>`
           : 'No data';
     }
-    showMonthStats(monthSelect.value);
-    monthSelect.addEventListener('change', e=> showMonthStats(e.target.value));
 
     // Render full list grouped by date within each (allowed) month (desc)
+    renderAllMonths();
     function renderAllMonths(){
       const host = el('list');
+      if (!host) return;
       host.innerHTML = '';
 
       const monthKeys = Array.from(byMonth.keys())
@@ -503,7 +348,6 @@
 
       monthKeys.forEach(k=>{
         const list = byMonth.get(k) || [];
-        // group by date
         const byDate = {};
         list.forEach(p => { (byDate[p.date] ||= []).push(p); });
         const dates = Object.keys(byDate).sort((a,b)=> b.localeCompare(a));
@@ -512,7 +356,7 @@
         const wrap = document.createElement('section');
         wrap.innerHTML = `
           <div class="date-head" style="display:flex;justify-content:space-between;align-items:baseline">
-            <span>${monthLabel(k)}</span>
+            <span>${escapeHTML(monthLabel(k))}</span>
             <span class="muted-sm">
               Picks: <strong>${mStats.settled}</strong> ·
               Win%: <strong>${mStats.winRate!=null?mStats.winRate.toFixed(1)+'%':'—'}</strong> ·
@@ -523,23 +367,23 @@
 
         dates.forEach(d=>{
           const picks = byDate[d];
+          const rows = picks.map(p=>`
+            <tr>
+              <td><strong>${escapeHTML(p.home)}</strong> vs <strong>${escapeHTML(p.away)}</strong></td>
+              <td><strong>${escapeHTML(p.market||'')}</strong></td>
+              <td>${typeof p.odds==='number'? p.odds.toFixed(2) : '—'}</td>
+              <td>${wlPill(p.status)}</td>
+            </tr>
+          `).join('');
+
           const block = document.createElement('div');
           block.innerHTML = `
-            <div class="muted-sm" style="margin:.35rem 0 .2rem;"><strong>${d}</strong></div>
+            <div class="muted-sm" style="margin:.35rem 0 .2rem;"><strong>${escapeHTML(d)}</strong></div>
             <table class="tbl">
               <thead>
                 <tr><th>Match</th><th>Market</th><th>Odds</th><th>Result</th></tr>
               </thead>
-              <tbody>
-                ${picks.map(p=>`
-                  <tr>
-                    <td><strong>${p.home}</strong> vs <strong>${p.away}</strong></td>
-                    <td><strong>${p.market}</strong></td>
-                    <td>${typeof p.odds==='number'? p.odds.toFixed(2) : '—'}</td>
-                    <td>${wlPill(p.status)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
+              <tbody>${rows}</tbody>
             </table>
           `;
           wrap.appendChild(block);
@@ -548,7 +392,19 @@
         host.appendChild(wrap);
       });
     }
-    renderAllMonths();
-  </script>
-</body>
-</html>
+
+    // ---- utils
+    function setText(id, val){
+      const t = el(id);
+      if (t) t.textContent = (val==null? '—' : String(val));
+    }
+    function escapeHTML(s){
+      return String(s==null?'':s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+    }
+  })();
+})();
