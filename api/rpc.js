@@ -497,11 +497,15 @@ async function scoreFixtureForOU25(fx) {
   const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
+
   const pick   = overP >= underP ? "Over 2.5" : "Under 2.5";
-  const conf   = overP >= underP ? overP : underP;
+  const conf   = overP >= underP ? overP : underP;           // pick confidence (chosen side)
+  const modelP = pick === "Over 2.5" ? overP : underP;       // model probability for chosen side
+
   const time   = clockFromISO(fx?.fixture?.date);
   const odds   = await getOddsMap(fx?.fixture?.id);
   const confPct = pct(conf);
+  const modelProbPct = pct(modelP);
 
   return {
     fixtureId: fx?.fixture?.id,
@@ -513,6 +517,7 @@ async function scoreFixtureForOU25(fx) {
     away: fx?.teams?.away?.name,
     market: pick,
     confidencePct: confPct,
+    modelProbPct, // <— NEW
     odds: odds ? odds[pick === "Over 2.5" ? "over25" : "under25"] : null,
     reasoning: reasonOURich(fx, home, away, pick, confPct),
   };
@@ -576,6 +581,7 @@ async function scoreHeroCandidates(fx) {
       selection: "Over 2.5",
       market: "Over 2.5",
       confidencePct: confPct,
+      modelProbPct: pct(overP),                // <— NEW
       valueScore: Number((overP * odds.over25).toFixed(4)),
       reasoning: reasonOURich(fx, home, away, "Over 2.5", confPct),
     });
@@ -593,6 +599,7 @@ async function scoreHeroCandidates(fx) {
       selection: "Under 2.5",
       market: "Under 2.5",
       confidencePct: confPct,
+      modelProbPct: pct(underP),               // <— NEW
       valueScore: Number((underP * odds.under25).toFixed(4)),
       reasoning: reasonOURich(fx, home, away, "Under 2.5", confPct),
     });
@@ -612,6 +619,7 @@ async function scoreHeroCandidates(fx) {
       selection: "BTTS: Yes",
       market: "BTTS",
       confidencePct: confPct,
+      modelProbPct: pct(bttsP),                // <— NEW
       valueScore: Number((bttsP * odds.bttsYes).toFixed(4)),
       reasoning: reasonBTTSRich(fx, home, away, "BTTS: Yes", confPct),
     });
@@ -696,6 +704,7 @@ async function buildProBoard({ date, tz }) {
       const ou = {
         recommendation: ouPick,
         confidencePct: ouConfPct,
+        modelProbPct: pct(ouPick === "Over 2.5" ? overP : underP), // <— NEW
         reasoning: reasonOURich(fx, home, away, ouPick, ouConfPct),
       };
 
@@ -706,6 +715,7 @@ async function buildProBoard({ date, tz }) {
       const btts = {
         recommendation: bttsPick,
         confidencePct: bttsConfPct,
+        modelProbPct: pct(bttsPick === "BTTS: Yes" ? bttsP : (1 - bttsP)), // <— NEW
         reasoning: reasonBTTSRich(fx, home, away, bttsPick, bttsConfPct),
       };
 
@@ -714,6 +724,7 @@ async function buildProBoard({ date, tz }) {
       const onex2Rec = {
         recommendation: onex2.pick,
         confidencePct: onex2ConfPct,
+        modelProbPct: onex2ConfPct, // approximation
         reasoning: reason1X2Rich(fx, home, away, onex2.pick, onex2ConfPct),
       };
 
@@ -778,27 +789,27 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
           const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
           const conf = overP >= underP ? overP : underP;
           const confPct = pct(conf);
-          rec = { market: "OU Goals", pick, confidencePct: confPct };
+          rec = { market: "OU Goals", pick, confidencePct: confPct, modelProbPct: pct(pick === "Over 2.5" ? overP : underP) };
           why = reasonOURich(fx, H, A, pick, confPct);
         } else if (market === "btts") {
           const b = H.bttsRate*0.5 + A.bttsRate*0.5;
           const pick = b >= 0.5 ? "BTTS: Yes" : "BTTS: No";
           const conf = b >= 0.5 ? b : 1 - b;
           const confPct = pct(conf);
-          rec = { market: "BTTS", pick, confidencePct: confPct };
+          rec = { market: "BTTS", pick, confidencePct: confPct, modelProbPct: pct(pick === "BTTS: Yes" ? b : (1 - b)) };
           why = reasonBTTSRich(fx, H, A, pick, confPct);
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
           const confPct = pct(ox.conf);
-          rec = { market: "1X2", pick: ox.pick, confidencePct: confPct };
+          rec = { market: "1X2", pick: ox.pick, confidencePct: confPct, modelProbPct: confPct };
           why = reason1X2Rich(fx, H, A, ox.pick, confPct);
         } else if (market === "ou_cards") {
           const lean = computeCardsLean(H, A);
-          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct };
+          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct };
           why = reasonCardsRich(fx, H, A, lean.pick, lean.confidencePct);
         } else if (market === "ou_corners") {
           const lean = computeCornersLean(H, A);
-          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct };
+          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct };
           why = reasonCornersRich(fx, H, A, lean.pick, lean.confidencePct);
         }
       }
@@ -864,8 +875,7 @@ async function verifyStripeByEmail(email) {
 
   const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
   // after computing `plan` above
-return { pro: isPro, plan, status: best.status };
-
+  return { pro: isPro, plan, status: best.status };
 }
 async function getProOverride(email) {
   const v = await kvGet(`pro:override:${email}`);
@@ -1063,7 +1073,7 @@ export default async function handler(req, res) {
                   market: r.market || null,
                   selection: r.pick || null,
                   odds: null,
-                  fixtureId: fx.fixtureId || fx.fixture || fx.fixtureId || null,
+                  fixtureId: fx.fixtureId || null,
                   source: "pro-board",
                   status: "pending"
                 });
@@ -1255,7 +1265,7 @@ export default async function handler(req, res) {
     // PRO BOARD GROUPED — also persists recs to Firestore
     if (action === "pro-board-grouped") {
       if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();

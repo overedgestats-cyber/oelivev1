@@ -67,15 +67,33 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       padding:.7rem .9rem; margin:.35rem 0; background:#fff; border:1px solid #e6e8ee;
       border-radius:14px; box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
     }
-    .fixture-meta{ text-align:right; min-width:220px }
+    .fixture-meta{ text-align:right; min-width:280px }
     .badge-pick{
       display:inline-flex; align-items:center; gap:.4rem; padding:.22rem .6rem; border-radius:999px;
       font-weight:800; letter-spacing:.02em; background:#eff6ff; border:1px solid #cfe4ff; color:#1d4ed8;
     }
-    .badge-conf{
-      display:inline-block; margin-left:.35rem; padding:.18rem .5rem; border-radius:999px;
-      font-weight:800; background:#e8f8ee; border:1px solid #cbead8; color:#166534;
+    .badge-chip{
+      display:inline-flex; align-items:center; gap:.35rem; padding:.18rem .5rem; border-radius:999px; font-weight:800;
+      border:1px solid transparent;
     }
+    .badge-model{ background:#eef6ff; border-color:#cfe2ff; color:#0b57d0; }
+    .badge-conf{ background:#e8f8ee; border-color:#cbead8; color:#166534; }
+    .badge-gap{ display:inline-block; width:.28rem; }
+
+    .legend { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; margin:.25rem 0 1rem; }
+    .legend .label { font-weight:700; }
+    .tooltip {
+      position:relative; cursor:help; text-decoration:dotted underline; text-underline-offset:2px;
+    }
+    .tooltip[data-tip]::after{
+      content:attr(data-tip);
+      position:absolute; left:50%; transform:translateX(-50%); bottom:calc(100% + 8px);
+      background:#0a0a0a; color:#fff; padding:.5rem .6rem; border-radius:8px; font-size:.86rem; line-height:1.2;
+      opacity:0; pointer-events:none; white-space:normal; width:min(92vw,320px);
+      box-shadow:0 8px 30px rgba(0,0,0,.18); transition:opacity .15s ease;
+    }
+    .tooltip:hover::after, .tooltip:focus::after{ opacity:1; }
+
     .reason{ grid-column:1 / -1; margin-top:.35rem; font-size:.92rem; color:#5b6b82; white-space:pre-wrap; }
 
     /* Collapse/expand countries */
@@ -137,7 +155,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       </section>
 
       <section class="section" style="padding-top:.5rem">
-        <div class="grid-2" style="margin-bottom:.5rem">
+        <div class="grid-2" style="margin-bottom:.25rem">
           <h2 style="margin:0">Pro Board</h2>
           <div class="market-controls">
             <label for="boardMarket" class="muted-sm">Market:</label>
@@ -150,6 +168,21 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
             </select>
           </div>
         </div>
+
+        <!-- Legend for the two percentages -->
+        <div class="legend muted-sm">
+          <span class="label">Legend:</span>
+          <span class="badge-chip badge-model">
+            Model probability
+            <span class="tooltip" tabindex="0" data-tip="How often our model expects this exact selection to hit based on recent form and team stats.">ⓘ</span>
+          </span>
+          <span class="badge-gap"></span>
+          <span class="badge-chip badge-conf">
+            Pick confidence
+            <span class="tooltip" tabindex="0" data-tip="Our conviction in recommending this pick today. Blends model probability with slate quality and variance controls.">ⓘ</span>
+          </span>
+        </div>
+
         <!-- pro-board class enables the theme styles -->
         <div id="board" class="pro-board">Loading…</div>
       </section>
@@ -289,7 +322,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
             <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
           </div>
           <div style="text-align:right">
-            <span class="badge pill conf">Confidence ${p.confidencePct}%</span>
+            <span class="badge-chip badge-conf">Confidence ${p.confidencePct}%</span>
           </div>
         </div>
         <div style="margin-top:.5rem; white-space:pre-wrap">${p.reasoning || ""}</div>
@@ -307,7 +340,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       }
     }
 
-    // ---------- GROUPED PRO BOARD (with Trend + CLV chips) ----------
+    // ---------- GROUPED PRO BOARD (with Model & Confidence chips) ----------
     boardMarketSel.addEventListener('change', loadBoardGrouped);
 
     function renderGroupedBoard(payload){
@@ -342,21 +375,15 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
             const row = document.createElement('div');
             row.className = 'fixture-row';
             const rec = fx.recommendation;
-            const pickLabel = rec ? `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}` : "";
-            const confTxt = rec?.confidencePct != null ? `${rec.confidencePct}%` : "";
 
-            // NEW: trend/notes if provided by backend
+            if (!rec) return;
+
+            const pickLabel = `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}`;
+            const conf = (typeof rec.confidencePct === 'number') ? rec.confidencePct : null;
+            const model = (typeof rec.modelProbPct === 'number') ? rec.modelProbPct : conf; // fallback if backend not yet sending
+
+            // Optional trend/notes/reasoning
             const trend = fx.trend || rec?.trend || rec?.note || "";
-
-            // NEW: CLV badge if we have posted + close odds (fallback: rec.odds)
-            const open = (typeof rec?.postedOdds==='number') ? rec.postedOdds : rec?.odds;
-            const close = (typeof rec?.closeOdds==='number') ? rec.closeOdds : null;
-            let clvBadge = "";
-            if (typeof open==='number' && typeof close==='number') {
-              const edge = ((open - close)/close)*100;
-              const tag  = edge > 0 ? `Beat close +${edge.toFixed(1)}%` : (edge < 0 ? `Below close ${edge.toFixed(1)}%` : `= close`);
-              clvBadge = `<span class="pill" style="margin-left:.35rem">${tag}</span>`;
-            }
 
             row.innerHTML = `
               <div class="teams">
@@ -367,13 +394,19 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
               <div class="fixture-meta">
                 <div class="muted-sm">${fx.time || ""}</div>
-                ${rec ? `
-                  <div style="margin-top:.35rem">
-                    <span class="badge-pick">${pickLabel}</span>
-                    ${confTxt ? `<span class="badge-conf">${confTxt}</span>` : ``}
-                    ${clvBadge}
-                  </div>
-                ` : ``}
+                <div style="margin-top:.35rem">
+                  <span class="badge-pick">${pickLabel}</span>
+                </div>
+                <div style="margin-top:.35rem; display:flex; gap:.35rem; justify-content:flex-end; flex-wrap:wrap">
+                  <span class="badge-chip badge-model">
+                    Model ${typeof model==='number' ? `${model}%` : '—'}
+                    <span class="tooltip" tabindex="0" data-tip="Model probability: how often our model expects this selection to hit based on recent form and team stats.">ⓘ</span>
+                  </span>
+                  <span class="badge-chip badge-conf">
+                    Confidence ${typeof conf==='number' ? `${conf}%` : '—'}
+                    <span class="tooltip" tabindex="0" data-tip="Pick confidence: our conviction in recommending this today (model + slate quality + variance controls).">ⓘ</span>
+                  </span>
+                </div>
               </div>
 
               ${trend ? `<div class="reason">${trend}</div>` : (fx.reasoning ? `<div class="reason">${fx.reasoning}</div>` : ``)}
