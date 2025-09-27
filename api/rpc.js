@@ -12,6 +12,9 @@
 //  - hero-bet-results    (read Hero Bet outcomes from Firestore)
 //  - pro-board-results   (read Pro Board daily summaries from Firestore)
 //  - (optional) settle   (admin patch for results; protect before use)
+//  - NEW: capture-free-picks   (cron-friendly write of today's Free Picks)
+//  - NEW: capture-hero-bet     (cron-friendly write of today's Hero Bet)
+//  - NEW: capture-proboard     (cron-friendly write of today's Pro Board recs)
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -41,13 +44,13 @@ try {
  *  kind: "free-picks" | "hero-bet" | "pro-board"
  *  date: "YYYY-MM-DD"
  *  picks: [
- *    { date, matchTime, country, league, home, away, market, selection, odds?, source }
+ *    { date, matchTime, country, league, home, away, market, selection, odds?, fixtureId?, source, status? }
  *  ]
  *
  * Storage shape:
  *  - "free_picks_results" docId=date: { date, picks:[{...}] }
  *  - "hero_bet_results"   docId=date: { date, picks:[{...}]}  // one per day
- *  - "pro_board_results"  docId=date: { date, totals?, picks:[{...}] }
+ *  - "pro_board_results"  docId=date: { date, picks:[{...}] }
  */
 async function writeDailyPicks(kind, date, picks) {
   if (!db) return;
@@ -55,57 +58,27 @@ async function writeDailyPicks(kind, date, picks) {
 
   const normKey = (s) => String(s || "").trim().toLowerCase();
 
-  if (kind === "free-picks") {
-    const col = db.collection("free_picks_results");
-    const docRef = col.doc(date);
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(docRef);
-      const existing = (snap.exists ? (snap.data()?.picks || []) : []);
-      // Upsert by (home,away,market,selection)
-      const merged = upsertPicks(existing, picks, (a, b) =>
-        normKey(a.home) === normKey(b.home) &&
-        normKey(a.away) === normKey(b.away) &&
-        normKey(a.market) === normKey(b.market) &&
-        normKey(a.selection || a.market) === normKey(b.selection || b.market)
-      );
-      tx.set(docRef, { date, picks: merged }, { merge: true });
-    });
-    return;
-  }
+  const colName =
+    kind === "free-picks" ? "free_picks_results" :
+    kind === "hero-bet"   ? "hero_bet_results"   :
+    kind === "pro-board"  ? "pro_board_results"  : null;
 
-  if (kind === "hero-bet") {
-    const col = db.collection("hero_bet_results");
-    const docRef = col.doc(date);
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(docRef);
-      const existing = (snap.exists ? (snap.data()?.picks || []) : []);
-      const merged = upsertPicks(existing, picks, (a, b) =>
-        normKey(a.home) === normKey(b.home) &&
-        normKey(a.away) === normKey(b.away) &&
-        normKey(a.market) === normKey(b.market) &&
-        normKey(a.selection || a.market) === normKey(b.selection || b.market)
-      );
-      tx.set(docRef, { date, picks: merged }, { merge: true });
-    });
-    return;
-  }
+  if (!colName) return;
 
-  if (kind === "pro-board") {
-    const col = db.collection("pro_board_results");
-    const docRef = col.doc(date);
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(docRef);
-      const existing = (snap.exists ? (snap.data()?.picks || []) : []);
-      const merged = upsertPicks(existing, picks, (a, b) =>
-        normKey(a.home) === normKey(b.home) &&
-        normKey(a.away) === normKey(b.away) &&
-        normKey(a.market) === normKey(b.market) &&
-        normKey(a.selection || a.market) === normKey(b.selection || b.market)
-      );
-      tx.set(docRef, { date, picks: merged }, { merge: true });
-    });
-    return;
-  }
+  const col = db.collection(colName);
+  const docRef = col.doc(date);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const existing = (snap.exists ? (snap.data()?.picks || []) : []);
+    const merged = upsertPicks(existing, picks, (a, b) =>
+      normKey(a.home) === normKey(b.home) &&
+      normKey(a.away) === normKey(b.away) &&
+      normKey(a.market) === normKey(b.market) &&
+      normKey(a.selection || a.market) === normKey(b.selection || b.market)
+    );
+    tx.set(docRef, { date, picks: merged }, { merge: true });
+  });
 }
 
 // Generic pick upsert
@@ -113,10 +86,11 @@ function upsertPicks(existing, incoming, eq) {
   const out = existing.slice();
   for (const p of incoming) {
     const idx = out.findIndex((x) => eq(x, p));
-    if (idx === -1) out.push(p);
+    const base = { status: "pending" }; // default status
+    if (idx === -1) out.push({ ...base, ...cleanMerge(p) });
     else {
-      // merge non-null fields
       out[idx] = { ...out[idx], ...cleanMerge(p) };
+      if (!out[idx].status) out[idx].status = "pending";
     }
   }
   return out;
@@ -206,7 +180,7 @@ function stableSortFixtures(fixtures = []) {
     const bi = b?.fixture?.id ?? 0;
     if (ai !== bi) return ai - bi;
     const ad = a?.fixture?.date || "";
-    const bd = b?.fixture?.date || "";
+       const bd = b?.fixture?.date || "";
     return ad.localeCompare(bd);
   });
 }
@@ -889,7 +863,9 @@ async function verifyStripeByEmail(email) {
   const currency = price.currency ? price.currency.toUpperCase() : null;
 
   const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
-  return { pro: isPro, plan, status: best.status };
+  // after computing `plan` above
+return { pro: isPro, plan, status: best.status };
+
 }
 async function getProOverride(email) {
   const v = await kvGet(`pro:override:${email}`);
@@ -997,6 +973,114 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, env: process.env.NODE_ENV || "unknown" });
     }
 
+    // ======== NEW: CRON-FRIENDLY CAPTURE ACTIONS ========
+
+    if (action === "capture-free-picks") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+      const minConf = Number(req.query.minConf || 75);
+      const payload = await pickFreePicks({ date, tz, minConf });
+
+      try {
+        const toStore = (payload?.picks || []).map(p => ({
+          date,
+          matchTime: p.matchTime || null,
+          country: p.country || null,
+          league: p.league || null,
+          home: p.home, away: p.away,
+          market: p.market || "OU 2.5",
+          selection: p.market || null,
+          odds: (typeof p.odds === "number" ? p.odds : null),
+          fixtureId: p.fixtureId || null,
+          source: "free-picks",
+          status: "pending"
+        }));
+        if (toStore.length) await writeDailyPicks("free-picks", date, toStore);
+      } catch (e) {}
+      return res.status(200).json({ ok: true, stored: (payload?.picks || []).length });
+    }
+
+    if (action === "capture-hero-bet") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+      const market = (req.query.market || "auto").toString().toLowerCase(); // auto|ou_goals|btts
+      const payload = await pickHeroBet({ date, tz, market });
+
+      try {
+        const h = payload?.heroBet;
+        if (h && h.home && h.away) {
+          const toStore = [{
+            date,
+            matchTime: h.matchTime || null,
+            country: h.country || null,
+            league: h.league || null,
+            home: h.home, away: h.away,
+            market: h.market || null,
+            selection: h.selection || h.market,
+            odds: (typeof h.odds === "number" ? h.odds : null),
+            fixtureId: h.fixtureId || null,
+            source: "hero-bet",
+            status: "pending"
+          }];
+          await writeDailyPicks("hero-bet", date, toStore);
+        }
+      } catch (e) {}
+      return res.status(200).json({ ok: true, stored: payload?.heroBet ? 1 : 0 });
+    }
+
+    if (action === "capture-proboard") {
+      if (!process.env.API_FOOTBALL_KEY) {
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
+      }
+      const tz = req.query.tz || "Europe/Sofia";
+      const date = req.query.date || ymd();
+
+      const markets = ["ou_goals", "btts", "one_x_two", "ou_cards", "ou_corners"];
+      let stored = 0;
+
+      for (const m of markets) {
+        const payload = await buildProBoardGrouped({ date, tz, market: m });
+        try {
+          const recs = [];
+          for (const g of (payload?.groups || [])) {
+            for (const L of (g.leagues || [])) {
+              for (const fx of (L.fixtures || [])) {
+                const r = fx?.recommendation;
+                if (!r || !fx?.home?.name || !fx?.away?.name) continue;
+                recs.push({
+                  date,
+                  matchTime: fx.time || null,
+                  country: g.country || null,
+                  league: L.leagueName || null,
+                  home: fx.home.name,
+                  away: fx.away.name,
+                  market: r.market || null,
+                  selection: r.pick || null,
+                  odds: null,
+                  fixtureId: fx.fixtureId || fx.fixture || fx.fixtureId || null,
+                  source: "pro-board",
+                  status: "pending"
+                });
+              }
+            }
+          }
+          if (recs.length) {
+            await writeDailyPicks("pro-board", date, recs);
+            stored += recs.length;
+          }
+        } catch (e) {}
+      }
+      return res.status(200).json({ ok: true, stored });
+    }
+
+    // ======== READERS FOR WIDGETS ========
+
     // FREE PICKS — RESULTS (read from Firestore)
     if (action === "free-picks-results") {
       try {
@@ -1073,7 +1157,7 @@ export default async function handler(req, res) {
       // === Step 2: persist to Firestore (idempotent) ===
       try {
         const toStore = (payload?.picks || []).map(p => ({
-          date: date,
+          date,
           matchTime: p.matchTime || null,
           country: p.country || null,
           league: p.league || null,
@@ -1082,12 +1166,12 @@ export default async function handler(req, res) {
           market: p.market || "OU 2.5",
           selection: p.market || null,
           odds: (typeof p.odds === "number" ? p.odds : null),
-          source: "free-picks"
+          fixtureId: p.fixtureId || null,
+          source: "free-picks",
+          status: "pending"
         }));
-        if (toStore.length) {
-          await writeDailyPicks("free-picks", date, toStore);
-        }
-      } catch (e) { /* non-fatal */ }
+        if (toStore.length) await writeDailyPicks("free-picks", date, toStore);
+      } catch (e) {}
 
       putCached(key, payload);
       await fpSet(date, tz, minConf, payload);
@@ -1123,7 +1207,7 @@ export default async function handler(req, res) {
         const h = payload?.heroBet;
         if (h && h.home && h.away) {
           const toStore = [{
-            date: date,
+            date,
             matchTime: h.matchTime || null,
             country: h.country || null,
             league: h.league || null,
@@ -1132,11 +1216,13 @@ export default async function handler(req, res) {
             market: h.market || null,
             selection: h.selection || h.market,
             odds: (typeof h.odds === "number" ? h.odds : null),
-            source: "hero-bet"
+            fixtureId: h.fixtureId || null,
+            source: "hero-bet",
+            status: "pending"
           }];
           await writeDailyPicks("hero-bet", date, toStore);
         }
-      } catch (e) { /* non-fatal */ }
+      } catch (e) {}
 
       putCachedPP(key, payload);
       await ppSet(date, tz, market, payload);
@@ -1166,7 +1252,7 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD GROUPED — NO odds
+    // PRO BOARD GROUPED — also persists recs to Firestore
     if (action === "pro-board-grouped") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
@@ -1195,7 +1281,7 @@ export default async function handler(req, res) {
               const r = fx?.recommendation;
               if (!r || !fx?.home?.name || !fx?.away?.name) continue;
               recs.push({
-                date: date,
+                date,
                 matchTime: fx.time || null,
                 country: g.country || null,
                 league: L.leagueName || null,
@@ -1204,15 +1290,15 @@ export default async function handler(req, res) {
                 market: r.market || null,
                 selection: r.pick || null,
                 odds: null,
-                source: "pro-board"
+                fixtureId: fx.fixtureId || null,
+                source: "pro-board",
+                status: "pending"
               });
             }
           }
         }
-        if (recs.length) {
-          await writeDailyPicks("pro-board", date, recs);
-        }
-      } catch (e) { /* non-fatal */ }
+        if (recs.length) await writeDailyPicks("pro-board", date, recs);
+      } catch (e) {}
 
       putCachedPBG(key, payload);
       await pbgSet(date, tz, market, payload);
@@ -1286,27 +1372,30 @@ async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
 
   snap.forEach((doc) => {
     const d = doc.data() || {};
-    const p = {
-      home: d.home, away: d.away,
-      market: d.market || d.selection || "",
-      odds: (typeof d.odds === "number" ? d.odds : null),
-      status: d.status || "pending",
-      finalScore: d.finalScore || null
-    };
-
-    const st = (p.status || "").toLowerCase();
-    if (st && st !== "pending") {
-      if (st === "win") wins += 1;
-      else if (st === "loss" || st === "lose") losses += 1;
-      else push += 1;
-
-      if (typeof p.odds === "number" && p.odds > 1) {
-        staked += 1;
-        pnl += (st === "win") ? (p.odds - 1) : -1; // 1u staking
+    const picks = Array.isArray(d.picks) ? d.picks : [];
+    let dayPick = null;
+    if (picks.length) {
+      const p = { ...picks[0] };
+      const st = (p.status || "").toLowerCase();
+      if (st && st !== "pending") {
+        if (st === "win") wins += 1;
+        else if (st === "loss" || st === "lose") losses += 1;
+        else push += 1;
+        const o = Number(p.odds);
+        if (Number.isFinite(o) && o > 1) {
+          staked += 1;
+          pnl += (st === "win") ? (o - 1) : -1;
+        }
       }
+      dayPick = {
+        home: p.home, away: p.away,
+        market: p.market || p.selection || "",
+        odds: (typeof p.odds === "number" ? p.odds : null),
+        status: p.status || "pending",
+        finalScore: p.finalScore || null
+      };
     }
-
-    days.push({ date: d.date, picks: [p] }); // one hero pick per day
+    if (dayPick) days.push({ date: d.date, picks: [dayPick] });
   });
 
   const settled = wins + losses;
@@ -1333,9 +1422,24 @@ async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}
 
   snap.forEach((doc) => {
     const d = doc.data() || {};
-    const T = d.totals || {};
-    const markets = Object.keys(T);
+    let T = d.totals || {};
 
+    // NEW: If totals missing, build from picks (status != pending)
+    if ((!T || !Object.keys(T).length) && Array.isArray(d.picks)) {
+      const acc = {};
+      for (const p of d.picks) {
+        const st = String(p.status || "").toLowerCase();
+        if (!st || st === "pending") continue;
+        const m = String(p.market || p.selection || "Other");
+        acc[m] = acc[m] || { wins: 0, losses: 0, push: 0 };
+        if (st === "win") acc[m].wins += 1;
+        else if (st === "loss" || st === "lose") acc[m].losses += 1;
+        else acc[m].push += 1;
+      }
+      T = acc;
+    }
+
+    const markets = Object.keys(T || {});
     let dayWins = 0, dayLosses = 0, dayPush = 0;
 
     markets.forEach(m => {
@@ -1395,7 +1499,7 @@ async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) 
       const st = (p.status || "").toLowerCase();
       if (st && st !== "pending") {
         if (st === "win") wins += 1;
-        else if (st === "loss") losses += 1;
+        else if (st === "loss" || st === "lose") losses += 1;
         else push += 1;
 
         const o = Number(p.odds);
