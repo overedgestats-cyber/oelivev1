@@ -52,7 +52,7 @@ async function apiGet(path, params = {}) {
   });
   if (!resp.ok) throw new Error(`API ${path} ${resp.status}`);
   const data = await resp.json();
-  return data.response || [];
+  return (data && data.response) || [];
 }
 function clockFromISO(iso) {
   try { return new Date(iso).toISOString().substring(11, 16); } catch { return ""; }
@@ -147,52 +147,6 @@ function isYouthFixture(fx = {}) {
   return hit(ln) || hit(h) || hit(a);
 }
 
-/* ---------------- Narrative helpers (legacy + rich) --------------- */
-function seededPick(seed, n) { const s = Number(seed || 0); const x = (s * 9301 + 49297) % 233280; return Math.abs(Math.floor((x / 233280) * n)); }
-function narrativeOU(h, a, pick, seed = 0) {
-  const overs = [
-    "Front-foot styles on both sides should create volume: width, runners beyond, and set-piece threat point to an open game. Over 2.5 appeals.",
-    "Neither team is inclined to sit; pressing and transitions can stretch the lines. An early goal would turbo-charge it. Over 2.5 is the value angle.",
-    "Attacks look sharper than the back lines right now. With multiple scoring outlets, three or more feels live. Over 2.5 preferred."
-  ];
-  const unders = [
-    "Both coaches prioritise structure; expect compact shapes and fewer clean looks. Without a quick breakthrough this stays cagey. Under 2.5 fits.",
-    "Territory should be controlled rather than chaotic. Midfield traffic and low blocks limit clear chances. Under 2.5 is sensible.",
-    "Defensive match-ups favour containment over chaos. Set-pieces may decide it, but volume should be capped. Under 2.5 appeals."
-  ];
-  const pool = pick === "Over 2.5" ? overs : unders;
-  return pool[seededPick(seed, pool.length)];
-}
-function narrativeBTTS() {
-  const temps = [
-    "Both create enough to trouble each other and neither is flawless at the back. If one scores, the game should open. BTTS live.",
-    "Hosts push at home while visitors counter with pace — both defences can be exposed in transition. BTTS makes sense."
-  ];
-  return temps[seededPick(0, temps.length)];
-}
-function narrative1X2(label) {
-  const h = [
-    "Home side carry the better recent differential and enjoy the venue edge. Narrow home lean.",
-    "Support tilts to the hosts: stronger forward output and decent control phases suggest 1."
-  ];
-  const d = [
-    "Margins look thin and risk profiles align; a chessy, low-variance script can land a stalemate.",
-    "Neither side convincingly outpunches the other. A level game feels on script."
-  ];
-  const a = [
-    "Visitors profile well on the break and can exploit space behind. Away lean with price support.",
-    "Form tilt and chance quality favour the travellers. 2 is live."
-  ];
-  const pool = label === "Home" ? h : label === "Draw" ? d : a;
-  return pool[seededPick(0, pool.length)];
-}
-function narrativeCards() {
-  return "Discipline trends + derby intensity and referee profile drive card volume. Consider common lines around 4.5–5.5; late-game tactical fouls can inflate counts.";
-}
-function narrativeCorners() {
-  return "Wide play, crossing volume, and shot pressure correlate with corners. Teams that attack the byline or fire from range often push totals near the 9.5–10.5 band.";
-}
-
 /* ===== Rich, data-forward reasoning blocks ===== */
 const CARDS_BASELINE = 4.8;
 const CORNERS_BASELINE = 9.7;
@@ -232,7 +186,7 @@ function reasonBTTSRich(fx, H, A, pick, confPct) {
   return `${lines.join(BR)}${BR}${tail}`;
 }
 
-/* 1X2 */
+/* 1X2 (still used by Pro Board filter; Hero Bet no longer uses 1X2) */
 function reason1X2Rich(fx, H, A, pick, confPct) {
   const hN = fx.teams?.home?.name || "Home";
   const aN = fx.teams?.away?.name || "Away";
@@ -479,7 +433,7 @@ function onex2Lean(home, away) {
   return { pick: "Draw", conf: 0.50 };
 }
 
-// -- REPLACED: scoreHeroCandidates limited to OU 2.5 and BTTS only
+// Limited to OU 2.5 and BTTS only
 async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
@@ -490,7 +444,7 @@ async function scoreHeroCandidates(fx) {
 
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
-  // --- OU 2.5 ---
+  // OU 2.5
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
 
@@ -528,9 +482,8 @@ async function scoreHeroCandidates(fx) {
     });
   }
 
-  // --- BTTS ---
+  // BTTS
   const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
-
   if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
     const confPct = pct(bttsP);
     candidates.push({
@@ -548,11 +501,10 @@ async function scoreHeroCandidates(fx) {
     });
   }
 
-  // (No 1X2 candidates anymore)
   return candidates;
 }
 
-// -- REPLACED: pickHeroBet normalized to auto|ou_goals|btts only
+// pickHeroBet normalized to auto|ou_goals|btts only
 async function pickHeroBet({ date, tz, market = "auto" }) {
   const m0 = (market || "auto").toString().toLowerCase();
   const m  = (m0 === "ou_goals" || m0 === "btts" || m0 === "auto") ? m0 : "auto";
