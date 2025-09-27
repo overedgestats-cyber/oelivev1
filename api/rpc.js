@@ -11,6 +11,7 @@
 //  - free-picks-results  (read Free Picks outcomes from Firestore)
 //  - hero-bet-results    (read Hero Bet outcomes from Firestore)
 //  - pro-board-results   (read Pro Board daily summaries from Firestore)
+//  - (optional) settle   (admin patch for results; protect before use)
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -32,6 +33,147 @@ try {
 } catch (e) {
   console.error("Firestore init error:", e?.message || e);
   db = null;
+}
+
+/* ----------------- Firestore writer helpers (Step 2) ----------------- */
+/**
+ * Idempotently writes picks for a given day to a collection:
+ *  kind: "free-picks" | "hero-bet" | "pro-board"
+ *  date: "YYYY-MM-DD"
+ *  picks: [
+ *    { date, matchTime, country, league, home, away, market, selection, odds?, source }
+ *  ]
+ *
+ * Storage shape:
+ *  - "free_picks_results" docId=date: { date, picks:[{...}] }
+ *  - "hero_bet_results"   docId=date: { date, picks:[{...}]}  // one per day
+ *  - "pro_board_results"  docId=date: { date, totals?, picks:[{...}] }
+ */
+async function writeDailyPicks(kind, date, picks) {
+  if (!db) return;
+  if (!Array.isArray(picks) || !picks.length) return;
+
+  const normKey = (s) => String(s || "").trim().toLowerCase();
+
+  if (kind === "free-picks") {
+    const col = db.collection("free_picks_results");
+    const docRef = col.doc(date);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const existing = (snap.exists ? (snap.data()?.picks || []) : []);
+      // Upsert by (home,away,market,selection)
+      const merged = upsertPicks(existing, picks, (a, b) =>
+        normKey(a.home) === normKey(b.home) &&
+        normKey(a.away) === normKey(b.away) &&
+        normKey(a.market) === normKey(b.market) &&
+        normKey(a.selection || a.market) === normKey(b.selection || b.market)
+      );
+      tx.set(docRef, { date, picks: merged }, { merge: true });
+    });
+    return;
+  }
+
+  if (kind === "hero-bet") {
+    const col = db.collection("hero_bet_results");
+    const docRef = col.doc(date);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const existing = (snap.exists ? (snap.data()?.picks || []) : []);
+      const merged = upsertPicks(existing, picks, (a, b) =>
+        normKey(a.home) === normKey(b.home) &&
+        normKey(a.away) === normKey(b.away) &&
+        normKey(a.market) === normKey(b.market) &&
+        normKey(a.selection || a.market) === normKey(b.selection || b.market)
+      );
+      tx.set(docRef, { date, picks: merged }, { merge: true });
+    });
+    return;
+  }
+
+  if (kind === "pro-board") {
+    const col = db.collection("pro_board_results");
+    const docRef = col.doc(date);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const existing = (snap.exists ? (snap.data()?.picks || []) : []);
+      const merged = upsertPicks(existing, picks, (a, b) =>
+        normKey(a.home) === normKey(b.home) &&
+        normKey(a.away) === normKey(b.away) &&
+        normKey(a.market) === normKey(b.market) &&
+        normKey(a.selection || a.market) === normKey(b.selection || b.market)
+      );
+      tx.set(docRef, { date, picks: merged }, { merge: true });
+    });
+    return;
+  }
+}
+
+// Generic pick upsert
+function upsertPicks(existing, incoming, eq) {
+  const out = existing.slice();
+  for (const p of incoming) {
+    const idx = out.findIndex((x) => eq(x, p));
+    if (idx === -1) out.push(p);
+    else {
+      // merge non-null fields
+      out[idx] = { ...out[idx], ...cleanMerge(p) };
+    }
+  }
+  return out;
+}
+function cleanMerge(obj) {
+  const o = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v === undefined) continue;
+    o[k] = v;
+  }
+  return o;
+}
+
+/**
+ * settlePick(kind, key, patch)
+ *  kind: "free-picks" | "hero-bet" | "pro-board"
+ *  key:  { date, home, away, market, selection }
+ *  patch:{ status?, closing?, finalScore? }
+ */
+async function settlePick(kind, key, patch) {
+  if (!db) throw new Error("No Firestore");
+  const { date, home, away, market, selection } = key || {};
+  if (!date || !home || !away) throw new Error("Missing date/home/away");
+
+  const col = kind === "free-picks" ? "free_picks_results"
+            : kind === "hero-bet"  ? "hero_bet_results"
+            : kind === "pro-board" ? "pro_board_results"
+            : null;
+  if (!col) throw new Error("Unknown kind");
+
+  const docRef = db.collection(col).doc(date);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    if (!snap.exists) throw new Error("Day doc not found");
+    const data = snap.data() || {};
+    const picks = Array.isArray(data.picks) ? data.picks : [];
+    const norm = (s) => String(s || "").trim().toLowerCase();
+
+    const idx = picks.findIndex((p) =>
+      norm(p.home) === norm(home) &&
+      norm(p.away) === norm(away) &&
+      (!market || norm(p.market) === norm(market)) &&
+      (!selection || norm(p.selection || p.market) === norm(selection))
+    );
+    if (idx === -1) throw new Error("Pick not found for day");
+
+    const next = { ...picks[idx] };
+    if (patch.status) next.status = String(patch.status).toLowerCase();
+    if (patch.closing !== undefined) {
+      const c = Number(patch.closing);
+      if (Number.isFinite(c)) next.closing = c;
+    }
+    if (patch.finalScore !== undefined) next.finalScore = String(patch.finalScore);
+
+    picks[idx] = next;
+    tx.set(docRef, { picks }, { merge: true });
+  });
 }
 
 /* --------------------------- Generic Helpers --------------------------- */
@@ -927,6 +1069,26 @@ export default async function handler(req, res) {
       }
 
       const payload = await pickFreePicks({ date, tz, minConf });
+
+      // === Step 2: persist to Firestore (idempotent) ===
+      try {
+        const toStore = (payload?.picks || []).map(p => ({
+          date: date,
+          matchTime: p.matchTime || null,
+          country: p.country || null,
+          league: p.league || null,
+          home: p.home,
+          away: p.away,
+          market: p.market || "OU 2.5",
+          selection: p.market || null,
+          odds: (typeof p.odds === "number" ? p.odds : null),
+          source: "free-picks"
+        }));
+        if (toStore.length) {
+          await writeDailyPicks("free-picks", date, toStore);
+        }
+      } catch (e) { /* non-fatal */ }
+
       putCached(key, payload);
       await fpSet(date, tz, minConf, payload);
       return res.status(200).json(payload);
@@ -955,6 +1117,27 @@ export default async function handler(req, res) {
       }
 
       const payload = await pickHeroBet({ date, tz, market });
+
+      // === Step 2: persist hero bet (idempotent) ===
+      try {
+        const h = payload?.heroBet;
+        if (h && h.home && h.away) {
+          const toStore = [{
+            date: date,
+            matchTime: h.matchTime || null,
+            country: h.country || null,
+            league: h.league || null,
+            home: h.home,
+            away: h.away,
+            market: h.market || null,
+            selection: h.selection || h.market,
+            odds: (typeof h.odds === "number" ? h.odds : null),
+            source: "hero-bet"
+          }];
+          await writeDailyPicks("hero-bet", date, toStore);
+        }
+      } catch (e) { /* non-fatal */ }
+
       putCachedPP(key, payload);
       await ppSet(date, tz, market, payload);
       return res.status(200).json(payload);
@@ -1002,6 +1185,35 @@ export default async function handler(req, res) {
       }
 
       const payload = await buildProBoardGrouped({ date, tz, market });
+
+      // === Step 2: persist pro-board recommendations (idempotent) ===
+      try {
+        const recs = [];
+        for (const g of (payload?.groups || [])) {
+          for (const L of (g.leagues || [])) {
+            for (const fx of (L.fixtures || [])) {
+              const r = fx?.recommendation;
+              if (!r || !fx?.home?.name || !fx?.away?.name) continue;
+              recs.push({
+                date: date,
+                matchTime: fx.time || null,
+                country: g.country || null,
+                league: L.leagueName || null,
+                home: fx.home.name,
+                away: fx.away.name,
+                market: r.market || null,
+                selection: r.pick || null,
+                odds: null,
+                source: "pro-board"
+              });
+            }
+          }
+        }
+        if (recs.length) {
+          await writeDailyPicks("pro-board", date, recs);
+        }
+      } catch (e) { /* non-fatal */ }
+
       putCachedPBG(key, payload);
       await pbgSet(date, tz, market, payload);
       return res.status(200).json(payload);
@@ -1031,6 +1243,23 @@ export default async function handler(req, res) {
         status: base.pro ? base.status : (hasOverride ? "override" : base.status),
         overrideUntil: hasOverride ? new Date(overrideSec * 1000).toISOString() : null,
       });
+    }
+
+    // (OPTIONAL) ADMIN settle endpoint — protect with your own auth in production!
+    if (action === "settle") {
+      const { kind = "free-picks", date, home, away, market = "", selection = "", status = "", closing = "", finalScore = "" } = req.query || {};
+      if (!date || !home || !away) return res.status(400).json({ ok:false, error:"Missing date/home/away" });
+
+      try {
+        const patch = {};
+        if (status)  patch.status = String(status).toLowerCase(); // win|lose|loss|push|pending
+        if (closing !== "") patch.closing = Number(closing);
+        if (finalScore !== "") patch.finalScore = String(finalScore);
+        await settlePick(kind, { date, home, away, market, selection }, patch);
+        return res.status(200).json({ ok:true });
+      } catch (e) {
+        return res.status(500).json({ ok:false, error: e?.message || "settle failed" });
+      }
     }
 
     return res.status(404).json({ error: "Unknown action" });
