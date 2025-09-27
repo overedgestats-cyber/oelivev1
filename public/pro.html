@@ -47,21 +47,12 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
     /* Country / league headings */
     .country-block { margin:1.25rem 0; }
-    .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; }
-
-    /* Flag size + subtle border */
+    .country-header { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.05rem; margin:.25rem 0 .5rem; cursor:pointer; }
     .country-header img.flag{
-      width:16px !important;
-      height:12px !important;
-      max-width:none !important;
-      object-fit:cover;
-      border:1px solid #e2e8f0;
-      border-radius:2px;
-      box-shadow:0 1px 0 rgba(0,0,0,.05);
-      flex:0 0 16px;
-      image-rendering:-webkit-optimize-contrast;
+      width:16px !important; height:12px !important; max-width:none !important; object-fit:cover;
+      border:1px solid #e2e8f0; border-radius:2px; box-shadow:0 1px 0 rgba(0,0,0,.05);
+      flex:0 0 16px; image-rendering:-webkit-optimize-contrast;
     }
-
     .league-title { font-weight:600; margin:.25rem 0 .25rem; opacity:.9; }
 
     /* Teams row */
@@ -72,39 +63,22 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
     /* Sleek sportsbook fixture row */
     .fixture-row{
-      display:grid;
-      grid-template-columns: 1fr auto;
-      align-items:center;
-      gap:.75rem;
-      padding:.7rem .9rem;
-      margin:.35rem 0;
-      background:#fff;
-      border:1px solid #e6e8ee;
-      border-radius:14px;
-      box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
+      display:grid; grid-template-columns: 1fr auto; align-items:center; gap:.75rem;
+      padding:.7rem .9rem; margin:.35rem 0; background:#fff; border:1px solid #e6e8ee;
+      border-radius:14px; box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
     }
     .fixture-meta{ text-align:right; min-width:220px }
     .badge-pick{
-      display:inline-flex; align-items:center; gap:.4rem;
-      padding:.22rem .6rem; border-radius:999px;
-      font-weight:800; letter-spacing:.02em;
-      background:#eff6ff; border:1px solid #cfe4ff; color:#1d4ed8;
+      display:inline-flex; align-items:center; gap:.4rem; padding:.22rem .6rem; border-radius:999px;
+      font-weight:800; letter-spacing:.02em; background:#eff6ff; border:1px solid #cfe4ff; color:#1d4ed8;
     }
     .badge-conf{
-      display:inline-block; margin-left:.35rem;
-      padding:.18rem .5rem; border-radius:999px;
+      display:inline-block; margin-left:.35rem; padding:.18rem .5rem; border-radius:999px;
       font-weight:800; background:#e8f8ee; border:1px solid #cbead8; color:#166534;
     }
-    .reason{
-      grid-column:1 / -1;
-      margin-top:.35rem;
-      font-size:.92rem;
-      color:#5b6b82;
-      white-space:pre-wrap;
-    }
+    .reason{ grid-column:1 / -1; margin-top:.35rem; font-size:.92rem; color:#5b6b82; white-space:pre-wrap; }
 
-    /* NEW: collapse/expand countries */
-    .country-header{ cursor:pointer; }
+    /* Collapse/expand countries */
     .country-block .country-header::after{ content:"▾"; margin-left:.25rem; opacity:.6; }
     .country-block.collapsed .country-header::after{ content:"▸"; }
     .country-block.collapsed .league-title,
@@ -114,6 +88,8 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="/pixel.js" defer></script>
 <script src="/social.js" defer></script>
+<script src="/betslip.js" defer></script>
+<script src="/simulator.js" defer></script>
 
 <body>
   <header class="site-header">
@@ -177,37 +153,26 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         <!-- pro-board class enables the theme styles -->
         <div id="board" class="pro-board">Loading…</div>
       </section>
+
+      <!-- TOOLS: ROI Simulator + ROI by Market + CLV + Export -->
+      <section class="section" style="padding-top:.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <h2 style="margin:0">Tools</h2>
+          <button id="exportPro" class="btn small" type="button">Copy Today’s Bet Slip</button>
+        </div>
+        <div id="roiSim" style="margin-top:1rem"></div>
+        <div id="roiMarkets" style="margin-top:1rem"></div>
+        <div id="clvBox" style="margin-top:1rem"></div>
+      </section>
     </section>
   </main>
 
-  <!-- UPDATED FOOTER WITH TRUST + BIGGER SOCIAL + COOKIE LINK -->
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
-
-    <div class="trust">
-      <span class="tb"><i class="icon">💳</i> Secured by Stripe</span>
-      <span class="tb"><i class="icon">🇪🇺</i> GDPR Compliant</span>
-      <span class="tb"><i class="icon">🔒</i> 256-bit SSL</span>
-    </div>
-
-    <!-- Bigger FB/IG buttons -->
-    <div class="footer-social" style="display:flex;gap:.5rem;justify-content:center;margin:.6rem 0;">
-      <a class="btn" href="https://www.facebook.com/overedgefootball" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.5rem;">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M22 12.07C22 6.48 17.52 2 11.93 2S2 6.48 2 12.07c0 5.02 3.66 9.19 8.44 9.93v-7.02H7.9v-2.9h2.54V9.41c0-2.5 1.5-3.88 3.79-3.88 1.1 0 2.25.2 2.25.2v2.47h-1.27c-1.25 0-1.64.78-1.64 1.58v1.9h2.79l-.45 2.9h-2.34V22c4.78-.74 8.44-4.91 8.44-9.93z"/></svg>
-        <span>Facebook</span>
-      </a>
-      <a class="btn secondary" href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.5rem;">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm5 3.5A5.5 5.5 0 1 1 6.5 13 5.5 5.5 0 0 1 12 7.5Zm0 2A3.5 3.5 0 1 0 15.5 13 3.5 3.5 0 0 0 12 9.5Zm5.75-3.25a.75.75 0 1 1-.75.75.75.75 0 0 1 .75-.75Z"/></svg>
-        <span>Instagram</span>
-      </a>
-    </div>
-
-    <a href="#" class="cookie-link" onclick="oeConsent.revoke();return false;">Cookie settings</a>
-
-    <div class="contact" style="margin-top:6px">
+    <div class="contact">
       <a href="mailto:overedgestats@gmail.com">overedgestats@gmail.com</a>
       &nbsp;·&nbsp;
-      <a href="https://www.facebook.com/overedgefootball" target="_blank" rel="noopener">Facebook</a>
+      <a href="https://www.facebook.com/profile.php?id=61579190114778" target="_blank" rel="noopener">Facebook</a>
       &nbsp;·&nbsp;
       <a href="https://www.instagram.com/overedgefootball" target="_blank" rel="noopener">@overedgefootball</a>
     </div>
@@ -231,6 +196,9 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
     let auth = null;
     let currentUser = null;
+
+    // Keep the most recent grouped payload so we can export bet slip
+    let LAST_GROUPED = null;
 
     function tzGuess(){
       try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
@@ -301,7 +269,12 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       if (!sub.pro) return showLocked();
       showPro();
       loadHero();
-      loadBoardGrouped();
+      await loadBoardGrouped();
+
+      // Tools (history endpoints similar to win-rate widget)
+      OE_Sim.initROI('/api/rpc?action=pro-board-results&limit=60', 'roiSim');
+      OE_Sim.initROIByMarket('/api/rpc?action=pro-board-results&limit=60', 'roiMarkets');
+      OE_Sim.initCLV('/api/rpc?action=pro-board-results&limit=60', 'clvBox');
     }
 
     // ---------- HERO BET (no odds shown) ----------
@@ -334,10 +307,11 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       }
     }
 
-    // ---------- GROUPED PRO BOARD (no odds shown) ----------
+    // ---------- GROUPED PRO BOARD (with Trend + CLV chips) ----------
     boardMarketSel.addEventListener('change', loadBoardGrouped);
 
     function renderGroupedBoard(payload){
+      LAST_GROUPED = payload; // save for export
       if (!payload || !payload.groups || !payload.groups.length) {
         boardEl.innerHTML = "<p>No matches found today.</p>";
         return;
@@ -354,7 +328,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
           </div>
         `;
 
-        /* NEW: toggle collapse on header click */
+        // toggle collapse on header click
         const hdr = countryWrap.querySelector('.country-header');
         hdr.addEventListener('click', () => countryWrap.classList.toggle('collapsed'));
 
@@ -371,13 +345,24 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
             const pickLabel = rec ? `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}` : "";
             const confTxt = rec?.confidencePct != null ? `${rec.confidencePct}%` : "";
 
+            // NEW: trend/notes if provided by backend
+            const trend = fx.trend || rec?.trend || rec?.note || "";
+
+            // NEW: CLV badge if we have posted + close odds (fallback: rec.odds)
+            const open = (typeof rec?.postedOdds==='number') ? rec.postedOdds : rec?.odds;
+            const close = (typeof rec?.closeOdds==='number') ? rec.closeOdds : null;
+            let clvBadge = "";
+            if (typeof open==='number' && typeof close==='number') {
+              const edge = ((open - close)/close)*100;
+              const tag  = edge > 0 ? `Beat close +${edge.toFixed(1)}%` : (edge < 0 ? `Below close ${edge.toFixed(1)}%` : `= close`);
+              clvBadge = `<span class="pill" style="margin-left:.35rem">${tag}</span>`;
+            }
+
             row.innerHTML = `
               <div class="teams">
-                ${fx.home?.logo ? `<img class="logo" src="${fx.home.logo}" alt="">` : ""}
-                <span class="team">${fx.home?.name || ""}</span>
+                ${fx.home?.logo ? `<img class="logo" src="${fx.home.logo}" alt="">` : ""}<span class="team">${fx.home?.name || ""}</span>
                 <span class="sep">vs</span>
-                ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}
-                <span class="team">${fx.away?.name || ""}</span>
+                ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}<span class="team">${fx.away?.name || ""}</span>
               </div>
 
               <div class="fixture-meta">
@@ -386,11 +371,12 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
                   <div style="margin-top:.35rem">
                     <span class="badge-pick">${pickLabel}</span>
                     ${confTxt ? `<span class="badge-conf">${confTxt}</span>` : ``}
+                    ${clvBadge}
                   </div>
                 ` : ``}
               </div>
 
-              ${fx.reasoning ? `<div class="reason">${fx.reasoning}</div>` : ``}
+              ${trend ? `<div class="reason">${trend}</div>` : (fx.reasoning ? `<div class="reason">${fx.reasoning}</div>` : ``)}
             `;
             countryWrap.appendChild(row);
           });
@@ -415,16 +401,19 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       }
     }
 
+    // Export bet slip
+    document.getElementById('exportPro').addEventListener('click', () => {
+      try{
+        const txt = window.OE_BetSlip.fromProBoard(LAST_GROUPED || {});
+        window.OE_BetSlip.copyToClipboard(txt);
+      }catch{ alert('Nothing to export yet.'); }
+    });
+
     // boot
     initFirebase();
   </script>
 
-  <!-- Cookie settings shim so the footer link always works -->
-  <script>
-    window.oeConsent = window.oeConsent || {};
-    if (typeof window.oeConsent.revoke !== 'function') {
-      window.oeConsent.revoke = function(){ alert('Cookie settings coming soon.'); };
-    }
-  </script>
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
 </body>
 </html>
