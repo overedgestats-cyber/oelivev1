@@ -1,0 +1,172 @@
+warning: in the working copy of 'api/rpc.js', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/api/rpc.js b/api/rpc.js[m
+[1mindex f6fb472..b6d24e9 100644[m
+[1m--- a/api/rpc.js[m
+[1m+++ b/api/rpc.js[m
+[36m@@ -1,571 +1,997 @@[m
+[31m-/* ------------------------------ Handler ------------------------------ */[m
+[31m-export default async function handler(req, res) {[m
+[31m-  try {[m
+[31m-    setNoEdgeCache(res); // prevent CDN caching differences by region[m
+[31m-    const { action = "health" } = req.query;[m
+[31m-[m
+[31m-    if (action === "health") {[m
+[31m-      return res.status(200).json({ ok: true, env: process.env.NODE_ENV || "unknown" });[m
+[31m-    }[m
+[31m-[m
+[31m-    // ======== NEW: CRON-FRIENDLY CAPTURE ACTIONS ========[m
+[31m-[m
+[31m-    if (action === "capture-free-picks") {[m
+[31m-      if (!process.env.API_FOOTBALL_KEY) {[m
+[31m-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });[m
+[31m-      }[m
+[31m-      const tz = req.query.tz || "Europe/Sofia";[m
+[31m-      const date = req.query.date || ymd();[m
+[31m-      const minConf = Number(req.query.minConf || 75);[m
+[31m-      const payload = await pickFreePicks({ date, tz, minConf });[m
+[31m-[m
+[31m-      try {[m
+[31m-        const toStore = (payload?.picks || []).map(p => ({[m
+[31m-          date,[m
+[31m-          matchTime: p.matchTime || null,[m
+[31m-          country: p.country || null,[m
+[31m-          league: p.league || null,[m
+[31m-          home: p.home, away: p.away,[m
+[31m-          market: p.market || "OU 2.5",[m
+[31m-          selection: p.market || null,[m
+[31m-          odds: (typeof p.odds === "number" ? p.odds : null),[m
+[31m-          fixtureId: p.fixtureId || null,[m
+[31m-          source: "free-picks",[m
+[31m-          status: "pending"[m
+[31m-        }));[m
+[31m-        if (toStore.length) await writeDailyPicks("free-picks", date, toStore);[m
+[31m-      } catch (e) {}[m
+[31m-      return res.status(200).json({ ok: true, stored: (payload?.picks || []).length });[m
+[31m-    }[m
+[31m-[m
+[31m-    if (action === "capture-hero-bet") {[m
+[31m-      if (!process.env.API_FOOTBALL_KEY) {[m
+[31m-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });[m
+[31m-      }[m
+[31m-      const tz = req.query.tz || "Europe/Sofia";[m
+[31m-      const date = req.query.date || ymd();[m
+[31m-      const market = (req.query.market || "auto").toString().toLowerCase(); // auto|ou_goals|btts[m
+[31m-      const payload = await pickHeroBet({ date, tz, market });[m
+[31m-[m
+[31m-      try {[m
+[31m-        const h = payload?.heroBet;[m
+[31m-        if (h && h.home && h.away) {[m
+[31m-          const toStore = [{[m
+[31m-            date,[m
+[31m-            matchTime: h.matchTime || null,[m
+[31m-            country: h.country || null,[m
+[31m-            league: h.league || null,[m
+[31m-            home: h.home, away: h.away,[m
+[31m-            market: h.market || null,[m
+[31m-            selection: h.selection || h.market,[m
+[31m-            odds: (typeof h.odds === "number" ? h.odds : null),[m
+[31m-            fixtureId: h.fixtureId || null,[m
+[31m-            source: "hero-bet",[m
+[31m-            status: "pending"[m
+[31m-          }];[m
+[31m-          await writeDailyPicks("hero-bet", date, toStore);[m
+[31m-        }[m
+[31m-      } catch (e) {}[m
+[31m-      return res.status(200).json({ ok: true, stored: payload?.heroBet ? 1 : 0 });[m
+[31m-    }[m
+[31m-[m
+[31m-    if (action === "capture-proboard") {[m
+[31m-      if (!process.env.API_FOOTBALL_KEY) {[m
+[31m-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });[m
+[31m-      }[m
+[31m-      const tz = req.query.tz || "Europe/Sofia";[m
+[31m-      const date = req.query.date || ymd();[m
+[31m-[m
+[31m-      const markets = ["ou_goals", "btts", "one_x_two", "ou_cards", "ou_corners"];[m
+[31m-      let stored = 0;[m
+[31m-[m
+[31m-      for (const m of markets) {[m
+[31m-        const payload = await buildProBoardGrouped({ date, tz, market: m });[m
+[31m-        try {[m
+[31m-          const recs = [];[m
+[31m-          for (const g of (payload?.groups || [])) {[m
+[31m-            for (const L of (g.leagues || [])) {[m
+[31m-              for (const fx of (L.fixtures || [])) {[m
+[31m-                const r = fx?.recommendation;[m
+[31m-                if (!r || !fx?.home?.name || !fx?.away?.name) continue;[m
+[31m-                recs.push({[m
+[31m-                  date,[m
+[31m-                  matchTime: fx.time || null,[m
+[31m-                  country: g.country || null,[m
+[31m-                  league: L.leagueName || null,[m
+[31m-                  home: fx.home.name,[m
+[31m-                  away: fx.away.name,[m
+[31m-                  market: r.market || null,[m
+[31m-                  selection: r.pick || null,[m
+[31m-                  odds: null,[m
+[31m-                  fixtureId: fx.fixtureId || null,[m
+[31m-                  source: "pro-board",[m
+[31m-                  status: "pending"[m
+[31m-                });[m
+[31m-              }[m
+[31m-            }[m
+[31m-          }[m
+[31m-          if (recs.length) {[m
+[31m-            await writeDailyPicks("pro-board", date, recs);[m
+[31m-            stored += recs.length;[m
+[31m-          }[m
+[31m-        } catch (e) {}[m
+[31m-      }[m
+[31m-      return res.status(200).json({ ok: true, stored });[m
+[31m-    }[m
+[31m-[m
+[31m-    // ======== READERS FOR WIDGETS ========[m
+[31m-[m
+[31m-    // FREE PICKS — RESULTS (read from Firestore)[m
+[31m-    if (action === "free-picks-results") {[m
+[31m-      try {[m
+[31m-        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD[m
+[31m-        const to    = (req.query.to    || "").toString().slice(0, 10) || null;[m
+[31m-        const limit = Number(req.query.limit || 60);[m
+[31m-        const payload = await listFreePickResults({ from, to, limit });[m
+[31m-        return res.status(200).json(payload);[m
+[31m-      } catch (e) {[m
+[31m-        console.error("free-picks-results error:", e);[m
+[31m-        return res.status(500).json({ error: "Results read error" });[m
+[31m-      }[m
+[31m-    }[m
+[31m-[m
+[31m-    // HERO BET — RESULTS (read from Firestore)[m
+[31m-    if (action === "hero-bet-results") {[m
+[31m-      try {[m
+[31m-        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD[m
+[31m-        const to    = (req.query.to    || "").toString().slice(0, 10) || null;[m
+[31m-        const limit = Number(req.query.limit || 60);[m
+[31m-        const payload = await listHeroBetResults({ from, to, limit });[m
+[31m-        return res.status(200).json(payload);[m
+[31m-      } catch (e) {[m
+[31m-        console.error("hero-bet-results error:", e);[m
+[31m-        return res.status(500).json({ error: "Hero results read error" });[m
+[31m-      }[m
+[31m-    }[m
+[31m-[m
+[31m-    // PRO BOARD — DAILY SUMMARIES (read from Firestore; aggregates by market)[m
+[31m-    if (action === "pro-board-results") {[m
+[31m-      try {[m
+[31m-        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD[m
+[31m-        const to    = (req.query.to    || "").toString().slice(0, 10) || null;[m
+[31m-        const limit = Number(req.query.limit || 60);[m
+[31m-        const payload = await listProBoardSummaries({ from, to, limit });[m
+[31m-        return res.status(200).json(payload);[m
+[31m-      } catch (e) {[m
+[31m-        console.error("pro-board-results error:", e);[m
+[31m-        return res.status(500).json({ error: "Pro board results read error" });[m
+[31m-      }[m
+[31m-    }[m
+[31m-[m
+[31m-    if (action === "public-config") {[m
+[31m-      return res.status(200).json({[m
+[31m-        firebase: {[m
+[31m-          apiKey: process.env.FB_API_KEY || "",[m
+[31m-          authDomain: process.env.FB_AUTH_DOMAIN || "",[m
+[31m-          projectId: process.env.FB_PROJECT_ID |
