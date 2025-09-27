@@ -170,9 +170,16 @@ async function apiGet(path, params = {}) {
   const data = await resp.json();
   return (data && data.response) || [];
 }
+
+// TZ-SAFE: extract "HH:MM" from the original API string (no UTC conversion)
 function clockFromISO(iso) {
-  try { return new Date(iso).toISOString().substring(11, 16); } catch { return ""; }
+  try {
+    const s = String(iso || "");
+    const m = s.match(/T(\d{2}:\d{2})/);
+    return m ? m[1] : "";
+  } catch { return ""; }
 }
+
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 function stableSortFixtures(fixtures = []) {
   return [...fixtures].sort((a,b) => {
@@ -489,7 +496,6 @@ async function getOddsMap(fixtureId) {
     return out;
   } catch { return null; }
 }
-
 /* ------------------------ Free Picks (OU 2.5) ------------------------ */
 async function scoreFixtureForOU25(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
@@ -517,7 +523,7 @@ async function scoreFixtureForOU25(fx) {
     away: fx?.teams?.away?.name,
     market: pick,
     confidencePct: confPct,
-    modelProbPct, // <— NEW
+    modelProbPct, // NEW
     odds: odds ? odds[pick === "Over 2.5" ? "over25" : "under25"] : null,
     reasoning: reasonOURich(fx, home, away, pick, confPct),
   };
@@ -525,8 +531,16 @@ async function scoreFixtureForOU25(fx) {
 
 const FREEPICKS_CACHE = new Map();
 function cacheKey(date, tz, minConf) { return `fp|${date}|${tz}|${minConf}`; }
-function getCached(key) { const e = FREEPICKS_CACHE.get(key); if (e && e.exp > Date.now()) return e.payload; if (e) FREEPICKS_CACHE.delete(e); return null; }
-function putCached(key, payload) { const ttlMs = 22 * 60 * 60 * 1000; FREEPICKS_CACHE.set(key, { payload, exp: Date.now() + ttlMs }); }
+function getCached(key) {
+  const e = FREEPICKS_CACHE.get(key);
+  if (e && e.exp > Date.now()) return e.payload;
+  if (e) FREEPICKS_CACHE.delete(key);
+  return null;
+}
+function putCached(key, payload) {
+  const ttlMs = 22 * 60 * 60 * 1000;
+  FREEPICKS_CACHE.set(key, { payload, exp: Date.now() + ttlMs });
+}
 
 async function pickFreePicks({ date, tz, minConf = 75 }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
@@ -581,7 +595,7 @@ async function scoreHeroCandidates(fx) {
       selection: "Over 2.5",
       market: "Over 2.5",
       confidencePct: confPct,
-      modelProbPct: pct(overP),                // <— NEW
+      modelProbPct: pct(overP),                // NEW
       valueScore: Number((overP * odds.over25).toFixed(4)),
       reasoning: reasonOURich(fx, home, away, "Over 2.5", confPct),
     });
@@ -599,7 +613,7 @@ async function scoreHeroCandidates(fx) {
       selection: "Under 2.5",
       market: "Under 2.5",
       confidencePct: confPct,
-      modelProbPct: pct(underP),               // <— NEW
+      modelProbPct: pct(underP),               // NEW
       valueScore: Number((underP * odds.under25).toFixed(4)),
       reasoning: reasonOURich(fx, home, away, "Under 2.5", confPct),
     });
@@ -619,7 +633,7 @@ async function scoreHeroCandidates(fx) {
       selection: "BTTS: Yes",
       market: "BTTS",
       confidencePct: confPct,
-      modelProbPct: pct(bttsP),                // <— NEW
+      modelProbPct: pct(bttsP),                // NEW
       valueScore: Number((bttsP * odds.bttsYes).toFixed(4)),
       reasoning: reasonBTTSRich(fx, home, away, "BTTS: Yes", confPct),
     });
@@ -704,7 +718,7 @@ async function buildProBoard({ date, tz }) {
       const ou = {
         recommendation: ouPick,
         confidencePct: ouConfPct,
-        modelProbPct: pct(ouPick === "Over 2.5" ? overP : underP), // <— NEW
+        modelProbPct: pct(ouPick === "Over 2.5" ? overP : underP), // NEW
         reasoning: reasonOURich(fx, home, away, ouPick, ouConfPct),
       };
 
@@ -715,7 +729,7 @@ async function buildProBoard({ date, tz }) {
       const btts = {
         recommendation: bttsPick,
         confidencePct: bttsConfPct,
-        modelProbPct: pct(bttsPick === "BTTS: Yes" ? bttsP : (1 - bttsP)), // <— NEW
+        modelProbPct: pct(bttsPick === "BTTS: Yes" ? bttsP : (1 - bttsP)), // NEW
         reasoning: reasonBTTSRich(fx, home, away, bttsPick, bttsConfPct),
       };
 
@@ -753,7 +767,7 @@ async function buildProBoard({ date, tz }) {
     groups[r.competition].push(r);
   });
   Object.keys(groups).forEach(k => {
-    groups[k].sort((a,b)=> (a.matchTime || "").localeCompare(b.matchTime || ""));
+    groups[k].sort((a,b)=> (a.matchTime || "").localeCompare(b.matchTime || "")); 
   });
   return { date, timezone: tz, groups };
 }
@@ -774,9 +788,14 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
       const leagueId = fx.league?.id;
       const leagueName = fx.league?.name || "League";
 
+      // Provide a trimmed short label for UI/slip
+      const leagueShort = (fx.league?.name || "League")
+        .replace(/\s*\(Regular Season\)\s*/i, "")
+        .replace(/\s*Group\s+[A-Z]\s*$/i, "");
+
       if (!byCountry.has(country)) byCountry.set(country, { country, flag, leagues: new Map() });
       const c = byCountry.get(country);
-      if (!c.leagues.has(leagueId)) c.leagues.set(leagueId, { leagueId, leagueName, fixtures: [] });
+      if (!c.leagues.has(leagueId)) c.leagues.set(leagueId, { leagueId, leagueName, leagueShort, fixtures: [] });
       const L = c.leagues.get(leagueId);
 
       const hId = fx?.teams?.home?.id, aId = fx?.teams?.away?.id;
@@ -789,35 +808,35 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
           const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
           const conf = overP >= underP ? overP : underP;
           const confPct = pct(conf);
-          rec = { market: "OU Goals", pick, confidencePct: confPct, modelProbPct: pct(pick === "Over 2.5" ? overP : underP) };
           why = reasonOURich(fx, H, A, pick, confPct);
+          rec = { market: "OU Goals", pick, confidencePct: confPct, modelProbPct: pct(pick === "Over 2.5" ? overP : underP), trend: why };
         } else if (market === "btts") {
           const b = H.bttsRate*0.5 + A.bttsRate*0.5;
           const pick = b >= 0.5 ? "BTTS: Yes" : "BTTS: No";
           const conf = b >= 0.5 ? b : 1 - b;
           const confPct = pct(conf);
-          rec = { market: "BTTS", pick, confidencePct: confPct, modelProbPct: pct(pick === "BTTS: Yes" ? b : (1 - b)) };
           why = reasonBTTSRich(fx, H, A, pick, confPct);
+          rec = { market: "BTTS", pick, confidencePct: confPct, modelProbPct: pct(pick === "BTTS: Yes" ? b : (1 - b)), trend: why };
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
           const confPct = pct(ox.conf);
-          rec = { market: "1X2", pick: ox.pick, confidencePct: confPct, modelProbPct: confPct };
           why = reason1X2Rich(fx, H, A, ox.pick, confPct);
+          rec = { market: "1X2", pick: ox.pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
         } else if (market === "ou_cards") {
           const lean = computeCardsLean(H, A);
-          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct };
           why = reasonCardsRich(fx, H, A, lean.pick, lean.confidencePct);
+          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct, trend: why };
         } else if (market === "ou_corners") {
           const lean = computeCornersLean(H, A);
-          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct };
           why = reasonCornersRich(fx, H, A, lean.pick, lean.confidencePct);
+          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct, trend: why };
         }
       }
 
       L.fixtures.push({
         fixtureId: fx.fixture?.id,
         time: clockFromISO(fx.fixture?.date),
-        leagueId, leagueName, country, flag,
+        leagueId, leagueName, leagueShort, country, flag,
         home: { id: fx.teams?.home?.id, name: fx.teams?.home?.name, logo: fx.teams?.home?.logo },
         away: { id: fx.teams?.away?.id, name: fx.teams?.away?.name, logo: fx.teams?.away?.logo },
         recommendation: rec,
@@ -830,8 +849,9 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
     .sort((a,b)=> a.country.localeCompare(b.country))
     .map(c => ({
       country: c.country, flag: c.flag,
-      leagues: Array.from(c.leagues.values()).sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))}
-    ));
+      leagues: Array.from(c.leagues.values())
+        .sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))
+    }));
 
   return { date, timezone: tz, groups };
 }
@@ -874,7 +894,6 @@ async function verifyStripeByEmail(email) {
   const currency = price.currency ? price.currency.toUpperCase() : null;
 
   const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
-  // after computing `plan` above
   return { pro: isPro, plan, status: best.status };
 }
 async function getProOverride(email) {
@@ -976,7 +995,7 @@ async function pbgSet(date, tz, market, payload){
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
   try {
-    setNoEdgeCache(res); // <-- prevent CDN caching differences by region
+    setNoEdgeCache(res); // prevent CDN caching differences by region
     const { action = "health" } = req.query;
 
     if (action === "health") {
@@ -1164,7 +1183,7 @@ export default async function handler(req, res) {
 
       const payload = await pickFreePicks({ date, tz, minConf });
 
-      // === Step 2: persist to Firestore (idempotent) ===
+      // Persist to Firestore (idempotent)
       try {
         const toStore = (payload?.picks || []).map(p => ({
           date,
@@ -1212,7 +1231,7 @@ export default async function handler(req, res) {
 
       const payload = await pickHeroBet({ date, tz, market });
 
-      // === Step 2: persist hero bet (idempotent) ===
+      // Persist hero bet (idempotent)
       try {
         const h = payload?.heroBet;
         if (h && h.home && h.away) {
@@ -1242,7 +1261,7 @@ export default async function handler(req, res) {
     // PRO BOARD (flat) — NO odds
     if (action === "pro-board") {
       if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
+        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
@@ -1282,7 +1301,7 @@ export default async function handler(req, res) {
 
       const payload = await buildProBoardGrouped({ date, tz, market });
 
-      // === Step 2: persist pro-board recommendations (idempotent) ===
+      // Persist pro-board recommendations (idempotent)
       try {
         const recs = [];
         for (const g of (payload?.groups || [])) {
@@ -1434,7 +1453,7 @@ async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}
     const d = doc.data() || {};
     let T = d.totals || {};
 
-    // NEW: If totals missing, build from picks (status != pending)
+    // If totals missing, build from picks (status != pending)
     if ((!T || !Object.keys(T).length) && Array.isArray(d.picks)) {
       const acc = {};
       for (const p of d.picks) {
