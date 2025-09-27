@@ -4,7 +4,7 @@
 //  - health
 //  - public-config
 //  - free-picks
-//  - pro-pick            (Hero Bet; supports market=auto|ou_goals|btts|one_x_two)
+//  - pro-pick            (Hero Bet; supports market=auto|ou_goals|btts)
 //  - pro-board           (flat list; strict allowed comps)
 //  - pro-board-grouped   (grouped by country with flag; strict allowed comps)
 //  - verify-sub
@@ -470,6 +470,7 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
 }
 
 /* ------------------------- Hero Bet (value) -------------------------- */
+// NOTE: Hero Bet restricted to OU 2.5 and BTTS only (no 1X2)
 function onex2Lean(home, away) {
   const ha = 0.20;
   const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
@@ -478,6 +479,7 @@ function onex2Lean(home, away) {
   return { pick: "Draw", conf: 0.50 };
 }
 
+// -- REPLACED: scoreHeroCandidates limited to OU 2.5 and BTTS only
 async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
@@ -486,65 +488,75 @@ async function scoreHeroCandidates(fx) {
   const time = clockFromISO(fx?.fixture?.date);
   const candidates = [];
 
+  const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
+
+  // --- OU 2.5 ---
   const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
   const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
-  const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
   if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
     const confPct = pct(overP);
     candidates.push({
-      selection: "Over 2.5", market: "Over 2.5", conf: overP,
-      valueScore: overP * odds.over25,
+      fixtureId: fx?.fixture?.id,
+      league: fx?.league?.name || "",
+      country: fx?.league?.country || "",
+      matchTime: time,
+      home: fx?.teams?.home?.name || "",
+      away: fx?.teams?.away?.name || "",
+      selection: "Over 2.5",
+      market: "Over 2.5",
+      confidencePct: confPct,
+      valueScore: Number((overP * odds.over25).toFixed(4)),
       reasoning: reasonOURich(fx, home, away, "Over 2.5", confPct),
     });
   }
+
   if (odds?.under25 && odds.under25 >= 2.0 && withinBand(underP)) {
     const confPct = pct(underP);
     candidates.push({
-      selection: "Under 2.5", market: "Under 2.5", conf: underP,
-      valueScore: underP * odds.under25,
+      fixtureId: fx?.fixture?.id,
+      league: fx?.league?.name || "",
+      country: fx?.league?.country || "",
+      matchTime: time,
+      home: fx?.teams?.home?.name || "",
+      away: fx?.teams?.away?.name || "",
+      selection: "Under 2.5",
+      market: "Under 2.5",
+      confidencePct: confPct,
+      valueScore: Number((underP * odds.under25).toFixed(4)),
       reasoning: reasonOURich(fx, home, away, "Under 2.5", confPct),
     });
   }
+
+  // --- BTTS ---
   const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
+
   if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
     const confPct = pct(bttsP);
     candidates.push({
-      selection: "BTTS: Yes", market: "BTTS", conf: bttsP,
-      valueScore: bttsP * odds.bttsYes,
+      fixtureId: fx?.fixture?.id,
+      league: fx?.league?.name || "",
+      country: fx?.league?.country || "",
+      matchTime: time,
+      home: fx?.teams?.home?.name || "",
+      away: fx?.teams?.away?.name || "",
+      selection: "BTTS: Yes",
+      market: "BTTS",
+      confidencePct: confPct,
+      valueScore: Number((bttsP * odds.bttsYes).toFixed(4)),
       reasoning: reasonBTTSRich(fx, home, away, "BTTS: Yes", confPct),
     });
   }
 
-  const one = onex2Lean(home, away);
-  if (odds) {
-    const choose = one.pick === "Home" ? odds.homeWin : one.pick === "Away" ? odds.awayWin : odds.draw;
-    if (choose && choose >= 2.0 && withinBand(one.conf, 0.55, 0.72)) {
-      const confPct = pct(one.conf);
-      candidates.push({
-        selection: one.pick, market: "1X2", conf: one.conf,
-        valueScore: one.conf * choose,
-        reasoning: reason1X2Rich(fx, home, away, one.pick, confPct),
-      });
-    }
-  }
-
-  return candidates.map(c => ({
-    fixtureId: fx?.fixture?.id,
-    league: fx?.league?.name || "",
-    country: fx?.league?.country || "",
-    matchTime: time,
-    home: fx?.teams?.home?.name || "",
-    away: fx?.teams?.away?.name || "",
-    selection: c.selection,
-    market: c.market,
-    confidencePct: pct(c.conf),
-    valueScore: Number((c.valueScore || 0).toFixed(4)),
-    reasoning: c.reasoning,
-  }));
+  // (No 1X2 candidates anymore)
+  return candidates;
 }
 
+// -- REPLACED: pickHeroBet normalized to auto|ou_goals|btts only
 async function pickHeroBet({ date, tz, market = "auto" }) {
+  const m0 = (market || "auto").toString().toLowerCase();
+  const m  = (m0 === "ou_goals" || m0 === "btts" || m0 === "auto") ? m0 : "auto";
+
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
   fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
@@ -553,12 +565,11 @@ async function pickHeroBet({ date, tz, market = "auto" }) {
   for (const fx of fixtures.slice(0, 100)) {
     try {
       const c = await scoreHeroCandidates(fx);
-      const filtered = (market === "auto")
+      const filtered = (m === "auto")
         ? c
         : c.filter(x =>
-            (market === "ou_goals" && (x.market === "Over 2.5" || x.market === "Under 2.5")) ||
-            (market === "btts" && x.market === "BTTS") ||
-            (market === "one_x_two" && x.market === "1X2")
+            (m === "ou_goals" && (x.market === "Over 2.5" || x.market === "Under 2.5")) ||
+            (m === "btts"     && x.market === "BTTS")
           );
       candidates = candidates.concat(filtered);
     } catch {}
@@ -969,14 +980,18 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // HERO BET (Pro pick) — pinned by date/tz/market unless refresh=1 (no odds exposed)
+    // HERO BET (Pro pick) — restricted to OU 2.5 and BTTS; pinned by date/tz/market unless refresh=1
     if (action === "pro-pick") {
       if (!process.env.API_FOOTBALL_KEY) {
         return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
       }
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
-      const market = (req.query.market || "auto").toString().toLowerCase();
+
+      // normalize market to auto|ou_goals|btts only
+      const m0 = (req.query.market || "auto").toString().toLowerCase();
+      const market = (m0 === "ou_goals" || m0 === "btts" || m0 === "auto") ? m0 : "auto";
+
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
       const key = ppCacheKey(date, tz, market);
 
