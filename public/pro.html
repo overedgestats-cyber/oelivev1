@@ -89,6 +89,11 @@
     .badge-conf{ background:#e8f8ee; border-color:#cbead8; color:#166534; }
     .badge-gap{ display:inline-block; width:.28rem; }
 
+    /* New badges */
+    .badge-fair{ background:#fff7ed; border-color:#fde2c7; color:#9a3412; }    /* warm */
+    .badge-edge{ background:#f0fdf4; border-color:#dcfce7; color:#166534; }    /* green */
+    .badge-stake{ background:#eef2ff; border-color:#e0e7ff; color:#3730a3; }   /* indigo */
+
     .legend { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; margin:.25rem 0 1rem; }
     .legend .label { font-weight:700; }
     .tooltip { position:relative; cursor:help; text-decoration:dotted underline; text-underline-offset:2px; }
@@ -106,7 +111,7 @@
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="/pixel.js" defer></script>
-script src="/social.js" defer></script>
+<script src="/social.js" defer></script>
 <script src="/betslip.js" defer></script>
 <script src="/simulator.js" defer></script>
 
@@ -323,10 +328,19 @@ script src="/social.js" defer></script>
       OE_Sim.initCLV('/api/rpc?action=pro-board-results&limit=60', 'clvBox');
     }
 
-    // ---------- HERO BET (no odds shown) ----------
+    // ---------- HERO BET (shows extra fields when API provides them) ----------
     function heroCard(h){
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
+      const chips = [];
+      if (typeof p.modelProbPct === 'number') chips.push(`<span class="badge-chip badge-model">Model ${p.modelProbPct}%</span>`);
+      if (typeof p.confidencePct === 'number') chips.push(`<span class="badge-chip badge-conf">Confidence ${p.confidencePct}%</span>`);
+      if (typeof p.fairOdds === 'number') chips.push(`<span class="badge-chip badge-fair">Fair ${p.fairOdds.toFixed(2)}</span>`);
+      if (typeof p.edge === 'number') chips.push(`<span class="badge-chip badge-edge">Edge ${(p.edge >= 0 ? '+' : '')}${p.edge.toFixed(2)}</span>`);
+      if (p.stakeGuide) chips.push(`<span class="badge-chip badge-stake">Stake ${p.stakeGuide}</span>`);
+
+      const trend = p.histTrend || p.trend || p.reasoning || "";
+
       return `
         <div class="grid-2">
           <div>
@@ -334,11 +348,11 @@ script src="/social.js" defer></script>
             <div class="muted-sm">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
             <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
           </div>
-          <div style="text-align:right">
-            <span class="badge-chip badge-conf">Confidence ${p.confidencePct}%</span>
+          <div style="text-align:right; display:flex; gap:.35rem; flex-wrap:wrap; justify-content:flex-end">
+            ${chips.join('')}
           </div>
         </div>
-        <div style="margin-top:.5rem; white-space:pre-wrap">${p.reasoning || ""}</div>
+        <div style="margin-top:.5rem; white-space:pre-wrap">${trend}</div>
       `;
     }
 
@@ -363,7 +377,10 @@ script src="/social.js" defer></script>
       const pick = rec?.pick || '';
       const conf = (typeof rec?.confidencePct === 'number') ? ` · Confidence ${Math.round(rec.confidencePct)}%` : '';
       const model = (typeof rec?.modelProbPct === 'number') ? ` · Model ${Math.round(rec.modelProbPct)}%` : '';
-      return `${time} — ${fx.home?.name || ''} vs ${fx.away?.name || ''} — ${league} — ${market}${pick ? ' — ' + pick : ''}${model}${conf}`;
+      const fair  = (typeof rec?.fairOdds === 'number') ? ` · Fair ${rec.fairOdds.toFixed(2)}` : '';
+      const edge  = (typeof rec?.edge === 'number') ? ` · Edge ${(rec.edge >= 0 ? '+' : '')}${rec.edge.toFixed(2)}` : '';
+      const stake = rec?.stakeGuide ? ` · Stake ${rec.stakeGuide}` : '';
+      return `${time} — ${fx.home?.name || ''} vs ${fx.away?.name || ''} — ${league} — ${market}${pick ? ' — ' + pick : ''}${model}${conf}${fair}${edge}${stake}`;
     }
 
     function renderGroupedBoard(payload){
@@ -407,7 +424,11 @@ script src="/social.js" defer></script>
             const pickLabel = `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}`;
             const conf = (typeof rec.confidencePct === 'number') ? rec.confidencePct : null;
             const model = (typeof rec.modelProbPct === 'number') ? rec.modelProbPct : conf; // fallback
-            const trend = fx.trend || rec?.trend || rec?.note || "";
+            const fair  = (typeof rec.fairOdds === 'number') ? rec.fairOdds.toFixed(2) : null;
+            const edge  = (typeof rec.edge === 'number') ? rec.edge : null;
+            const stake = rec.stakeGuide || null;
+
+            const trend = fx.trend || rec?.histTrend || rec?.trend || rec?.note || "";
 
             // left (teams + reason)
             const left = document.createElement('div');
@@ -437,6 +458,9 @@ script src="/social.js" defer></script>
                   Confidence ${typeof conf==='number' ? `${conf}%` : '—'}
                   <span class="tooltip" tabindex="0" data-tip="Pick confidence: our conviction in recommending this today (model + slate quality + variance controls).">ⓘ</span>
                 </span>
+                ${fair ? `<span class="badge-chip badge-fair">Fair ${fair}<span class="tooltip" tabindex="0" data-tip="Fair odds derived from our model probability (1 / p).">ⓘ</span></span>` : ``}
+                ${typeof edge === 'number' ? `<span class="badge-chip badge-edge">Edge ${(edge>=0?'+':'')}${edge.toFixed(2)}<span class="tooltip" tabindex="0" data-tip="Value vs market (book odds – fair odds). Positive = value.">ⓘ</span></span>` : ``}
+                ${stake ? `<span class="badge-chip badge-stake">Stake ${stake}<span class="tooltip" tabindex="0" data-tip="Stake guide based on confidence and edge (e.g., Low / Medium / High).">ⓘ</span></span>` : ``}
               </div>
             `;
 

@@ -855,7 +855,6 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
 
   return { date, timezone: tz, groups };
 }
-
 /* ----------------- Stripe verify + Pro override merge ---------------- */
 async function verifyStripeByEmail(email) {
   const key = process.env.STRIPE_SECRET || "";
@@ -1383,7 +1382,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server error" });
   }
 }
-
 /* ===================== READ: Hero Bet results ====================== */
 async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
   if (typeof db === "undefined" || !db) return { days: [], summary: null };
