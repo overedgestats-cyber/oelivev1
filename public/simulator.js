@@ -4,6 +4,7 @@
 (function () {
   const el = (id) => document.getElementById(id);
   const fmtPct = (v) => (v == null ? "—" : `${Number(v).toFixed(1)}%`);
+  const hasNum = (x) => typeof x === "number" && Number.isFinite(x);
 
   async function getJSON(url) {
     try {
@@ -23,7 +24,23 @@
     `;
   }
 
-  /* ========= Overall ROI (from summary) ========= */
+  /* ========= helpers to compute from days when summary missing ========= */
+  function sumFromDays(days = []) {
+    let wins = 0, losses = 0, push = 0;
+    for (const d of days) {
+      const T = d?.totals || {};
+      for (const k of Object.keys(T)) {
+        wins   += Number(T[k]?.wins   || 0);
+        losses += Number(T[k]?.losses || 0);
+        push   += Number(T[k]?.push   || 0);
+      }
+    }
+    const settled = wins + losses;
+    const winRate = settled ? Math.round((wins / settled) * 100) : null;
+    return { totalDays: days.length, wins, losses, push, winRate, roiPct: null };
+  }
+
+  /* ========= Overall ROI / Win% (from summary; fallback compute) ========= */
   async function initROI(url, hostId) {
     const host = el(hostId);
     if (!host) return;
@@ -32,26 +49,30 @@
     const data = await getJSON(url);
     const s = data?.summary || null;
 
-    if (!s) {
+    if (!s && (!data || !Array.isArray(data.days) || !data.days.length)) {
       host.innerHTML = card("ROI (last 60 days)", `<p class="muted">No data yet.</p>`);
       return;
     }
 
+    const S = s || sumFromDays(data.days || []);
     const html = `
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <span class="pill">Days: <strong>${s.totalDays ?? "—"}</strong></span>
-        <span class="pill">Wins: <strong>${s.wins ?? 0}</strong></span>
-        <span class="pill">Losses: <strong>${s.losses ?? 0}</strong></span>
-        <span class="pill">Push: <strong>${s.push ?? 0}</strong></span>
-        <span class="pill">Win%: <strong>${fmtPct(s.winRate)}</strong></span>
-        <span class="pill">ROI: <strong>${fmtPct(s.roiPct)}</strong></span>
+        <span class="pill">Days: <strong>${S.totalDays ?? "—"}</strong></span>
+        <span class="pill">Wins: <strong>${S.wins ?? 0}</strong></span>
+        <span class="pill">Losses: <strong>${S.losses ?? 0}</strong></span>
+        <span class="pill">Push: <strong>${S.push ?? 0}</strong></span>
+        <span class="pill">Win%: <strong>${fmtPct(S.winRate)}</strong></span>
+        <span class="pill">ROI: <strong>${fmtPct(S.roiPct)}</strong></span>
       </div>
       <style>.pill{display:inline-block;padding:.22rem .55rem;border:1px solid #e5e7eb;border-radius:999px;font-weight:800}</style>
+      <div class="muted-sm" style="margin-top:.5rem">
+        Pro Board storage doesn’t include odds yet, so ROI may show “—”. Win% excludes pushes.
+      </div>
     `;
     host.innerHTML = card("ROI (last 60 days)", html);
   }
 
-  /* ========= ROI by Market (wins only — board has no odds) ========= */
+  /* ========= ROI by Market (Win% only — board has no odds) ========= */
   async function initROIByMarket(url, hostId) {
     const host = el(hostId);
     if (!host) return;
@@ -72,9 +93,9 @@
       for (const [m, row] of Object.entries(T)) {
         if (!agg.has(m)) agg.set(m, { wins: 0, losses: 0, push: 0 });
         const a = agg.get(m);
-        a.wins += Number(row?.wins || 0);
+        a.wins   += Number(row?.wins   || 0);
         a.losses += Number(row?.losses || 0);
-        a.push += Number(row?.push || 0);
+        a.push   += Number(row?.push   || 0);
       }
     }
 
@@ -103,19 +124,16 @@
         </tbody>
       </table>
       <div class="muted-sm" style="margin-top:.5rem">
-        Pro Board storage doesn’t include odds yet, so ROI per market is shown as Win% only.
+        Pro Board storage doesn’t include odds yet, so per-market ROI is shown as Win% only.
       </div>
     `;
     host.innerHTML = card("ROI by Market", table);
   }
 
   /* ========= CLV (placeholder until closing odds exist) ========= */
-  async function initCLV(url, hostId) {
+  async function initCLV(_url, hostId) {
     const host = el(hostId);
     if (!host) return;
-    host.innerHTML = "Loading…";
-
-    // Pro Board results currently don’t store opening/closing odds → show placeholder.
     host.innerHTML = card(
       "CLV (Closing Line Value)",
       `<p class="muted">No closing-odds data yet. Once picks include <code>odds</code> and <code>closing</code>, we’ll compute average edge and beat-close rate here.</p>`
