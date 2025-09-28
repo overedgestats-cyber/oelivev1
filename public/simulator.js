@@ -1,146 +1,127 @@
-/* ===== helpers ===== */
-async function fetchJSON(url){
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
+// /public/simulator.js
+// Widgets for Pro Board results (reads /api/rpc?action=pro-board-results&limit=60)
 
-// If your endpoint returns { days:[ { date, picks:[...] } ] } like winrate.js,
-// turn it into a flat array of picks with date on each.
-function flattenDays(payload){
-  const out = [];
-  const days = Array.isArray(payload?.days) ? payload.days : [];
-  for (const d of days){
-    const picks = Array.isArray(d?.picks) ? d.picks : [];
-    for (const p of picks){
-      out.push({ date: d.date, ...p });
+(function () {
+  const el = (id) => document.getElementById(id);
+  const fmtPct = (v) => (v == null ? "—" : `${Number(v).toFixed(1)}%`);
+
+  async function getJSON(url) {
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      return r.ok ? await r.json() : null;
+    } catch {
+      return null;
     }
   }
-  return out;
-}
 
-function pct(x){ return (x != null ? `${(x*100).toFixed(1)}%` : "—"); }
-
-/* ===== ROI by market ===== */
-function statsByMarket(picks){
-  // computes { market, picks, winrate, roi }
-  const map = new Map();
-  for (const p of picks){
-    if (typeof p.odds !== "number") continue; // need odds for ROI
-    const key = p.market || "—";
-    const arr = map.get(key) || [];
-    arr.push(p);
-    map.set(key, arr);
+  function card(title, inner) {
+    return `
+      <div class="card" style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(17,24,39,.06);">
+        <h3 style="margin:0 0 .35rem">${title}</h3>
+        ${inner}
+      </div>
+    `;
   }
-  const rows = [];
-  for (const [market, arr] of map.entries()){
-    let wins=0, losses=0, stake=0, pnl=0;
-    for (const p of arr){
-      const s = String(p.status||"").toLowerCase();
-      if (s === "win") wins++;
-      else if (s === "loss" || s === "lose") losses++;
-      stake += 1;
-      if (s === "win") pnl += (p.odds - 1);
-      else if (s === "loss" || s === "lose") pnl -= 1;
+
+  /* ========= Overall ROI (from summary) ========= */
+  async function initROI(url, hostId) {
+    const host = el(hostId);
+    if (!host) return;
+    host.innerHTML = "Loading…";
+
+    const data = await getJSON(url);
+    const s = data?.summary || null;
+
+    if (!s) {
+      host.innerHTML = card("ROI (last 60 days)", `<p class="muted">No data yet.</p>`);
+      return;
     }
-    const settled = wins + losses;
-    const winrate = settled ? wins/settled : null;
-    const roi = stake ? pnl/stake : null;
-    rows.push({ market, picks: settled, winrate, roi });
+
+    const html = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <span class="pill">Days: <strong>${s.totalDays ?? "—"}</strong></span>
+        <span class="pill">Wins: <strong>${s.wins ?? 0}</strong></span>
+        <span class="pill">Losses: <strong>${s.losses ?? 0}</strong></span>
+        <span class="pill">Push: <strong>${s.push ?? 0}</strong></span>
+        <span class="pill">Win%: <strong>${fmtPct(s.winRate)}</strong></span>
+        <span class="pill">ROI: <strong>${fmtPct(s.roiPct)}</strong></span>
+      </div>
+      <style>.pill{display:inline-block;padding:.22rem .55rem;border:1px solid #e5e7eb;border-radius:999px;font-weight:800}</style>
+    `;
+    host.innerHTML = card("ROI (last 60 days)", html);
   }
-  rows.sort((a,b)=> (b.roi ?? -1) - (a.roi ?? -1));
-  return rows;
-}
 
-async function initROIByMarket(lastNDaysEndpoint, hostId){
-  try{
-    const data = await fetchJSON(lastNDaysEndpoint);
-    const picks = flattenDays(data);
-    const rows = statsByMarket(picks);
-
-    const host = document.getElementById(hostId);
+  /* ========= ROI by Market (wins only — board has no odds) ========= */
+  async function initROIByMarket(url, hostId) {
+    const host = el(hostId);
     if (!host) return;
+    host.innerHTML = "Loading…";
 
-    host.innerHTML = `
-      <div class="card" style="padding:1rem">
-        <strong>Historical ROI by Market (last 30 days)</strong>
-        <table class="tbl" style="width:100%;margin-top:.5rem">
-          <thead>
-            <tr><th>Market</th><th>Picks</th><th>Win%</th><th>ROI</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map(r => `
-              <tr>
-                <td><strong>${r.market}</strong></td>
-                <td>${r.picks}</td>
-                <td>${r.winrate!=null ? (r.winrate*100).toFixed(1) + "%" : "—"}</td>
-                <td>${r.roi!=null ? (r.roi*100).toFixed(1) + "%" : "—"}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="muted-sm" style="margin-top:.6rem">Computed from settled picks only; pushes excluded.</div>
+    const data = await getJSON(url);
+    const days = Array.isArray(data?.days) ? data.days : [];
+
+    if (!days.length) {
+      host.innerHTML = card("ROI by Market", `<p class="muted">No data yet.</p>`);
+      return;
+    }
+
+    // Aggregate wins/losses by market from day.totals
+    const agg = new Map(); // market -> {wins, losses, push}
+    for (const d of days) {
+      const T = d.totals || {};
+      for (const [m, row] of Object.entries(T)) {
+        if (!agg.has(m)) agg.set(m, { wins: 0, losses: 0, push: 0 });
+        const a = agg.get(m);
+        a.wins += Number(row?.wins || 0);
+        a.losses += Number(row?.losses || 0);
+        a.push += Number(row?.push || 0);
+      }
+    }
+
+    const rows = [];
+    for (const [market, a] of agg.entries()) {
+      const settled = a.wins + a.losses;
+      const win = settled ? (a.wins / settled) * 100 : null;
+      rows.push({ market, picks: settled, win });
+    }
+    rows.sort((A, B) => (B.win ?? -1) - (A.win ?? -1));
+
+    const table = `
+      <table class="tbl" style="width:100%;border-collapse:separate;border-spacing:0">
+        <thead><tr><th>Market</th><th>Picks</th><th>Win%</th></tr></thead>
+        <tbody>
+          ${rows
+            .map(
+              (r) => `
+            <tr>
+              <td><strong>${r.market}</strong></td>
+              <td>${r.picks}</td>
+              <td>${r.win != null ? r.win.toFixed(1) + "%" : "—"}</td>
+            </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+      <div class="muted-sm" style="margin-top:.5rem">
+        Pro Board storage doesn’t include odds yet, so ROI per market is shown as Win% only.
       </div>
     `;
-  } catch(e){
-    const host = document.getElementById(hostId);
-    if (host) host.innerHTML = `<div class="card" style="padding:1rem">No market history yet.</div>`;
+    host.innerHTML = card("ROI by Market", table);
   }
-}
 
-/* ===== CLV (Closing Line Value) =====
-   Requires open odds (odds) and closing odds (closing) on each pick.
-   Aggregates how often your open price beat the close and average edges.
-*/
-function clvStats(picks){
-  let samples=0, beat=0, tie=0, worse=0;
-  let sumCLV=0;       // (closing - open) / open
-  let sumEdge=0;      // (open - closing) / closing  (positive means you beat close)
-  for (const p of picks){
-    const open = Number(p.odds);
-    const close = Number(p.closing);
-    if (!isFinite(open) || !isFinite(close) || open<=0 || close<=0) continue;
-
-    samples += 1;
-    const diff = close - open;
-    if (diff > 1e-9) worse += 1;     // close > open => we got worse than close
-    else if (diff < -1e-9) beat += 1; // close < open => we beat close
-    else tie += 1;
-
-    sumCLV  += (close - open) / open;
-    sumEdge += (open - close) / close;
-  }
-  const clvPct     = samples ? (sumCLV / samples) : null;   // avg % change vs open (positive = close higher)
-  const avgEdgePct = samples ? (sumEdge / samples) : null;  // avg % edge vs close (positive = beat close)
-  return { samples, beat, tie, worse, clvPct, avgEdgePct };
-}
-
-async function initCLV(lastNDaysEndpoint, hostId){
-  try{
-    const data = await fetchJSON(lastNDaysEndpoint);
-    const picks = flattenDays(data);
-    const stats = clvStats(picks);
-
-    const host = document.getElementById(hostId);
+  /* ========= CLV (placeholder until closing odds exist) ========= */
+  async function initCLV(url, hostId) {
+    const host = el(hostId);
     if (!host) return;
+    host.innerHTML = "Loading…";
 
-    host.innerHTML = `
-      <div class="card" style="padding:1rem">
-        <strong>Closing Line Value (CLV)</strong>
-        <div class="muted-sm" style="margin-top:.25rem">How often our advised odds beat the market close.</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem;margin-top:.6rem">
-          <div class="card" style="padding:.7rem"><div>Samples</div><div style="font-weight:900">${stats.samples}</div></div>
-          <div class="card" style="padding:.7rem"><div>Beat Close</div><div style="font-weight:900">${stats.beat}</div></div>
-          <div class="card" style="padding:.7rem"><div>Tied</div><div style="font-weight:900">${stats.tie}</div></div>
-          <div class="card" style="padding:.7rem"><div>Worse</div><div style="font-weight:900">${stats.worse}</div></div>
-          <div class="card" style="padding:.7rem"><div>Avg CLV vs Open</div><div style="font-weight:900">${pct(stats.clvPct)}</div></div>
-          <div class="card" style="padding:.7rem"><div>Avg Edge vs Close</div><div style="font-weight:900">${pct(stats.avgEdgePct)}</div></div>
-        </div>
-        <div class="muted-sm" style="margin-top:.5rem">Requires posted open odds and closing odds; rows without both are skipped.</div>
-      </div>
-    `;
-  } catch(e){
-    const host = document.getElementById(hostId);
-    if (host) host.innerHTML = `<div class="card" style="padding:1rem">CLV stats unavailable.</div>`;
+    // Pro Board results currently don’t store opening/closing odds → show placeholder.
+    host.innerHTML = card(
+      "CLV (Closing Line Value)",
+      `<p class="muted">No closing-odds data yet. Once picks include <code>odds</code> and <code>closing</code>, we’ll compute average edge and beat-close rate here.</p>`
+    );
   }
-}
+
+  // Expose to pro.html
+  window.OE_Sim = { initROI, initROIByMarket, initCLV };
+})();
