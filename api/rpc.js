@@ -812,7 +812,6 @@ async function buildProBoard({ date, tz }) {
   });
   return { date, timezone: tz, groups };
 }
-
 /* --------------- Pro Board grouped by country (flags) ---------------- */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
@@ -979,7 +978,7 @@ async function pbgGet(date, tz, market){
 async function pbgSet(date, tz, market, payload){
   try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
-// /api/rpc.js  (PART 3 / 4)
+// /api/rpc.js  (PART 4 / 4)
 
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
@@ -1033,7 +1032,8 @@ export default async function handler(req, res) {
             matchTime: h.matchTime || null,
             country: h.country || null,
             league: h.league || null,
-            home: h.home, away: h.away,
+            home: h.home,
+            away: h.away,
             market: h.market || null,
             selection: h.selection || h.market,
             odds: (typeof h.odds === "number" ? h.odds : null),
@@ -1345,7 +1345,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server error" });
   }
 }
-// /api/rpc.js  (PART 4 / 4)
 
 /* ================= Stripe Verify + Pro override merge ================= */
 async function verifyStripeByEmail(email) {
