@@ -1,20 +1,5 @@
-// /api/rpc.js
+// /api/rpc.js  (PART 1 / 3)
 // One endpoint, multiple actions via ?action=...
-// Actions:
-//  - health
-//  - public-config
-//  - free-picks
-//  - pro-pick            (Hero Bet; supports market=auto|ou_goals|btts)
-//  - pro-board           (flat list; strict allowed comps)
-//  - pro-board-grouped   (grouped by country with flag; strict allowed comps)
-//  - verify-sub
-//  - free-picks-results  (read Free Picks outcomes from Firestore)
-//  - hero-bet-results    (read Hero Bet outcomes from Firestore)
-//  - pro-board-results   (read Pro Board daily summaries from Firestore)
-//  - (optional) settle   (admin patch for results; protect before use)
-//  - NEW: capture-free-picks   (cron-friendly write of today's Free Picks)
-//  - NEW: capture-hero-bet     (cron-friendly write of today's Hero Bet)
-//  - NEW: capture-proboard     (cron-friendly write of today's Pro Board recs)
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -38,20 +23,7 @@ try {
   db = null;
 }
 
-/* ----------------- Firestore writer helpers (Step 2) ----------------- */
-/**
- * Idempotently writes picks for a given day to a collection:
- *  kind: "free-picks" | "hero-bet" | "pro-board"
- *  date: "YYYY-MM-DD"
- *  picks: [
- *    { date, matchTime, country, league, home, away, market, selection, odds?, fixtureId?, source, status? }
- *  ]
- *
- * Storage shape:
- *  - "free_picks_results" docId=date: { date, picks:[{...}] }
- *  - "hero_bet_results"   docId=date: { date, picks:[{...}]}  // one per day
- *  - "pro_board_results"  docId=date: { date, picks:[{...}] }
- */
+/* ----------------- Firestore writer helpers ----------------- */
 async function writeDailyPicks(kind, date, picks) {
   if (!db) return;
   if (!Array.isArray(picks) || !picks.length) return;
@@ -81,12 +53,11 @@ async function writeDailyPicks(kind, date, picks) {
   });
 }
 
-// Generic pick upsert
 function upsertPicks(existing, incoming, eq) {
   const out = existing.slice();
   for (const p of incoming) {
     const idx = out.findIndex((x) => eq(x, p));
-    const base = { status: "pending" }; // default status
+    const base = { status: "pending" };
     if (idx === -1) out.push({ ...base, ...cleanMerge(p) });
     else {
       out[idx] = { ...out[idx], ...cleanMerge(p) };
@@ -104,12 +75,6 @@ function cleanMerge(obj) {
   return o;
 }
 
-/**
- * settlePick(kind, key, patch)
- *  kind: "free-picks" | "hero-bet" | "pro-board"
- *  key:  { date, home, away, market, selection }
- *  patch:{ status?, closing?, finalScore? }
- */
 async function settlePick(kind, key, patch) {
   if (!db) throw new Error("No Firestore");
   const { date, home, away, market, selection } = key || {};
@@ -153,6 +118,9 @@ async function settlePick(kind, key, patch) {
 /* --------------------------- Generic Helpers --------------------------- */
 function ymd(d = new Date()) { return new Date(d).toISOString().slice(0, 10); }
 function pct(n) { return Math.round(Math.max(1, Math.min(99, n * 100))); }
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function clampRange(x, lo = 0.51, hi = 0.95){ return Math.max(lo, Math.min(hi, x)); }
+
 function qs(params = {}) {
   const u = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -170,17 +138,10 @@ async function apiGet(path, params = {}) {
   const data = await resp.json();
   return (data && data.response) || [];
 }
-
-// TZ-SAFE: extract "HH:MM" from the original API string (no UTC conversion)
 function clockFromISO(iso) {
-  try {
-    const s = String(iso || "");
-    const m = s.match(/T(\d{2}:\d{2})/);
-    return m ? m[1] : "";
-  } catch { return ""; }
+  try { const m = String(iso||"").match(/T(\d{2}:\d{2})/); return m?m[1]:""; }
+  catch { return ""; }
 }
-
-function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 function stableSortFixtures(fixtures = []) {
   return [...fixtures].sort((a,b) => {
     const ai = a?.fixture?.id ?? 0;
@@ -191,8 +152,6 @@ function stableSortFixtures(fixtures = []) {
     return ad.localeCompare(bd);
   });
 }
-
-/* ---- NEW: ensure no CDN/edge caching of API responses (avoid stale by region) --- */
 function setNoEdgeCache(res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
@@ -218,7 +177,7 @@ function getLeagueFlag(league = {}) {
   return league?.flag || flagURLFromCountryName(league?.country || "");
 }
 
-/* -------- European scope (Free Picks only; keep broad) ------- */
+/* -------- European scope (Free Picks only) ------- */
 const EURO_COUNTRIES = [
   "England","Scotland","Wales","Northern Ireland","Ireland",
   "Spain","Italy","Germany","France","Portugal","Netherlands","Belgium",
@@ -232,7 +191,7 @@ const EURO_COUNTRIES = [
 ];
 const CUP_TOKENS = ["cup","pokal","beker","taça","taca","kup","kupa","cupa","coppa","copa","karik","knvb","dfb","scottish cup"];
 const DENY_TIER_TOKENS = ["oberliga","regionalliga","3. liga","iii liga","liga 3","third division","liga 4","fourth","fifth","amateur","county","ykkönen","2. divisjon avd","reserve","reserves"," ii"," b team"," b-team"," b-team"];
-const TIER1_PATTERNS = [/premier/i, /super\s?lig(?![ae])/i, /super\s?league(?!\s?2)/i, /bundesliga(?!.*2)/i, /la\s?liga(?!\s?2)/i, /serie\s?a/i, /ligue\s?1/i, /eredivisie/i, /ekstraklasa/i, /allsvenskan/i, /eliteserien/i, /superliga(?!\s?2)/i, /pro\s?league/i, /hnl/i];
+const TIER1_PATTERNS = [/premier/i, /super\s?lig(?![ae])/i, /super\s?league(?!\s?2)/i, /bundesliga(?!.*2)/i, /la\s?liga(?!\s?2)/i, /serie\s?a/i, /ligue\s?1/i, /eredivisie/i, /ekstraklasa/i, /allsvenskan/i, /eliteserien/i, /superliga(?!\s?2)/i];
 const TIER2_PATTERNS = [/championship/i, /2\.\s?bundesliga/i, /bundesliga\s?2/i, /la\s?liga\s?2/i, /segunda/i, /segund/i, /serie\s?b/i, /ligue\s?2/i, /eerste\s?divisie/i, /liga\s?portugal\s?2/i, /challenger\s?pro\s?league/i, /challenge\s?league/i, /1\.\s?lig/i, /2\.\s?liga/i, /superettan/i, /obos/i, /i\s?liga(?!\s?2)/i, /prva\s?liga/i, /super\s?league\s?2/i];
 function isEuroCountry(c = "") { return EURO_COUNTRIES.includes(c); }
 function hasToken(name = "", tokens = []) { const s = (name || "").toLowerCase(); return tokens.some(t => s.includes(t)); }
@@ -270,14 +229,13 @@ function isYouthFixture(fx = {}) {
   return hit(ln) || hit(h) || hit(a);
 }
 
-/* ===== Rich, data-forward reasoning blocks ===== */
+/* ===== Rich reasoning text ===== */
 const CARDS_BASELINE = 4.8;
 const CORNERS_BASELINE = 9.7;
 const fmtN = (x, d = 1) => (Number.isFinite(x) ? Number(x).toFixed(d) : "-");
 const pctS = (p) => `${Math.round(Math.max(0, Math.min(1, p)) * 100)}%`;
 const BR = "<br/>";
 
-/* OU Goals (Over/Under 2.5) */
 function reasonOURich(fx, H, A, pick, confPct) {
   const hN = fx.teams?.home?.name || "Home";
   const aN = fx.teams?.away?.name || "Away";
@@ -292,8 +250,6 @@ function reasonOURich(fx, H, A, pick, confPct) {
     : "Controlled tempo + compact lines point to 0–2 goals more often.";
   return `${lines.join(BR)}${BR}${tail}`;
 }
-
-/* BTTS */
 function reasonBTTSRich(fx, H, A, pick, confPct) {
   const hN = fx.teams?.home?.name || "Home";
   const aN = fx.teams?.away?.name || "Away";
@@ -308,8 +264,6 @@ function reasonBTTSRich(fx, H, A, pick, confPct) {
     : "At least one side profiles for a clean sheet or low xG creation; BTTS fades.";
   return `${lines.join(BR)}${BR}${tail}`;
 }
-
-/* 1X2 (still used by Pro Board filter; Hero Bet no longer uses 1X2) */
 function reason1X2Rich(fx, H, A, pick, confPct) {
   const hN = fx.teams?.home?.name || "Home";
   const aN = fx.teams?.away?.name || "Away";
@@ -328,8 +282,6 @@ function reason1X2Rich(fx, H, A, pick, confPct) {
       : "Margins tight; risk profiles align toward a stalemate.";
   return `${lines.join(BR)}${BR}${tail}`;
 }
-
-/* OU Cards */
 function reasonCardsRich(fx, H, A, pick, confPct) {
   const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
   const line = avg >= CARDS_BASELINE ? 5.5 : 4.5;
@@ -352,8 +304,6 @@ function reasonCardsRich(fx, H, A, pick, confPct) {
   const verdict = `Pick: <strong>${pick}</strong> · Confidence ${confPct}%`;
   return `${top}${BR}${overview}${BR}${verdict}`;
 }
-
-/* OU Corners */
 function reasonCornersRich(fx, H, A, pick, confPct) {
   const pressure = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
   const line = pressure >= CORNERS_BASELINE ? 10.5 : 9.5;
@@ -375,28 +325,63 @@ function reasonCornersRich(fx, H, A, pick, confPct) {
   return `${top}${BR}${overview}${BR}${verdict}`;
 }
 
-/* ---- NEW: explicit lean calculators for Cards & Corners (with line) --- */
-function computeCardsLean(H, A) {
-  const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
-  const baseline = 4.8;
-  const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.06));
-  const line = avg >= baseline ? 5.5 : 4.5;
-  return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
+/* ---- NEW: separate model probability vs adjusted confidence ---- */
+function computeOUModelProb(H, A) {
+  // baseline model prob purely from O/U rates
+  const overP  = H.over25Rate * 0.5 + A.over25Rate * 0.5;
+  const underP = H.under25Rate * 0.5 + A.under25Rate * 0.5;
+  const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
+  const model = pick === "Over 2.5" ? overP : underP;
+  return { pick, modelProb: clampRange(model, 0.51, 0.95), overP, underP };
 }
-function computeCornersLean(H, A) {
-  const avg = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
-  const baseline = 9.7;
-  const conf = Math.min(0.8, Math.max(0.55, 0.55 + Math.abs(avg - baseline) * 0.05));
-  const line = avg >= baseline ? 10.5 : 9.5;
-  return { pick: avg >= baseline ? `Over ${line}` : `Under ${line}`, confidencePct: pct(conf) };
+function adjustOUConfidence(pick, modelProb, H, A) {
+  // contextual nudges: clean sheets / FTS / home-away splits / PPG gap
+  let adj = modelProb;
+  const csGap = Math.abs(H.cleanSheetRate - A.cleanSheetRate);      // more CS -> under tilt
+  const ftsAvg = (H.failToScoreRate + A.failToScoreRate) / 2;       // more FTS -> under tilt
+  const o25Venue = (H.o25HomeRate + A.o25AwayRate) / 2;             // venue splits -> over tilt
+  const ppgGap = Math.abs(H.ppg - A.ppg);                            // imbalance -> over (game opens) or under if both low GF
+
+  if (pick.startsWith("Over")) {
+    adj += (o25Venue - 0.5) * 0.12;
+    adj += (ppgGap) * 0.05;
+    adj -= (csGap) * 0.05;
+    adj -= (ftsAvg - 0.3) * 0.06;
+  } else {
+    adj += (csGap) * 0.06;
+    adj += (ftsAvg - 0.3) * 0.07;
+    adj -= (o25Venue - 0.5) * 0.10;
+    adj -= (ppgGap) * 0.04;
+  }
+  return pct(clampRange(adj, 0.52, 0.97));
 }
+
+function computeBTTSModelProb(H, A) {
+  const bttsP = H.bttsRate * 0.5 + A.bttsRate * 0.5;
+  const pick = bttsP >= 0.5 ? "BTTS: Yes" : "BTTS: No";
+  const model = pick === "BTTS: Yes" ? bttsP : (1 - bttsP);
+  return { pick, modelProb: clampRange(model, 0.51, 0.95), bttsP };
+}
+function adjustBTTSConfidence(pick, modelProb, H, A) {
+  let adj = modelProb;
+  const csAvg  = (H.cleanSheetRate + A.cleanSheetRate) / 2; // more CS -> No
+  const ftsAvg = (H.failToScoreRate + A.failToScoreRate) / 2;// more FTS -> No
+  if (pick.endsWith("Yes")) {
+    adj -= (csAvg - 0.25) * 0.10;
+    adj -= (ftsAvg - 0.25) * 0.10;
+  } else {
+    adj += (csAvg - 0.25) * 0.10;
+    adj += (ftsAvg - 0.25) * 0.10;
+  }
+  return pct(clampRange(adj, 0.52, 0.97));
+}
+// /api/rpc.js  (PART 2 / 3)
 
 /* -------------------- Team stats + odds utilities -------------------- */
 async function teamLastN(teamId, n = 12) {
   const rows = await apiGet("/fixtures", { team: teamId, last: n });
   let gp = 0, goalsFor = 0, goalsAg = 0, over25 = 0, under25 = 0, btts = 0;
   let wins = 0, draws = 0, losses = 0, cs = 0, fts = 0;
-
   let homeG = 0, awayG = 0, o25Home = 0, o25Away = 0;
 
   for (const r of rows) {
@@ -406,16 +391,13 @@ async function teamLastN(teamId, n = 12) {
     const ta = isHome ? ga : gh;
 
     gp += 1;
-    goalsFor += tf;
-    goalsAg  += ta;
+    goalsFor += tf; goalsAg += ta;
 
     if (total >= 3) over25 += 1;
     if (total <= 2) under25 += 1;
     if (gh > 0 && ga > 0) btts += 1;
 
-    if (tf > ta) { wins += 1; }
-    else if (tf === ta) { draws += 1; }
-    else { losses += 1; }
+    if (tf > ta) wins += 1; else if (tf === ta) draws += 1; else losses += 1;
 
     if (ta === 0) cs += 1;
     if (tf === 0) fts += 1;
@@ -501,18 +483,15 @@ async function getOddsMap(fixtureId) {
 async function scoreFixtureForOU25(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return null;
-  const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
-  const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
-  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
+  const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
-  const pick   = overP >= underP ? "Over 2.5" : "Under 2.5";
-  const conf   = overP >= underP ? overP : underP;           // pick confidence (chosen side)
-  const modelP = pick === "Over 2.5" ? overP : underP;       // model probability for chosen side
+  // model probability vs adjusted confidence
+  const m = computeOUModelProb(H, A);
+  const confPct = adjustOUConfidence(m.pick, m.modelProb, H, A);
+  const modelProbPct = pct(m.modelProb);
 
   const time   = clockFromISO(fx?.fixture?.date);
   const odds   = await getOddsMap(fx?.fixture?.id);
-  const confPct = pct(conf);
-  const modelProbPct = pct(modelP);
 
   return {
     fixtureId: fx?.fixture?.id,
@@ -522,11 +501,11 @@ async function scoreFixtureForOU25(fx) {
     matchTime: time,
     home: fx?.teams?.home?.name,
     away: fx?.teams?.away?.name,
-    market: pick,
-    confidencePct: confPct,
-    modelProbPct, // NEW
-    odds: odds ? odds[pick === "Over 2.5" ? "over25" : "under25"] : null,
-    reasoning: reasonOURich(fx, home, away, pick, confPct),
+    market: m.pick,
+    confidencePct: confPct,     // adjusted
+    modelProbPct,               // raw model prob
+    odds: odds ? odds[m.pick === "Over 2.5" ? "over25" : "under25"] : null,
+    reasoning: reasonOURich(fx, H, A, m.pick, confPct),
   };
 }
 
@@ -560,7 +539,7 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
 }
 
 /* ------------------------- Hero Bet (value) -------------------------- */
-// NOTE: Hero Bet restricted to OU 2.5 and BTTS only (no 1X2)
+// keep 1X2 lean helper (used only for Pro Board)
 function onex2Lean(home, away) {
   const ha = 0.20;
   const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
@@ -569,23 +548,20 @@ function onex2Lean(home, away) {
   return { pick: "Draw", conf: 0.50 };
 }
 
-// Limited to OU 2.5 and BTTS only
+// OU & BTTS only
 async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
-  const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
+  const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
   const odds = await getOddsMap(fx?.fixture?.id);
   const time = clockFromISO(fx?.fixture?.date);
   const candidates = [];
-
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
-  // OU 2.5
-  const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
-  const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
-
-  if (odds?.over25 && odds.over25 >= 2.0 && withinBand(overP)) {
-    const confPct = pct(overP);
+  // OU model + adjusted confidence
+  const mOU = computeOUModelProb(H, A);
+  if (mOU.pick === "Over 2.5" && odds?.over25 && odds.over25 >= 2.0 && withinBand(mOU.overP)) {
+    const confPct = adjustOUConfidence("Over 2.5", mOU.modelProb, H, A);
     candidates.push({
       fixtureId: fx?.fixture?.id,
       league: fx?.league?.name || "",
@@ -596,14 +572,13 @@ async function scoreHeroCandidates(fx) {
       selection: "Over 2.5",
       market: "Over 2.5",
       confidencePct: confPct,
-      modelProbPct: pct(overP),                // NEW
-      valueScore: Number((overP * odds.over25).toFixed(4)),
-      reasoning: reasonOURich(fx, home, away, "Over 2.5", confPct),
+      modelProbPct: pct(mOU.overP),
+      valueScore: Number((mOU.overP * odds.over25).toFixed(4)), // value uses model prob
+      reasoning: reasonOURich(fx, H, A, "Over 2.5", confPct),
     });
   }
-
-  if (odds?.under25 && odds.under25 >= 2.0 && withinBand(underP)) {
-    const confPct = pct(underP);
+  if (mOU.pick === "Under 2.5" && odds?.under25 && odds.under25 >= 2.0 && withinBand(mOU.underP)) {
+    const confPct = adjustOUConfidence("Under 2.5", mOU.modelProb, H, A);
     candidates.push({
       fixtureId: fx?.fixture?.id,
       league: fx?.league?.name || "",
@@ -614,16 +589,16 @@ async function scoreHeroCandidates(fx) {
       selection: "Under 2.5",
       market: "Under 2.5",
       confidencePct: confPct,
-      modelProbPct: pct(underP),               // NEW
-      valueScore: Number((underP * odds.under25).toFixed(4)),
-      reasoning: reasonOURich(fx, home, away, "Under 2.5", confPct),
+      modelProbPct: pct(mOU.underP),
+      valueScore: Number((mOU.underP * odds.under25).toFixed(4)),
+      reasoning: reasonOURich(fx, H, A, "Under 2.5", confPct),
     });
   }
 
   // BTTS
-  const bttsP = home.bttsRate * 0.5 + away.bttsRate * 0.5;
-  if (odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(bttsP)) {
-    const confPct = pct(bttsP);
+  const mBT = computeBTTSModelProb(H, A);
+  if (mBT.pick === "BTTS: Yes" && odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(mBT.bttsP)) {
+    const confPct = adjustBTTSConfidence("BTTS: Yes", mBT.modelProb, H, A);
     candidates.push({
       fixtureId: fx?.fixture?.id,
       league: fx?.league?.name || "",
@@ -634,16 +609,32 @@ async function scoreHeroCandidates(fx) {
       selection: "BTTS: Yes",
       market: "BTTS",
       confidencePct: confPct,
-      modelProbPct: pct(bttsP),                // NEW
-      valueScore: Number((bttsP * odds.bttsYes).toFixed(4)),
-      reasoning: reasonBTTSRich(fx, home, away, "BTTS: Yes", confPct),
+      modelProbPct: pct(mBT.bttsP),
+      valueScore: Number((mBT.bttsP * odds.bttsYes).toFixed(4)),
+      reasoning: reasonBTTSRich(fx, H, A, "BTTS: Yes", confPct),
+    });
+  }
+  if (mBT.pick === "BTTS: No" && odds?.bttsNo && odds.bttsNo >= 2.0 && withinBand(1 - mBT.bttsP)) {
+    const confPct = adjustBTTSConfidence("BTTS: No", mBT.modelProb, H, A);
+    candidates.push({
+      fixtureId: fx?.fixture?.id,
+      league: fx?.league?.name || "",
+      country: fx?.league?.country || "",
+      matchTime: time,
+      home: fx?.teams?.home?.name || "",
+      away: fx?.teams?.away?.name || "",
+      selection: "BTTS: No",
+      market: "BTTS",
+      confidencePct: confPct,
+      modelProbPct: pct(1 - mBT.bttsP),
+      valueScore: Number(((1 - mBT.bttsP) * odds.bttsNo).toFixed(4)),
+      reasoning: reasonBTTSRich(fx, H, A, "BTTS: No", confPct),
     });
   }
 
   return candidates;
 }
 
-// pickHeroBet normalized to auto|ou_goals|btts only
 async function pickHeroBet({ date, tz, market = "auto" }) {
   const m0 = (market || "auto").toString().toLowerCase();
   const m  = (m0 === "ou_goals" || m0 === "btts" || m0 === "auto") ? m0 : "auto";
@@ -709,46 +700,43 @@ async function buildProBoard({ date, tz }) {
     try {
       const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
       if (!homeId || !awayId) continue;
-      const [home, away] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
+      const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
-      const overP  = home.over25Rate  * 0.5 + away.over25Rate  * 0.5;
-      const underP = home.under25Rate * 0.5 + away.under25Rate * 0.5;
-      const ouPick = overP >= underP ? "Over 2.5" : "Under 2.5";
-      const ouConf = overP >= underP ? overP : underP;
-      const ouConfPct = pct(ouConf);
+      // OU
+      const mOU = computeOUModelProb(H, A);
+      const ouConfPct = adjustOUConfidence(mOU.pick, mOU.modelProb, H, A);
       const ou = {
-        recommendation: ouPick,
+        recommendation: mOU.pick,
         confidencePct: ouConfPct,
-        modelProbPct: pct(ouPick === "Over 2.5" ? overP : underP), // NEW
-        reasoning: reasonOURich(fx, home, away, ouPick, ouConfPct),
+        modelProbPct: pct(mOU.modelProb),
+        reasoning: reasonOURich(fx, H, A, mOU.pick, ouConfPct),
       };
 
-      const bttsP  = home.bttsRate * 0.5 + away.bttsRate * 0.5;
-      const bttsPick = bttsP >= 0.5 ? "BTTS: Yes" : "BTTS: No";
-      const bttsConf = bttsP >= 0.5 ? bttsP : 1 - bttsP;
-      const bttsConfPct = pct(bttsConf);
+      // BTTS
+      const mBT = computeBTTSModelProb(H, A);
+      const bttsConfPct = adjustBTTSConfidence(mBT.pick, mBT.modelProb, H, A);
       const btts = {
-        recommendation: bttsPick,
+        recommendation: mBT.pick,
         confidencePct: bttsConfPct,
-        modelProbPct: pct(bttsPick === "BTTS: Yes" ? bttsP : (1 - bttsP)), // NEW
-        reasoning: reasonBTTSRich(fx, home, away, bttsPick, bttsConfPct),
+        modelProbPct: pct(mBT.modelProb),
+        reasoning: reasonBTTSRich(fx, H, A, mBT.pick, bttsConfPct),
       };
 
-      const onex2 = onex2Lean(home, away);
+      // 1X2 (approx conf=model)
+      const onex2 = onex2Lean(H, A);
       const onex2ConfPct = pct(onex2.conf);
       const onex2Rec = {
         recommendation: onex2.pick,
         confidencePct: onex2ConfPct,
-        modelProbPct: onex2ConfPct, // approximation
-        reasoning: reason1X2Rich(fx, home, away, onex2.pick, onex2ConfPct),
+        modelProbPct: onex2ConfPct,
+        reasoning: reason1X2Rich(fx, H, A, onex2.pick, onex2ConfPct),
       };
 
       const cands = [
-        { market: "ou25", conf: ouConf },
-        { market: "btts", conf: bttsConf },
+        { market: "ou25", conf: mOU.modelProb },
+        { market: "btts", conf: mBT.modelProb },
         { market: "onex2", conf: onex2.conf },
-      ];
-      cands.sort((a,b)=> (b.conf - a.conf));
+      ].sort((a,b)=> b.conf - a.conf);
 
       rows.push({
         fixtureId: fx?.fixture?.id,
@@ -772,6 +760,7 @@ async function buildProBoard({ date, tz }) {
   });
   return { date, timezone: tz, groups };
 }
+
 /* --------------- Pro Board grouped by country (flags) ---------------- */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
@@ -787,8 +776,6 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
       const flag = getLeagueFlag(fx.league) || flagURLFromCountryName(country);
       const leagueId = fx.league?.id;
       const leagueName = fx.league?.name || "League";
-
-      // Provide a trimmed short label for UI/slip
       const leagueShort = (fx.league?.name || "League")
         .replace(/\s*\(Regular Season\)\s*/i, "")
         .replace(/\s*Group\s+[A-Z]\s*$/i, "");
@@ -803,33 +790,32 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
       if (hId && aId) {
         const [H, A] = await Promise.all([teamLastN(hId), teamLastN(aId)]);
         if (market === "ou_goals") {
-          const overP = H.over25Rate*0.5 + A.over25Rate*0.5;
-          const underP = H.under25Rate*0.5 + A.under25Rate*0.5;
-          const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
-          const conf = overP >= underP ? overP : underP;
-          const confPct = pct(conf);
-          why = reasonOURich(fx, H, A, pick, confPct);
-          rec = { market: "OU Goals", pick, confidencePct: confPct, modelProbPct: pct(pick === "Over 2.5" ? overP : underP), trend: why };
+          const mOU = computeOUModelProb(H, A);
+          const confPct = adjustOUConfidence(mOU.pick, mOU.modelProb, H, A);
+          why = reasonOURich(fx, H, A, mOU.pick, confPct);
+          rec = { market: "OU Goals", pick: mOU.pick, confidencePct: confPct, modelProbPct: pct(mOU.modelProb), trend: why };
         } else if (market === "btts") {
-          const b = H.bttsRate*0.5 + A.bttsRate*0.5;
-          const pick = b >= 0.5 ? "BTTS: Yes" : "BTTS: No";
-          const conf = b >= 0.5 ? b : 1 - b;
-          const confPct = pct(conf);
-          why = reasonBTTSRich(fx, H, A, pick, confPct);
-          rec = { market: "BTTS", pick, confidencePct: confPct, modelProbPct: pct(pick === "BTTS: Yes" ? b : (1 - b)), trend: why };
+          const mBT = computeBTTSModelProb(H, A);
+          const confPct = adjustBTTSConfidence(mBT.pick, mBT.modelProb, H, A);
+          why = reasonBTTSRich(fx, H, A, mBT.pick, confPct);
+          rec = { market: "BTTS", pick: mBT.pick, confidencePct: confPct, modelProbPct: pct(mBT.modelProb), trend: why };
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
           const confPct = pct(ox.conf);
           why = reason1X2Rich(fx, H, A, ox.pick, confPct);
           rec = { market: "1X2", pick: ox.pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
         } else if (market === "ou_cards") {
-          const lean = computeCardsLean(H, A);
-          why = reasonCardsRich(fx, H, A, lean.pick, lean.confidencePct);
-          rec = { market: "OU Cards", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct, trend: why };
+          const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
+          const pick = avg >= CARDS_BASELINE ? "Over 5.5" : "Under 4.5";
+          const confPct = pct(clampRange(0.55 + Math.abs(avg - CARDS_BASELINE) * 0.06, 0.52, 0.9));
+          why = reasonCardsRich(fx, H, A, pick, confPct);
+          rec = { market: "OU Cards", pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
         } else if (market === "ou_corners") {
-          const lean = computeCornersLean(H, A);
-          why = reasonCornersRich(fx, H, A, lean.pick, lean.confidencePct);
-          rec = { market: "OU Corners", pick: lean.pick, confidencePct: lean.confidencePct, modelProbPct: lean.confidencePct, trend: why };
+          const pressure = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
+          const pick = pressure >= CORNERS_BASELINE ? "Over 10.5" : "Under 9.5";
+          const confPct = pct(clampRange(0.55 + Math.abs(pressure - CORNERS_BASELINE) * 0.05, 0.52, 0.9));
+          why = reasonCornersRich(fx, H, A, pick, confPct);
+          rec = { market: "OU Corners", pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
         }
       }
 
@@ -854,51 +840,6 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
     }));
 
   return { date, timezone: tz, groups };
-}
-/* ----------------- Stripe verify + Pro override merge ---------------- */
-async function verifyStripeByEmail(email) {
-  const key = process.env.STRIPE_SECRET || "";
-  if (!key) throw new Error("Missing STRIPE_SECRET");
-
-  const custResp = await fetch(`https://api.stripe.com/v1/customers?${qs({ email, limit: 3 })}`, {
-    headers: { Authorization: `Bearer ${key}` }, cache: "no-store",
-  });
-  if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
-  const custData = await custResp.json();
-  const customers = custData?.data || [];
-  if (!customers.length) return { pro: false, plan: null, status: "none" };
-
-  let best = null;
-  for (const c of customers) {
-    const subResp = await fetch(
-      `https://api.stripe.com/v1/subscriptions?${qs({ customer: c.id, status: "all", limit: 10 })}`,
-      { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" }
-    );
-    if (!subResp.ok) continue;
-    const subData = await subResp.json();
-    for (const s of (subData?.data || [])) {
-      if (!best || (s.created || 0) > (best.created || 0)) best = s;
-    }
-  }
-  if (!best) return { pro: false, plan: null, status: "none" };
-
-  const activeStatuses = new Set(["active", "trialing"]);
-  const isPro = activeStatuses.has(best.status);
-
-  const item = best.items?.data?.[0] || {};
-  const price = item.price || {};
-  const nickname = price.nickname || null;
-  const interval = price.recurring?.interval || null;
-  const amount = typeof price.unit_amount === "number" ? (price.unit_amount / 100).toFixed(2) : null;
-  const currency = price.currency ? price.currency.toUpperCase() : null;
-
-  const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
-  return { pro: isPro, plan, status: best.status };
-}
-async function getProOverride(email) {
-  const v = await kvGet(`pro:override:${email}`);
-  const sec = v && typeof v.result === "string" ? Number(v.result) : 0;
-  return Number.isFinite(sec) ? sec : 0;
 }
 
 /* ---------------------- Upstash (Redis) helpers ----------------------- */
@@ -941,28 +882,22 @@ async function fpGet(date, tz, minConf){ try {
 } catch {} return null; }
 async function fpSet(date, tz, minConf, payload){ try { await kvSet(fpRedisKey(date, tz, minConf), JSON.stringify(payload), 22 * 60 * 60); } catch {} }
 
-/* --- In-memory day caches for Pro endpoints (22h TTL) --- */
+/* --- In-memory day caches (22h TTL) --- */
 const DAY_TTL_MS = 22 * 60 * 60 * 1000;
-
 const PROPICK_CACHE   = new Map();
 const PROBOARD_CACHE  = new Map();
 const PROBOARDG_CACHE = new Map();
-
 function getCachedPP(key){ const e = PROPICK_CACHE.get(key);   if (e && e.exp > Date.now()) return e.payload;   if (e) PROPICK_CACHE.delete(key);   return null; }
 function putCachedPP(key, payload){ PROPICK_CACHE.set(key,   { payload, exp: Date.now() + DAY_TTL_MS }); }
-
 function getCachedPB(key){ const e = PROBOARD_CACHE.get(key);  if (e && e.exp > Date.now()) return e.payload;   if (e) PROBOARD_CACHE.delete(key);  return null; }
 function putCachedPB(key, payload){ PROBOARD_CACHE.set(key,  { payload, exp: Date.now() + DAY_TTL_MS }); }
-
 function getCachedPBG(key){ const e = PROBOARDG_CACHE.get(key); if (e && e.exp > Date.now()) return e.payload; if (e) PROBOARDG_CACHE.delete(key); return null; }
 function putCachedPBG(key, payload){ PROBOARDG_CACHE.set(key, { payload, exp: Date.now() + DAY_TTL_MS }); }
 
-// Cache keys
 function ppCacheKey(date, tz, market){ return `pp|${date}|${tz}|${market}`; }
 function pbCacheKey(date, tz){ return `pb|${date}|${tz}`; }
 function pbgCacheKey(date, tz, market){ return `pbg|${date}|${tz}|${market}`; }
 
-/* ----- Pro pick / board persistent caches (Redis) ----- */
 function ppRedisKey(date, tz, market){ return `propick:${date}:${tz}:${market}`; }
 async function ppGet(date, tz, market){
   try { const v = await kvGet(ppRedisKey(date, tz, market)); if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result); }
@@ -971,7 +906,6 @@ async function ppGet(date, tz, market){
 async function ppSet(date, tz, market, payload){
   try { await kvSet(ppRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
-
 function pbRedisKey(date, tz){ return `proboard:${date}:${tz}`; }
 async function pbGet(date, tz){
   try { const v = await kvGet(pbRedisKey(date, tz)); if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result); }
@@ -980,7 +914,6 @@ async function pbGet(date, tz){
 async function pbSet(date, tz, payload){
   try { await kvSet(pbRedisKey(date, tz), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
-
 function pbgRedisKey(date, tz, market){ return `proboardg:${date}:${tz}:${market}`; }
 async function pbgGet(date, tz, market){
   try { const v = await kvGet(pbgRedisKey(date, tz, market)); 
@@ -990,23 +923,21 @@ async function pbgGet(date, tz, market){
 async function pbgSet(date, tz, market, payload){
   try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
+// /api/rpc.js  (PART 3 / 3)
 
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
   try {
-    setNoEdgeCache(res); // prevent CDN caching differences by region
+    setNoEdgeCache(res);
     const { action = "health" } = req.query;
 
     if (action === "health") {
       return res.status(200).json({ ok: true, env: process.env.NODE_ENV || "unknown" });
     }
 
-    // ======== NEW: CRON-FRIENDLY CAPTURE ACTIONS ========
-
+    /* ======== CRON-FRIENDLY CAPTURE ======== */
     if (action === "capture-free-picks") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const minConf = Number(req.query.minConf || 75);
@@ -1032,9 +963,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "capture-hero-bet") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const market = (req.query.market || "auto").toString().toLowerCase(); // auto|ou_goals|btts
@@ -1063,9 +992,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "capture-proboard") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
 
@@ -1107,12 +1034,10 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, stored });
     }
 
-    // ======== READERS FOR WIDGETS ========
-
-    // FREE PICKS — RESULTS (read from Firestore)
+    /* ======== READERS FOR WIDGETS ======== */
     if (action === "free-picks-results") {
       try {
-        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+        const from  = (req.query.from  || "").toString().slice(0, 10) || null;
         const to    = (req.query.to    || "").toString().slice(0, 10) || null;
         const limit = Number(req.query.limit || 60);
         const payload = await listFreePickResults({ from, to, limit });
@@ -1123,10 +1048,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // HERO BET — RESULTS (read from Firestore)
     if (action === "hero-bet-results") {
       try {
-        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+        const from  = (req.query.from  || "").toString().slice(0, 10) || null;
         const to    = (req.query.to    || "").toString().slice(0, 10) || null;
         const limit = Number(req.query.limit || 60);
         const payload = await listHeroBetResults({ from, to, limit });
@@ -1137,10 +1061,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // PRO BOARD — DAILY SUMMARIES (read from Firestore; aggregates by market)
     if (action === "pro-board-results") {
       try {
-        const from  = (req.query.from  || "").toString().slice(0, 10) || null; // YYYY-MM-DD
+        const from  = (req.query.from  || "").toString().slice(0, 10) || null;
         const to    = (req.query.to    || "").toString().slice(0, 10) || null;
         const limit = Number(req.query.limit || 60);
         const payload = await listProBoardSummaries({ from, to, limit });
@@ -1164,9 +1087,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "free-picks") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const minConf = Number(req.query.minConf || 75);
@@ -1182,7 +1103,6 @@ export default async function handler(req, res) {
 
       const payload = await pickFreePicks({ date, tz, minConf });
 
-      // Persist to Firestore (idempotent)
       try {
         const toStore = (payload?.picks || []).map(p => ({
           date,
@@ -1206,15 +1126,11 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // HERO BET (Pro pick) — restricted to OU 2.5 and BTTS; pinned by date/tz/market unless refresh=1
     if (action === "pro-pick") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY in environment." });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
 
-      // normalize market to auto|ou_goals|btts only
       const m0 = (req.query.market || "auto").toString().toLowerCase();
       const market = (m0 === "ou_goals" || m0 === "btts" || m0 === "auto") ? m0 : "auto";
 
@@ -1230,7 +1146,6 @@ export default async function handler(req, res) {
 
       const payload = await pickHeroBet({ date, tz, market });
 
-      // Persist hero bet (idempotent)
       try {
         const h = payload?.heroBet;
         if (h && h.home && h.away) {
@@ -1257,11 +1172,8 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD (flat) — NO odds
     if (action === "pro-board") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
@@ -1280,14 +1192,11 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // PRO BOARD GROUPED — also persists recs to Firestore
     if (action === "pro-board-grouped") {
-      if (!process.env.API_FOOTBALL_KEY) {
-        return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
-      }
+      if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
-      const market = (req.query.market || "ou_goals").toString().toLowerCase(); // ou_goals|ou_cards|ou_corners|one_x_two|btts
+      const market = (req.query.market || "ou_goals").toString().toLowerCase();
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
       const key = pbgCacheKey(date, tz, market);
 
@@ -1300,7 +1209,6 @@ export default async function handler(req, res) {
 
       const payload = await buildProBoardGrouped({ date, tz, market });
 
-      // Persist pro-board recommendations (idempotent)
       try {
         const recs = [];
         for (const g of (payload?.groups || [])) {
@@ -1333,7 +1241,7 @@ export default async function handler(req, res) {
       return res.status(200).json(payload);
     }
 
-    // VERIFY SUB
+    /* ======== VERIFY SUB ======== */
     if (action === "verify-sub") {
       const email = (req.query.email || "").toString().trim().toLowerCase();
       if (!email) return res.status(400).json({ error: "Missing email" });
@@ -1359,14 +1267,13 @@ export default async function handler(req, res) {
       });
     }
 
-    // (OPTIONAL) ADMIN settle endpoint — protect with your own auth in production!
     if (action === "settle") {
       const { kind = "free-picks", date, home, away, market = "", selection = "", status = "", closing = "", finalScore = "" } = req.query || {};
       if (!date || !home || !away) return res.status(400).json({ ok:false, error:"Missing date/home/away" });
 
       try {
         const patch = {};
-        if (status)  patch.status = String(status).toLowerCase(); // win|lose|loss|push|pending
+        if (status)  patch.status = String(status).toLowerCase();
         if (closing !== "") patch.closing = Number(closing);
         if (finalScore !== "") patch.finalScore = String(finalScore);
         await settlePick(kind, { date, home, away, market, selection }, patch);
@@ -1382,7 +1289,54 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server error" });
   }
 }
-/* ===================== READ: Hero Bet results ====================== */
+
+/* ================= Stripe Verify + Pro override merge ================= */
+async function verifyStripeByEmail(email) {
+  const key = process.env.STRIPE_SECRET || "";
+  if (!key) throw new Error("Missing STRIPE_SECRET");
+
+  const custResp = await fetch(`https://api.stripe.com/v1/customers?${qs({ email, limit: 3 })}`, {
+    headers: { Authorization: `Bearer ${key}` }, cache: "no-store",
+  });
+  if (!custResp.ok) throw new Error(`Stripe customers ${custResp.status}`);
+  const custData = await custResp.json();
+  const customers = custData?.data || [];
+  if (!customers.length) return { pro: false, plan: null, status: "none" };
+
+  let best = null;
+  for (const c of customers) {
+    const subResp = await fetch(
+      `https://api.stripe.com/v1/subscriptions?${qs({ customer: c.id, status: "all", limit: 10 })}` ,
+      { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" }
+    );
+    if (!subResp.ok) continue;
+    const subData = await subResp.json();
+    for (const s of (subData?.data || [])) {
+      if (!best || (s.created || 0) > (best.created || 0)) best = s;
+    }
+  }
+  if (!best) return { pro: false, plan: null, status: "none" };
+
+  const activeStatuses = new Set(["active", "trialing"]);
+  const isPro = activeStatuses.has(best.status);
+
+  const item = best.items?.data?.[0] || {};
+  const price = item.price || {};
+  const nickname = price.nickname || null;
+  const interval = price.recurring?.interval || null;
+  const amount = typeof price.unit_amount === "number" ? (price.unit_amount / 100).toFixed(2) : null;
+  const currency = price.currency ? price.currency.toUpperCase() : null;
+
+  const plan = nickname || (interval ? `${interval}${amount ? ` ${amount} ${currency}` : ""}` : price.id || null);
+  return { pro: isPro, plan, status: best.status };
+}
+async function getProOverride(email) {
+  const v = await kvGet(`pro:override:${email}`);
+  const sec = v && typeof v.result === "string" ? Number(v.result) : 0;
+  return Number.isFinite(sec) ? sec : 0;
+}
+
+/* ===================== READERS ====================== */
 async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
   if (typeof db === "undefined" || !db) return { days: [], summary: null };
 
@@ -1433,7 +1387,6 @@ async function listHeroBetResults({ from = null, to = null, limit = 60 } = {}) {
   return { days, summary: { total, wins, losses, push, winRate, roiPct } };
 }
 
-/* ===================== READ: Pro Board daily summaries ====================== */
 async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}) {
   if (typeof db === "undefined" || !db) return { days: [], summary: null };
 
@@ -1451,7 +1404,6 @@ async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}
     const d = doc.data() || {};
     let T = d.totals || {};
 
-    // If totals missing, build from picks (status != pending)
     if ((!T || !Object.keys(T).length) && Array.isArray(d.picks)) {
       const acc = {};
       for (const p of d.picks) {
@@ -1505,7 +1457,6 @@ async function listProBoardSummaries({ from = null, to = null, limit = 60 } = {}
   return { days, summary };
 }
 
-/* ===================== READ: Free Picks results ====================== */
 async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) {
   if (typeof db === "undefined" || !db) return { days: [], summary: null };
 
@@ -1534,7 +1485,7 @@ async function listFreePickResults({ from = null, to = null, limit = 60 } = {}) 
         const o = Number(p.odds);
         if (Number.isFinite(o) && o > 1) {
           staked += 1;
-          pnl += st === "win" ? (o - 1) : -1; // 1u ROI calc
+          pnl += st === "win" ? (o - 1) : -1;
         }
       }
     });
