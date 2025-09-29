@@ -6,6 +6,10 @@ import { db } from './_firebase.js'; // must export a Firestore db (admin or web
 
 // ---------- Manual fallback (keep this in sync with the public page) ----------
 const MANUAL_RESULTS = [
+  // 2025-09-29 (today)
+  { date:"2025-09-29", home:"Dortmund W", away:"Bayern Munich W", market:"Over 2.5", odds:2.00, status:"lose" },
+  { date:"2025-09-29", home:"Utsikten",   away:"IK Brage",        market:"Over 2.5", odds:1.67, status:"win" },
+
   // 2025-09-26
   { date:"2025-09-26", home:"Fanalamanga", away:"Ferroviário Maputo", market:"Under 2.5", odds:1.53, status:"lose" },
   { date:"2025-09-26", home:"Tukums II",   away:"Riga Mariners",      market:"Over 2.5",  odds:1.33, status:"win" },
@@ -53,8 +57,6 @@ function keyOf(p) { return `${p.date}#${p.home}#${p.away}#${(p.market||'').toLow
 
 async function fetchFirestore(days = 180) {
   if (!db) return [];
-  // You can change these names to your actual collections.
-  // We'll try two common ones and merge what we find.
   const colNames = ['results_free', 'free_picks_results'];
   const end = new Date();
   const start = new Date();
@@ -71,7 +73,6 @@ async function fetchFirestore(days = 180) {
       if (!snap.empty) {
         snap.forEach(doc => {
           const v = doc.data() || {};
-          // Normalize fields
           const row = {
             date: v.date || (v.ts ? ymd(new Date(v.ts)) : null),
             home: v.home || v.homeTeam || v.h || '',
@@ -86,7 +87,7 @@ async function fetchFirestore(days = 180) {
         });
       }
     } catch (e) {
-      // swallow per-collection errors; we'll try next name or fallback to manual
+      // ignore per-collection errors; fallback handled below
     }
   }
   return rows;
@@ -95,7 +96,7 @@ async function fetchFirestore(days = 180) {
 function dedupePreferFirestore(manual = [], remote = []) {
   const map = new Map();
   for (const r of manual) map.set(keyOf(r), r);
-  for (const r of remote) map.set(keyOf(r), r); // overwrites manual on same key
+  for (const r of remote) map.set(keyOf(r), r); // prefer remote
   return Array.from(map.values()).sort((a,b)=> (a.date||'').localeCompare(b.date||''));
 }
 
@@ -105,10 +106,9 @@ function toDays(picks) {
     if (!byDate.has(p.date)) byDate.set(p.date, []);
     byDate.get(p.date).push(p);
   }
-  const days = Array.from(byDate.entries())
+  return Array.from(byDate.entries())
     .sort((a,b)=> b[0].localeCompare(a[0]))
     .map(([date, arr]) => ({ date, picks: arr }));
-  return days;
 }
 
 function summarize(picks) {
@@ -132,7 +132,6 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({ picks: merged, days: daysOut, summary });
   } catch (e) {
-    // graceful fallback: manual only
     const merged = MANUAL_RESULTS.slice().sort((a,b)=> a.date.localeCompare(b.date));
     res.status(200).json({ picks: merged, days: toDays(merged), summary: summarize(merged), fallback:true });
   }

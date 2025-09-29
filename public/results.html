@@ -13,36 +13,81 @@
   <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
 
   <style>
-    /* --- KPI look aligned with Pro pages --- */
-    .results-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:.5rem 0 1rem}
-    .results-summary .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(17,24,39,.06), inset 0 1px 0 #ffffffcc}
-    .results-summary .card>div:first-child{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:#6b7280;font-weight:800}
-    .results-summary .card>div:last-child{margin-top:2px;font-size:1.6rem;line-height:1;font-weight:900;color:#111827}
+    /* ===== Base (dark) ===== */
+    :root{
+      --card-bg:#0e1420;
+      --card-br:#2a2f3a;
+      --text:#e5e7eb;
+      --muted:rgba(229,231,235,.75);
+      --shadow:0 6px 18px rgba(17,24,39,.25), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    body{color:var(--text)}
+    .muted{opacity:.75}
+    .muted-sm{opacity:.75;font-size:.92rem}
+    .card{background:var(--card-bg);border:1px solid var(--card-br);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px}
 
-    .extras{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:.5rem 0 1.25rem}
-    .kpi{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px 14px;box-shadow:0 4px 14px rgba(17,24,39,.06)}
-    .kpi .label{font-size:.78rem;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em}
-    .kpi .value{font-size:1.3rem;font-weight:900;margin-top:2px}
+    /* ===== KPI GRID with explicit rows ===== */
+    .kpi-grid{
+      display:grid;gap:14px;margin:.5rem 0 1rem;
+      grid-template-columns:repeat(6, minmax(140px,1fr));
+      grid-template-areas:
+        "total wins losses . . ."
+        "mwin  mwin  mroi   mroi  . ."
+        "ywin  ywin  yroi   yroi  . .";
+    }
+    .kpi{display:flex;flex-direction:column;justify-content:center}
+    .kpi .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;opacity:.85;font-weight:800}
+    .kpi .value{margin-top:4px;font-size:1.6rem;line-height:1;font-weight:900}
 
-    .sim.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(17,24,39,.06);margin:.5rem 0 1.25rem}
+    .kpi.total  {grid-area:total}
+    .kpi.wins   {grid-area:wins}
+    .kpi.losses {grid-area:losses}
+    .kpi.mwin   {grid-area:mwin}
+    .kpi.mroi   {grid-area:mroi}
+    .kpi.ywin   {grid-area:ywin}
+    .kpi.yroi   {grid-area:yroi}
+
+    /* Responsive: stack gracefully */
+    @media (max-width: 1024px){
+      .kpi-grid{
+        grid-template-columns:repeat(2, minmax(140px,1fr));
+        grid-template-areas:
+          "total wins"
+          "losses losses"
+          "mwin  mwin"
+          "mroi  mroi"
+          "ywin  ywin"
+          "yroi  yroi";
+      }
+    }
+
+    /* ===== Extras row (same card style) ===== */
+    .extras{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:14px;margin:.5rem 0 1.25rem}
+    @media (max-width: 1024px){ .extras{grid-template-columns:repeat(2,minmax(220px,1fr))} }
+    @media (max-width: 560px) { .extras{grid-template-columns:1fr} }
+    .extras .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;opacity:.85;font-weight:800}
+    .extras .value{margin-top:2px;font-size:1.3rem;font-weight:900}
+
+    /* ===== Simulator (card) ===== */
     .sim .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 .75rem}
-    .sim input[type="number"], .sim select{padding:.45rem .6rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;min-width:110px}
-    .sim .out{display:flex;gap:1rem;flex-wrap:wrap}
-    .sim .pill{display:inline-block;padding:.22rem .55rem;border:1px solid #e5e7eb;border-radius:999px;font-weight:800}
+    .sim input[type="number"], .sim select{
+      padding:.45rem .6rem;border:1px solid var(--card-br);border-radius:8px;background:#0b1120;color:var(--text);min-width:120px
+    }
+    .pill{display:inline-block;padding:.22rem .55rem;border:1px solid var(--card-br);border-radius:999px;font-weight:800}
 
+    /* ===== Tables ===== */
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
-    .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top}
-    .tbl th{text-align:left;font-weight:800;opacity:.8}
+    .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid var(--card-br);vertical-align:top}
+    .tbl th{text-align:left;font-weight:800;opacity:.85}
 
+    /* WL pills */
     .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
-    .wl-win{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
-    .wl-lose{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .wl-win{background:#063; color:#d1fae5;border:1px solid #064e3b}
+    .wl-lose{background:#5a1111;color:#fee2e2;border:1px solid #991b1b}
 
     .date-head{margin-top:1.2rem;font-weight:800}
-    .muted-sm{opacity:.75;font-size:.92rem}
-
     .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
-    select{padding:.4rem .55rem;border:1px solid #e5e7eb;border-radius:.5rem;background:#fff}
+    select{padding:.4rem .55rem;border:1px solid var(--card-br);border-radius:.5rem;background:#0b1120;color:var(--text)}
   </style>
 
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
@@ -76,30 +121,30 @@
     <h1>Free Picks — Results</h1>
     <p class="muted">Transparent record of outcomes. Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
 
-    <!-- PRIMARY KPIs: Monthly first, then YTD -->
-    <div id="summary" class="results-summary">
-      <div class="card"><div><strong>Total</strong></div><div id="s-total">—</div></div>
-      <div class="card"><div><strong>Wins</strong></div><div id="s-wins">—</div></div>
-      <div class="card"><div><strong>Losses</strong></div><div id="s-losses">—</div></div>
+    <!-- ===== TOP KPIs (fixed 3 rows) ===== -->
+    <div id="summary" class="kpi-grid">
+      <div class="card kpi total"><div class="label">Total</div><div class="value" id="s-total">—</div></div>
+      <div class="card kpi wins"><div class="label">Wins</div><div class="value" id="s-wins">—</div></div>
+      <div class="card kpi losses"><div class="label">Losses</div><div class="value" id="s-losses">—</div></div>
 
-      <!-- Keep existing IDs so results.js continues to populate them -->
-      <div class="card"><div><strong>Monthly Win % (30d)</strong></div><div id="s-winrate">—</div></div>
-      <div class="card"><div><strong>Monthly ROI (1u, 30d)</strong></div><div id="s-roi">—</div></div>
+      <div class="card kpi mwin"><div class="label">Monthly Win % (30d)</div><div class="value" id="s-mwin">—</div></div>
+      <div class="card kpi mroi"><div class="label">Monthly ROI (1u, 30d)</div><div class="value" id="s-mroi">—</div></div>
 
-      <div class="card"><div><strong>YTD Win %</strong></div><div id="s-ywin">—</div></div>
-      <div class="card"><div><strong>YTD ROI (1u)</strong></div><div id="s-yroi">—</div></div>
+      <div class="card kpi ywin"><div class="label">YTD Win %</div><div class="value" id="s-ywin">—</div></div>
+      <div class="card kpi yroi"><div class="label">YTD ROI (1u)</div><div class="value" id="s-yroi">—</div></div>
     </div>
 
-    <!-- SECONDARY KPIs -->
+    <!-- ===== Extras (same card style) ===== -->
     <div class="extras">
-      <div class="kpi"><div class="label">Current streak</div><div class="value" id="k-streak">—</div></div>
-      <div class="kpi"><div class="label">Best streak</div><div class="value" id="k-best">—</div></div>
-      <div class="kpi"><div class="label">Last 7 days win%</div><div class="value" id="k-7d">—</div></div>
-      <div class="kpi"><div class="label">Last 30 days ROI (1u)</div><div class="value" id="k-30roi">—</div></div>
-      <div class="kpi"><div class="label">Avg CLV (edge)</div><div class="value" id="k-clv">—</div></div>
+      <div class="card"><div class="label">Current streak</div><div class="value" id="k-streak">—</div></div>
+      <div class="card"><div class="label">Best streak</div><div class="value" id="k-best">—</div></div>
+      <div class="card"><div class="label">Last 7 days win%</div><div class="value" id="k-7d">—</div></div>
+      <div class="card"><div class="label">Last 30 days ROI (1u)</div><div class="value" id="k-30roi">—</div></div>
+      <div class="card"><div class="label">Avg CLV (edge)</div><div class="value" id="k-clv">—</div></div>
     </div>
 
-    <section class="sim card">
+    <!-- ===== ROI Simulator (card) ===== -->
+    <section class="card sim">
       <h2 style="margin:0 0 .35rem">ROI Simulator</h2>
       <p class="muted-sm">“If I staked a flat amount on every pick in the selected period…”</p>
       <div class="row">
@@ -125,6 +170,7 @@
       </div>
     </section>
 
+    <!-- ===== Historical ROI by Market ===== -->
     <section class="card" style="padding:14px 16px; margin:.5rem 0 1.25rem">
       <h2 style="margin:0 0 .35rem">Historical ROI by Market</h2>
       <p class="muted-sm">Aggregated from the results on this page (flat 1u on picks with odds).</p>
@@ -134,12 +180,14 @@
       </table>
     </section>
 
+    <!-- ===== Month Picker ===== -->
     <div class="toolbar">
       <label for="monthSelect" class="muted-sm"><strong>Monthly view:</strong></label>
       <select id="monthSelect"></select>
       <span class="muted-sm" id="monthStats"></span>
     </div>
 
+    <!-- ===== Monthly Lists ===== -->
     <div id="list">Loading…</div>
   </main>
 
@@ -154,7 +202,7 @@
     </div>
   </footer>
 
-  <!-- Your page logic lives in /public/results.js -->
+  <!-- Page logic -->
   <script src="/results.js" defer></script>
 </body>
 </html>
