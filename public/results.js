@@ -10,8 +10,10 @@
   // You can add 'closing' for CLV calc on a per-pick basis.
   const MANUAL_RESULTS = [
     // 2025-09-27 (new)
-    { date:"2025-09-27", home:"Ogre United",     away:"Smiltene",        market:"Over 2.5",  odds:1.40, status:"lose" },
-    { date:"2025-09-27", home:"Piast Gliwice",   away:"Nieciecza",       market:"Under 2.5", odds:1.90, status:"lose" },
+    { date:"2025-09-27", home:"Ogre United",       away:"Smiltene",            market:"Over 2.5",  odds:1.40, status:"lose" },
+    { date:"2025-09-27", home:"Piast Gliwice",     away:"Nieciecza",           market:"Under 2.5", odds:1.90, status:"lose" },
+    { date:"2025-09-27", home:"SC Freiburg",       away:"1899 Hoffenheim",     market:"Over 2.5",  odds:1.62, status:"lose" },
+    { date:"2025-09-27", home:"Rosengård W",       away:"Brommapojkarna W",    market:"Over 2.5",  odds:1.53, status:"win" },
 
     // 2025-09-26
     { date:"2025-09-26", home:"Fanalamanga", away:"Ferroviário Maputo", market:"Under 2.5", odds:1.53, status:"lose" },
