@@ -13,27 +13,34 @@
   <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
 
   <style>
+    /* --- KPI look aligned with Pro pages --- */
     .results-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:.5rem 0 1rem}
     .results-summary .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(17,24,39,.06), inset 0 1px 0 #ffffffcc}
     .results-summary .card>div:first-child{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:#6b7280;font-weight:800}
     .results-summary .card>div:last-child{margin-top:2px;font-size:1.6rem;line-height:1;font-weight:900;color:#111827}
+
     .extras{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:.5rem 0 1.25rem}
     .kpi{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px 14px;box-shadow:0 4px 14px rgba(17,24,39,.06)}
     .kpi .label{font-size:.78rem;color:#6b7280;font-weight:800;text-transform:uppercase;letter-spacing:.03em}
     .kpi .value{font-size:1.3rem;font-weight:900;margin-top:2px}
+
     .sim.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px;box-shadow:0 6px 18px rgba(17,24,39,.06);margin:.5rem 0 1.25rem}
     .sim .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 .75rem}
     .sim input[type="number"], .sim select{padding:.45rem .6rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;min-width:110px}
     .sim .out{display:flex;gap:1rem;flex-wrap:wrap}
     .sim .pill{display:inline-block;padding:.22rem .55rem;border:1px solid #e5e7eb;border-radius:999px;font-weight:800}
+
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
     .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top}
     .tbl th{text-align:left;font-weight:800;opacity:.8}
+
     .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
     .wl-win{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
     .wl-lose{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+
     .date-head{margin-top:1.2rem;font-weight:800}
     .muted-sm{opacity:.75;font-size:.92rem}
+
     .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
     select{padding:.4rem .55rem;border:1px solid #e5e7eb;border-radius:.5rem;background:#fff}
   </style>
@@ -67,18 +74,23 @@
 
   <main class="section" style="max-width:1000px">
     <h1>Free Picks — Results</h1>
-    <p class="muted">Transparent record of outcomes. Win% from settled picks (Push excluded). ROI assumes 1u flat staking when odds are present.</p>
+    <p class="muted">Transparent record of outcomes. Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
 
+    <!-- PRIMARY KPIs: Monthly first, then YTD -->
     <div id="summary" class="results-summary">
       <div class="card"><div><strong>Total</strong></div><div id="s-total">—</div></div>
       <div class="card"><div><strong>Wins</strong></div><div id="s-wins">—</div></div>
       <div class="card"><div><strong>Losses</strong></div><div id="s-losses">—</div></div>
-      <div class="card"><div><strong>Win %</strong></div><div id="s-winrate">—</div></div>
-      <div class="card"><div><strong>ROI</strong></div><div id="s-roi">—</div></div>
-      <div class="card"><div><strong>Year Win %</strong></div><div id="s-ywin">—</div></div>
-      <div class="card"><div><strong>Year ROI</strong></div><div id="s-yroi">—</div></div>
+
+      <!-- Keep existing IDs so results.js continues to populate them -->
+      <div class="card"><div><strong>Monthly Win % (30d)</strong></div><div id="s-winrate">—</div></div>
+      <div class="card"><div><strong>Monthly ROI (1u, 30d)</strong></div><div id="s-roi">—</div></div>
+
+      <div class="card"><div><strong>YTD Win %</strong></div><div id="s-ywin">—</div></div>
+      <div class="card"><div><strong>YTD ROI (1u)</strong></div><div id="s-yroi">—</div></div>
     </div>
 
+    <!-- SECONDARY KPIs -->
     <div class="extras">
       <div class="kpi"><div class="label">Current streak</div><div class="value" id="k-streak">—</div></div>
       <div class="kpi"><div class="label">Best streak</div><div class="value" id="k-best">—</div></div>

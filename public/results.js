@@ -9,6 +9,10 @@
   // ======== MANUAL SEED (seed/fallback) ========
   // You can add 'closing' for CLV calc on a per-pick basis.
   const MANUAL_RESULTS = [
+    // 2025-09-29
+{ date:"2025-09-29", home:"Dortmund W", away:"Bayern Munich W", market:"Over 2.5", odds:2.00, status:"lose" },
+{ date:"2025-09-29", home:"Utsikten",   away:"IK Brage",        market:"Over 2.5", odds:1.67, status:"win" },
+
     // 2025-09-28
 { date:"2025-09-28", home:"SC Freiburg",  away:"1899 Hoffenheim",   market:"Over 2.5", odds:1.62, status:"lose" },
 { date:"2025-09-28", home:"Rosengård W",  away:"Brommapojkarna W", market:"Over 2.5", odds:1.53, status:"win" },
