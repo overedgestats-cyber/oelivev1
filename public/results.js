@@ -15,8 +15,9 @@
   // ======== MANUAL SEED ========
   const MANUAL_RESULTS = [
     // 2025-10-01 (today additions)
-    { date: "2025-10-01", home: "Dortmund W", away: "Bayern Munich W", market: "Over 2.5", odds: 2.0, status: "lose" },
-    { date: "2025-10-01", home: "Utsikten", away: "IK Brage", market: "Over 2.5", odds: 1.67, status: "win" },
+    // 2025-09-29
+{ date:"2025-09-29", home:"Dortmund W", away:"Bayern Munich W", market:"Over 2.5", odds:2.00, status:"lose" },
+{ date:"2025-09-29", home:"Utsikten",    away:"IK Brage",       market:"Over 2.5", odds:1.67, status:"win" },
 
     // keep seed
     { date: "2025-09-28", home: "SC Freiburg", away: "1899 Hoffenheim", market: "Over 2.5", odds: 1.62, status: "lose" },

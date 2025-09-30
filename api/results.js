@@ -22,8 +22,10 @@ try {
 // ---------- Manual fallback (keep in sync with /public/results.js) ----------
 const MANUAL_RESULTS = [
   // Today (you asked to attach these)
-  { date:"2025-10-01", home:"Dortmund W", away:"Bayern Munich W", market:"Over 2.5", odds:2.00, status:"lose" },
-  { date:"2025-10-01", home:"Utsikten",    away:"IK Brage",       market:"Over 2.5", odds:1.67, status:"win" },
+  // 2025-09-29
+{ date:"2025-09-29", home:"Dortmund W", away:"Bayern Munich W", market:"Over 2.5", odds:2.00, status:"lose" },
+{ date:"2025-09-29", home:"Utsikten",    away:"IK Brage",       market:"Over 2.5", odds:1.67, status:"win" },
+
 
   // 2025-09-28
   { date:"2025-09-28", home:"SC Freiburg",  away:"1899 Hoffenheim",   market:"Over 2.5", odds:1.62, status:"lose" },
