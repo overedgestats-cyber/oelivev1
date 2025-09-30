@@ -14,7 +14,9 @@
 
   // ======== MANUAL SEED ========
   const MANUAL_RESULTS = [
-    // 2025-10-01 (today additions)
+
+  { date:"2025-09-30", home:"Galatasaray", away:"Liverpool", market:"Over 2.5", odds:1.40, status:"pending" }, // in play now
+  { date:"2025-09-30", home:"Iskra",       away:"Congaz",    market:"Over 2.5", odds:1.60, status:"win" },
     // 2025-09-29
 { date:"2025-09-29", home:"Dortmund W", away:"Bayern Munich W", market:"Over 2.5", odds:2.00, status:"lose" },
 { date:"2025-09-29", home:"Utsikten",    away:"IK Brage",       market:"Over 2.5", odds:1.67, status:"win" },
