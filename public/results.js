@@ -15,6 +15,14 @@
   // ======== MANUAL SEED ========
   // ======== MANUAL SEED ========
 const MANUAL_RESULTS = [
+  // 2025-10-08
+{ date:"2025-10-08", home:"Rada W",          away:"Linköping W",     market:"Over 2.5", odds:1.55, status:"win" },
+{ date:"2025-10-08", home:"Sparta Praha W",  away:"Ferencváros W",   market:"Over 2.5", odds:1.44, status:"win" },
+
+// 2025-10-07
+{ date:"2025-10-07", home:"Arsenal W",       away:"Lyon W",          market:"Over 2.5", odds:1.44, status:"win" },
+{ date:"2025-10-07", home:"Caernarfon",      away:"TNS",             market:"Over 2.5", odds:1.44, status:"win" },
+
   // 2025-10-06
   { date:"2025-10-06", home:"Dragonas IDV W", away:"Santa Fe W",           market:"Under 2.5", odds:1.55, status:"win" },
 
