@@ -291,49 +291,97 @@
   </script>
 
   <!-- Perf band: fill WR/ROI from last 30 days of results -->
-  <script>
-  (async function loadPerf30(){
-    const wrEl = document.getElementById('wr30');
-    const roiEl = document.getElementById('roi30');
-    if (!wrEl || !roiEl) return;
+  <!-- Perf band: WR/ROI from last 30 days (RPC first, fallback to /results HTML) -->
+<script>
+(async function loadPerf30(){
+  const wrEl = document.getElementById('wr30');
+  const roiEl = document.getElementById('roi30');
+  if (!wrEl || !roiEl) return;
 
-    try {
+  // ---- helpers ----
+  const asDate = (s) => {
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T12:00:00");
+    const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/); // DD.MM.YYYY
+    if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00`);
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  };
+  const within30 = (d) => {
+    if (!(d instanceof Date) || isNaN(d)) return false;
+    const now = new Date();
+    const from = new Date(now); from.setDate(now.getDate() - 30);
+    return d >= from && d <= now;
+  };
+  function compute(items){
+    const last30 = items.filter(x => within30(asDate(x.date)));
+    const total = last30.length;
+    if (!total) return { wr: 0, roi: 0 };
+    let wins = 0, profit = 0;
+    for (const x of last30) {
+      const res  = String(x.result || "").toUpperCase();
+      const odds = Number(x.odds || 0);
+      if (res === "WIN") { wins += 1; if (odds > 1) profit += (odds - 1); }
+      else if (res === "LOSS" || res === "LOST") { profit -= 1; }
+      // PUSH/VOID => 0
+    }
+    return { wr: (wins/total)*100, roi: (profit/total)*100 };
+  }
+
+  // ---- data sources ----
+  async function fromRPC(){
+    try{
       const r = await fetch('/api/rpc?action=free-picks-results', { cache: 'no-store' });
       const data = await r.json();
-      const items = Array.isArray(data?.results) ? data.results : [];
+      const arr = Array.isArray(data?.results) ? data.results : [];
+      return arr.map(it => ({
+        date: it.date || it.matchDate || it.createdAt || "",
+        odds: it.odds || it.price || it.o || "",
+        result: it.result || it.outcome || ""
+      }));
+    }catch{ return []; }
+  }
+  async function fromResultsHTML(){
+    try{
+      const resp = await fetch('/results', { cache: 'no-store' });
+      const html = await resp.text();
+      const lines = html.split(/\n|\r/g);
+      let currentDate = null;
+      const out = [];
 
-      const now = new Date();
-      const from = new Date(now); from.setDate(now.getDate() - 30);
-      const last30 = items.filter(x => {
-        const d = new Date(x.date || x.matchDate || x.createdAt || 0);
-        return !isNaN(d) && d >= from && d <= now;
-      });
+      const dateRe1 = /^\s*(\d{4}-\d{2}-\d{2})\b/;   // 2025-10-07
+      const dateRe2 = /^\s*(\d{2}\.\d{2}\.\d{4})\b/; // 07.10.2025
+      const oddsRe  = /odds?\s*([0-9]+(?:\.[0-9]+)?)/i;
+      const resRe   = /\b(WIN|LOSS|LOST|PUSH|VOID)\b/i;
 
-      const total = last30.length || 0;
-      const wins  = last30.filter(x => String(x.result || x.outcome).toUpperCase() === 'WIN').length;
+      for (let raw of lines) {
+        const line = raw.replace(/<\/?[^>]+>/g, '').trim();
+        if (!line) continue;
 
-      // ROI per 1u stake: WIN => +(odds-1), LOSS => -1
-      let profit = 0;
-      for (const x of last30) {
-        const odds = Number(x.odds || x.price || 0);
-        const res  = String(x.result || x.outcome).toUpperCase();
-        if (res === 'WIN' && odds > 1) profit += (odds - 1);
-        else if (res === 'LOSS') profit -= 1;
+        let m;
+        if ((m = line.match(dateRe1))) { currentDate = m[1]; continue; }
+        if ((m = line.match(dateRe2))) { currentDate = m[1]; continue; }
+
+        if (line.toLowerCase().includes(' vs ') && resRe.test(line)) {
+          const resM  = line.match(resRe);
+          const oddsM = line.match(oddsRe);
+          out.push({
+            date: currentDate,
+            odds: oddsM ? oddsM[1] : "",
+            result: resM ? resM[1].toUpperCase() : ""
+          });
+        }
       }
+      return out;
+    }catch{ return []; }
+  }
 
-      const acc = total ? (wins / total) * 100 : 0;
-      const roi = total ? (profit / total) * 100 : 0;
+  let items = await fromRPC();
+  if (!items.length) items = await fromResultsHTML();
 
-      wrEl.textContent  = `${acc.toFixed(1)}%`;
-      roiEl.textContent = `${roi.toFixed(1)}%`;
-    } catch (e) {
-      wrEl.textContent  = '—';
-      roiEl.textContent = '—';
-    }
-  })();
-  </script>
+  const { wr, roi } = compute(items);
+  wrEl.textContent  = `${wr.toFixed(1)}%`;
+  roiEl.textContent = `${roi.toFixed(1)}%`;
+})();
+</script>
 
-  <!-- Shared navbar auth module -->
-  <script type="module" src="/auth.js"></script>
-</body>
-</html>
