@@ -290,15 +290,14 @@
     })();
   </script>
 
-  <!-- Perf band: fill WR/ROI from last 30 days of results -->
-  <!-- Perf band: WR/ROI from last 30 days (RPC first, fallback to /results HTML) -->
+ <!-- Perf band: WR/ROI from last 30 days (RPC → /results.js → /results HTML) -->
 <script>
 (async function loadPerf30(){
   const wrEl = document.getElementById('wr30');
   const roiEl = document.getElementById('roi30');
   if (!wrEl || !roiEl) return;
 
-  // ---- helpers ----
+  // ---------- helpers ----------
   const asDate = (s) => {
     if (!s) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T12:00:00");
@@ -328,55 +327,95 @@
     return { wr: (wins/total)*100, roi: (profit/total)*100 };
   }
 
-  // ---- data sources ----
+  // ---------- source #1: RPC ----------
   async function fromRPC(){
     try{
       const r = await fetch('/api/rpc?action=free-picks-results', { cache: 'no-store' });
       const data = await r.json();
       const arr = Array.isArray(data?.results) ? data.results : [];
       return arr.map(it => ({
-        date: it.date || it.matchDate || it.createdAt || "",
-        odds: it.odds || it.price || it.o || "",
-        result: it.result || it.outcome || ""
+        date:  it.date || it.matchDate || it.createdAt || "",
+        odds:  it.odds || it.price || it.o || "",
+        result: (it.result || it.outcome || "").toString()
       }));
     }catch{ return []; }
   }
-  async function fromResultsHTML(){
+
+  // ---------- source #2: parse /results.js (static builder) ----------
+  async function fromResultsJS(){
     try{
-      const resp = await fetch('/results', { cache: 'no-store' });
-      const html = await resp.text();
-      const lines = html.split(/\n|\r/g);
+      const js = await (await fetch('/results.js', { cache: 'no-store' })).text();
+
+      // try to extract JSON if you store it like const RESULTS=[...];
+      const jsonVar = js.match(/RESULTS\s*=\s*(\[[\s\S]*?\]);?/);
+      if (jsonVar) {
+        try {
+          const arr = JSON.parse(jsonVar[1]);
+          return arr.map(it => ({
+            date:  it.date || it.d || "",
+            odds:  it.odds || it.o || "",
+            result: it.result || it.r || ""
+          }));
+        } catch {}
+      }
+
+      // generic parser: walk through lines; remember last date header; parse rows
+      const lines = js.split(/\n|\r/);
       let currentDate = null;
       const out = [];
-
       const dateRe1 = /^\s*(\d{4}-\d{2}-\d{2})\b/;   // 2025-10-07
       const dateRe2 = /^\s*(\d{2}\.\d{2}\.\d{4})\b/; // 07.10.2025
-      const oddsRe  = /odds?\s*([0-9]+(?:\.[0-9]+)?)/i;
       const resRe   = /\b(WIN|LOSS|LOST|PUSH|VOID)\b/i;
+      const oddsRe  = /odds?\s*([0-9]+(?:\.[0-9]+)?)/i;
 
       for (let raw of lines) {
-        const line = raw.replace(/<\/?[^>]+>/g, '').trim();
+        const line = raw.replace(/[`'"<>]/g, '').trim();
         if (!line) continue;
-
         let m;
         if ((m = line.match(dateRe1))) { currentDate = m[1]; continue; }
         if ((m = line.match(dateRe2))) { currentDate = m[1]; continue; }
-
         if (line.toLowerCase().includes(' vs ') && resRe.test(line)) {
           const resM  = line.match(resRe);
           const oddsM = line.match(oddsRe);
-          out.push({
-            date: currentDate,
-            odds: oddsM ? oddsM[1] : "",
-            result: resM ? resM[1].toUpperCase() : ""
-          });
+          out.push({ date: currentDate, odds: oddsM ? oddsM[1] : "", result: resM[1].toUpperCase() });
         }
       }
       return out;
     }catch{ return []; }
   }
 
+  // ---------- source #3: scrape /results HTML ----------
+  async function fromResultsHTML(){
+    try{
+      const html = await (await fetch('/results', { cache: 'no-store' })).text();
+      const text = html.replace(/<\/?[^>]+>/g, '\n'); // drop tags to keep lines
+      const lines = text.split(/\n|\r/);
+      let currentDate = null;
+      const out = [];
+      const dateRe1 = /^\s*(\d{4}-\d{2}-\d{2})\b/;
+      const dateRe2 = /^\s*(\d{2}\.\d{2}\.\d{4})\b/;
+      const resRe   = /\b(WIN|LOSS|LOST|PUSH|VOID)\b/i;
+      const oddsRe  = /odds?\s*([0-9]+(?:\.[0-9]+)?)/i;
+
+      for (let raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        let m;
+        if ((m = line.match(dateRe1))) { currentDate = m[1]; continue; }
+        if ((m = line.match(dateRe2))) { currentDate = m[1]; continue; }
+        if (line.toLowerCase().includes(' vs ') && resRe.test(line)) {
+          const resM  = line.match(resRe);
+          const oddsM = line.match(oddsRe);
+          out.push({ date: currentDate, odds: oddsM ? oddsM[1] : "", result: resM[1].toUpperCase() });
+        }
+      }
+      return out;
+    }catch{ return []; }
+  }
+
+  // try in order
   let items = await fromRPC();
+  if (!items.length) items = await fromResultsJS();
   if (!items.length) items = await fromResultsHTML();
 
   const { wr, roi } = compute(items);
@@ -384,4 +423,3 @@
   roiEl.textContent = `${roi.toFixed(1)}%`;
 })();
 </script>
-
