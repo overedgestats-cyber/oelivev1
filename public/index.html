@@ -1,22 +1,22 @@
 <!doctype html>
 <html lang="en">
   <!-- Meta Pixel Code -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1135930111808538');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
-/></noscript>
-<!-- End Meta Pixel Code -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '1135930111808538');
+  fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+  src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"/></noscript>
+  <!-- End Meta Pixel Code -->
+
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -46,8 +46,36 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     .hb-blur{filter:blur(7px);-webkit-filter:blur(7px);pointer-events:none;user-select:none}
     /* simple fixture preview style (same as home) */
     .fixture-preview .meta{color:var(--muted);margin:.15rem 0 .15rem}
+
+    /* hero */
+    .hero{max-width:1100px;margin:0 auto;padding:32px 16px 8px;display:grid;gap:16px}
+    .hero h1{font-size: clamp(1.8rem, 3.2vw, 2.6rem);margin:0}
+    .hero p{max-width:72ch;opacity:.9}
+    .cta-row{display:flex;gap:.75rem;flex-wrap:wrap}
+    .cta-ghost{border:1px solid var(--line);background:transparent}
+
+    /* performance band */
+    .perf-band{
+      max-width:1100px;margin:8px auto 24px;padding:12px 16px;border:1px solid var(--line);
+      border-radius:14px;background:rgba(255,255,255,.02)
+    }
+    .perf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .perf-item{display:flex;flex-direction:column;gap:4px}
+    .perf-item .k{opacity:.7;font-size:.92rem}
+    .perf-item .v{font-weight:800;font-size:1.1rem}
+
+    .section-tight{max-width:900px;margin:0 auto}
+    .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
+    .benefit{border:1px solid var(--line);border-radius:12px;padding:14px;background:rgba(255,255,255,.02)}
+    .trust{display:flex;gap:16px;flex-wrap:wrap;align-items:center;opacity:.85;font-size:.95rem}
+
+    @media (max-width:820px){
+      .perf-grid{grid-template-columns:1fr 1fr}
+      .benefits{grid-template-columns:1fr}
+    }
   </style>
 </head>
+
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script>
   (function(){
@@ -84,9 +112,38 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     </nav>
   </header>
 
-  <main class="section" style="max-width:900px">
-    <h1>Today’s Free Picks (preview)</h1>
-    <p class="lead">Two fixtures for today — open the Free Picks page to see the bets and reasoning.</p>
+  <!-- HERO -->
+  <section class="hero">
+    <h1>Data beats gut.</h1>
+    <p>Smart, stats-driven football picks. Two free selections every day, plus a Pro board with deep team stats and a high-value Hero Bet.</p>
+    <div class="cta-row">
+      <a class="btn" href="/free-picks">🔥 Get Today’s Free Picks</a>
+      <a class="btn cta-ghost" href="/pro">🎯 Explore Pro Features</a>
+    </div>
+  </section>
+
+  <!-- PERFORMANCE -->
+  <section class="perf-band" aria-label="Performance last 30 days">
+    <div class="perf-grid">
+      <div class="perf-item">
+        <span class="k">Accuracy (30 days)</span>
+        <span class="v" id="wr30">—</span>
+      </div>
+      <div class="perf-item">
+        <span class="k">ROI (1u, 30 days)</span>
+        <span class="v" id="roi30">—</span>
+      </div>
+      <div class="perf-item">
+        <span class="k">Wins / Total (30 days)</span>
+        <span class="v" id="wintot30">—</span>
+      </div>
+    </div>
+    <div class="muted-sm" style="margin-top:6px">Verified daily via match results. <a href="/results">See full results →</a></div>
+  </section>
+
+  <main class="section section-tight">
+    <h2>Today’s Free Picks (preview)</h2>
+    <p class="lead">Open the Free Picks page to see the exact bets and reasoning.</p>
 
     <div id="home-free-picks" class="lead">Loading…</div>
 
@@ -106,6 +163,40 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     </section>
 
     <p><a class="btn" href="/free-picks">View full details →</a></p>
+
+    <!-- WHY GO PRO -->
+    <section class="section" style="padding-left:0;padding-right:0">
+      <h2>Why go Pro</h2>
+      <div class="benefits">
+        <div class="benefit">
+          <div style="font-weight:700;margin-bottom:.25rem">📊 Full stats board</div>
+          <div class="muted-sm">Goals, corners, cards, shots, and trend filters over last 5/10/15 matches.</div>
+        </div>
+        <div class="benefit">
+          <div style="font-weight:700;margin-bottom:.25rem">⚡ Hero Bet (2.00–3.00)</div>
+          <div class="muted-sm">One high-value pick daily with tight reasoning and odds.</div>
+        </div>
+        <div class="benefit">
+          <div style="font-weight:700;margin-bottom:.25rem">🔎 Pro Board & Filters</div>
+          <div class="muted-sm">Explore all fixtures with powerful filters and confidence scoring.</div>
+        </div>
+      </div>
+      <div class="cta-row" style="margin-top:12px">
+        <a class="btn" href="/pricing">Upgrade to Pro</a>
+        <a class="btn cta-ghost" href="/pro">See what’s inside</a>
+      </div>
+    </section>
+
+    <!-- TRUST BAR (no Telegram) -->
+    <section class="section" style="padding-left:0;padding-right:0">
+      <div class="trust">
+        <span>Trusted by football fans</span>
+        <span>•</span>
+        <span>Stripe secure checkout</span>
+        <span>•</span>
+        <a href="/results">Transparent daily records</a>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -127,13 +218,13 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       catch { return "Europe/Sofia"; }
     }
 
-    // same minimal preview as home
+    // same minimal preview as before
     function pickPreviewCard(p){
       const league = [p.country, p.league].filter(Boolean).join(" — ");
       return `
         <div class="card fixture-preview" style="margin:.75rem 0;padding:1rem;border-radius:12px">
           <div style="font-weight:700">${league}</div>
-          <div class="meta">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
+          <div class="meta">${p.matchTime || ''} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
         </div>
       `;
     }
@@ -185,7 +276,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         if (!planEl) return false;
         const t = (planEl.textContent || '').trim();
         return !!t && t.toLowerCase() !== 'free';
-      }
+        }
       function revealIfPro(){
         if (!isPro()) return;
         const content = document.getElementById('hb-content');
