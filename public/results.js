@@ -91,17 +91,19 @@
   // ---------- Helpers ----------
   const fmtPct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
+  // Exclude VOID/PUSH from win%, stake and ROI
   function computeStats(picks) {
     let wins = 0, losses = 0, stake = 0, pnl = 0;
     for (const p of picks) {
       const s = String(p.status || "").toLowerCase();
-      if (s === "win") wins++;
-      else if (s === "lose" || s === "loss") losses++;
-      if (typeof p.odds === "number") {
-        stake += 1;
-        if (s === "win") pnl += p.odds - 1;
-        else if (s === "lose" || s === "loss") pnl -= 1;
+      if (s === "win") {
+        wins++;
+        if (typeof p.odds === "number") { stake += 1; pnl += p.odds - 1; }
+      } else if (s === "lose" || s === "loss") {
+        losses++;
+        if (typeof p.odds === "number") { stake += 1; pnl -= 1; }
       }
+      // void/push: ignored
     }
     const settled = wins + losses;
     const winRate = settled ? (wins / settled) * 100 : null;
@@ -167,25 +169,15 @@
     // Monthly (last 30d)
     const last30 = ALLOWED_RESULTS.filter((p) => inLastNDays(p, 30));
     const s30 = computeStats(last30);
-    setText("s-mwin", fmtPct(s30.winRate)); // FIXED ID
-    setText("s-mroi", fmtPct(s30.roiPct));  // FIXED ID
+    setText("s-mwin", fmtPct(s30.winRate));
+    setText("s-mroi", fmtPct(s30.roiPct));
 
     // YTD
     const year = new Date().getFullYear();
     const yearPicks = ALLOWED_RESULTS.filter((r) => String(r.date || "").startsWith(String(year)));
     const yStats = computeStats(yearPicks.length ? yearPicks : ALLOWED_RESULTS);
-    setText("s-ywin", fmtPct(yStats.winRate)); // FIXED ID
-    setText("s-yroi", fmtPct(yStats.roiPct));  // FIXED ID
-
-    // ===== Secondary KPIs =====
-    const st = streaks(ALLOWED_RESULTS);
-    setText("k-streak", st.current > 0 ? `${st.current}W` : st.current < 0 ? `${-st.current}L` : "—");
-    setText("k-best", st.best ? `${st.best}W` : "—");
-    const last7 = ALLOWED_RESULTS.filter((p) => inLastNDays(p, 7));
-    const s7 = computeStats(last7);
-    setText("k-7d", fmtPct(s7.winRate));
-    setText("k-30roi", fmtPct(s30.roiPct));
-    // CLV (k-clv) left as '—' unless you add closing odds
+    setText("s-ywin", fmtPct(yStats.winRate));
+    setText("s-yroi", fmtPct(yStats.roiPct));
 
     // ===== Historical ROI by Market =====
     const tb = document.querySelector("#roiMarketTbl tbody");
@@ -226,18 +218,24 @@
       const n = Number(range) || 30;
       return ALLOWED_RESULTS.filter((p) => inLastNDays(p, n));
     }
+
     function runSimulator() {
       if (!elStake || !elRange) return;
       const stake = Math.max(0, Number(elStake.value) || 0);
       const range = elRange.value;
       const picks = filterRange(range).filter((p) => typeof p.odds === "number");
+
       let wins = 0, losses = 0, stTot = 0, pnl = 0;
       for (const p of picks) {
         const s = String(p.status || "").toLowerCase();
-        stTot += stake;
-        if (s === "win") { wins++; pnl += stake * (p.odds - 1); }
-        else if (s === "lose" || s === "loss") { losses++; pnl -= stake; }
+        if (s === "win") {
+          wins++; stTot += stake; pnl += stake * (p.odds - 1);
+        } else if (s === "lose" || s === "loss") {
+          losses++; stTot += stake; pnl -= stake;
+        }
+        // void/push: no stake, no pnl
       }
+
       const settled = wins + losses;
       const winrate = settled ? (wins / settled) * 100 : null;
       const roi = stTot ? (pnl / stTot) * 100 : null;
@@ -252,6 +250,7 @@
 
       window.__simLast = { picks, stake };
     }
+
     function exportCSV() {
       const data = window.__simLast || { picks: [], stake: 1 };
       const stake = data.stake || 1;

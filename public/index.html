@@ -310,19 +310,38 @@
     const from = new Date(now); from.setDate(now.getDate() - 30);
     return d >= from && d <= now;
   };
+
+  // Settled-only: VOID/PUSH ignored; ROI per 1u only when odds present
   function compute(items){
-    const last30 = items.filter(x => within30(asDate(x.date)));
-    const total = last30.length;
-    if (!total) return { wr: 0, roi: 0 };
-    let wins = 0, profit = 0;
-    for (const x of last30) {
-      const res  = String(x.result || x.status || "").toLowerCase();
-      const odds = Number(x.odds || 0);
-      if (res === "win") { wins += 1; if (odds > 1) profit += (odds - 1); }
-      else if (res === "loss" || res === "lose" || res === "lost") { profit -= 1; }
-      // push/void ignored
+    const settled = items.filter(x => {
+      const r = String(x.result || x.status || "").toLowerCase();
+      return r === "win" || r === "loss" || r === "lose" || r === "lost";
+    }).filter(x => within30(asDate(x.date)));
+
+    const totalSettled = settled.length;
+    if (!totalSettled) return { wr: 0, roi: 0 };
+
+    // Win rate from settled
+    const wins = settled.reduce((acc, x) => {
+      const r = String(x.result || x.status || "").toLowerCase();
+      return acc + (r === "win" ? 1 : 0);
+    }, 0);
+
+    // ROI across settled picks that have odds
+    let stake = 0;
+    let profit = 0;
+    for (const x of settled) {
+      const r = String(x.result || x.status || "").toLowerCase();
+      const odds = Number(x.odds || x.price || 0);
+      if (!Number.isFinite(odds) || odds <= 1) continue;
+      stake += 1;
+      if (r === "win") profit += (odds - 1);
+      else profit -= 1;
     }
-    return { wr: (wins/total)*100, roi: (profit/total)*100 };
+
+    const wr  = (wins / totalSettled) * 100;
+    const roi = stake ? (profit / stake) * 100 : 0;
+    return { wr, roi };
   }
 
   // ---------- source #1: RPC ----------
@@ -343,33 +362,16 @@
   async function fromResultsJS(){
     try{
       const js = await (await fetch('/results.js', { cache: 'no-store' })).text();
-
-      // Extract the array literal after "const MANUAL_RESULTS ="
       const m = js.match(/MANUAL_RESULTS\s*=\s*(\[[\s\S]*?\]);/);
       if (!m) return [];
-
       let arrText = m[1];
-
-      // Strip JS comments
-      arrText = arrText
-        .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
-        .replace(/\/\/[^\n\r]*/g, '');      // line comments
-
-      // Quote unquoted keys: { date:"...", odds:1.55 } -> { "date":"...", "odds":1.55 }
+      arrText = arrText.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n\r]*/g, '');
       arrText = arrText.replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
-
-      // Ensure valid JSON strings (your data already uses double quotes; keep as is)
-      // Remove dangling commas before ] or }
       arrText = arrText.replace(/,(\s*[}\]])/g, '$1');
 
       let data;
-      try {
-        data = JSON.parse(arrText);
-      } catch {
-        // As a fallback, try a safe eval of the array literal (same-origin trusted code)
-        // eslint-disable-next-line no-new-func
-        data = (new Function(`"use strict"; return (${arrText});`))();
-      }
+      try { data = JSON.parse(arrText); }
+      catch { data = (new Function(`"use strict"; return (${arrText});`))(); }
 
       if (!Array.isArray(data)) return [];
       return data.map(it => ({
@@ -417,3 +419,8 @@
   roiEl.textContent = `${roi.toFixed(1)}%`;
 })();
 </script>
+
+  <!-- Shared navbar auth module -->
+  <script type="module" src="/auth.js"></script>
+</body>
+</html>
