@@ -14,7 +14,11 @@
 
   // ======== MANUAL SEED ========
   const MANUAL_RESULTS = [
-    // 2025-10-10
+    
+    // 2025-10-11
+{ date:"2025-10-11", home:"Gresford Athletic", away:"Buckley Town", market:"Over 2.5", odds:1.36, status:"win" },
+{ date:"2025-10-11", home:"Zürich II", away:"Cham", market:"Over 2.5", odds:1.44, status:"lose" },
+// 2025-10-10
     { date:"2025-10-10", home:"Sudan",   away:"Mauritania",       market:"Under 2.5", odds:1.40, status:"win" },
     { date:"2025-10-10", home:"Clyde",   away:"Kilmarnock II",    market:"Over 2.5",  odds:1.40, status:"win" },
 
