@@ -98,3 +98,13 @@
     }
   });
 })();
+// --- Vercel Web Analytics (for static sites) ---
+(function () {
+  try {
+    var s = document.createElement('script');
+    s.defer = true;
+    s.src = '/_vercel/insights/script.js';
+    document.head.appendChild(s);
+    window.va = window.va || function(){ (window.vaq = window.vaq || []).push(arguments) };
+  } catch(e) {}
+})();
