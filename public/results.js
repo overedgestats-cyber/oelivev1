@@ -14,6 +14,18 @@
 
   // ======== MANUAL SEED ========
   const MANUAL_RESULTS = [
+    // 2025-10-16
+{ date:"2025-10-16", home:"PSG W",           away:"Real Madrid W",     market:"Over 2.5",  odds:1.53, status:"win" },
+{ date:"2025-10-16", home:"Ferencvaros W",   away:"Sparta Praha W",    market:"Over 2.5",  odds:1.73, status:"win" },
+
+// 2025-10-15
+{ date:"2025-10-15", home:"Vålerenga W",     away:"VfL Wolfsburg W",   market:"Over 2.5",  odds:1.36, status:"win" },
+{ date:"2025-10-15", home:"Älvsjö AIK W",    away:"Brommapojkarna W",  market:"Over 2.5",  odds:1.45, status:"win" },
+
+// 2025-10-14
+{ date:"2025-10-14", home:"Ivory Coast",     away:"Kenya",             market:"Under 2.5", odds:1.82, status:"lose" },
+{ date:"2025-10-14", home:"Senegal",         away:"Mauritania",        market:"Under 2.5", odds:2.00, status:"lose" },
+
     // 2025-10-12
 { date:"2025-10-12", home:"Växjö",              away:"Piteå W",            market:"Over 2.5",  odds:1.67, status:"win" },
 { date:"2025-10-12", home:"La Unión Atlético",  away:"Linares Deportivo",  market:"Under 2.5", odds:1.44, status:"lose" },
