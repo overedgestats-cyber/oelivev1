@@ -22,6 +22,14 @@ try {
 // ---------- Manual fallback (keep in sync with /public/results.js) ----------
 // ---------- Manual fallback (keep in sync with /public/results.js) ----------
 const MANUAL_RESULTS = [
+  // 2025-10-18
+{ date: "2025-10-18", home: "AFA Olaine", away: "Skanste", market: "Over 2.5", odds: 1.36, status: "win" },
+{ date: "2025-10-18", home: "Sarpsborg 08 FF", away: "Bodo/Glimt", market: "Over 2.5", odds: 1.33, status: "win" },
+
+// 2025-10-17
+{ date: "2025-10-17", home: "Wests APIA", away: "Sydney United", market: "Under 2.5", odds: 2.03, status: "lose" },
+{ date: "2025-10-17", home: "Linköping", away: "AIK", market: "Over 2.5", odds: 1.61, status: "win" },
+
   // 2025-10-06
   { date:"2025-10-06", home:"Dragonas IDV W", away:"Santa Fe W",           market:"Under 2.5", odds:1.55, status:"win" },
 

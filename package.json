@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@vercel/analytics": "^1.5.0",
     "@vercel/kv": "^1.0.1",
     "firebase-admin": "^12.5.0"
   }
