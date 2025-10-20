@@ -79,12 +79,6 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       color:#065f46;       /* emerald-900 */
       border-color:#bbf7d0;
     }
-
-    /* Win-rate widget minimal styles */
-    .win30.card{padding:14px 16px;border:1px solid rgba(0,0,0,.08);border-radius:14px;margin:0 auto 1rem}
-    .win30 .w-row{display:flex;justify-content:space-between;align-items:center}
-    .win30 .w-pill{background:#e6f7ec;border-radius:999px;padding:4px 10px;font-weight:700}
-    .win30 .w-sub{opacity:.8;margin-top:6px;font-size:14px}
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -139,36 +133,6 @@ document.addEventListener('click', (e) => {
     <section class="section">
       <h1 class="center">Pricing</h1>
       <p class="muted center">You must be <strong>signed in with Google</strong> before subscribing.</p>
-
-      <!-- Win-rate widgets row: Free Picks, Hero Bet, Pro Board -->
-      <div class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin:.5rem 0 1rem">
-        <!-- Free Picks -->
-        <div class="win30 card" data-endpoint="/api/rpc?action=free-picks-results&limit=60" style="padding:14px 16px;max-width:720px;margin:0 auto">
-          <div class="w-row">
-            <strong>Free Picks — last 30 days</strong>
-            <span class="w-pill">…</span>
-          </div>
-          <div class="w-sub">Loading…</div>
-        </div>
-
-        <!-- Hero Bet -->
-        <div class="win30 card" data-endpoint="/api/rpc?action=hero-bet-results&limit=60" style="padding:14px 16px;max-width:720px;margin:0 auto">
-          <div class="w-row">
-            <strong>Hero Bet — last 30 days</strong>
-            <span class="w-pill">…</span>
-          </div>
-          <div class="w-sub">Loading…</div>
-        </div>
-
-        <!-- Pro Board (all markets counted) -->
-        <div class="win30 card" data-endpoint="/api/rpc?action=pro-board-results&limit=60" style="padding:14px 16px;max-width:720px;margin:0 auto">
-          <div class="w-row">
-            <strong>Pro Board — last 30 days</strong>
-            <span class="w-pill">…</span>
-          </div>
-          <div class="w-sub">Loading…</div>
-        </div>
-      </div>
 
       <!-- Free vs Pro comparison -->
       <div class="plans" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin:.5rem 0 1rem">
@@ -385,9 +349,6 @@ document.addEventListener('click', (e) => {
       } catch {}
     })();
   </script>
-
-  <!-- Multi-widget win-rate loader (cache-busted) -->
-  <script src="/winrate.js?v=5" defer></script>
 
   <!-- Cookie settings shim so the footer link always works -->
   <script>
