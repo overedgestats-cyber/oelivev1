@@ -95,11 +95,11 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       </p>
     </section>
 
-    <!-- UPDATED: This month (calendar MTD) win-rate widget -->
+    <!-- UPDATED: This month (calendar MTD) widget — Free Picks only -->
     <section class="section">
-      <div class="win30 card" data-endpoint="/api/rpc?action=free-picks-results&limit=60">
+      <div class="win30 card" data-endpoint="/api/rpc?action=free-picks-results&limit=200">
         <div class="w-row">
-          <strong>This month</strong>
+          <strong>This month — Free Picks</strong>
           <span class="w-pill" id="win30-accuracy">…</span>
         </div>
         <div class="w-sub" id="win30-stats">Loading…</div>
@@ -189,47 +189,65 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
 
-    /* Win-rate widget: compute CURRENT MONTH (calendar MTD) from RPC {days} */
+    /* Monthly widget (Free Picks MTD): Win% from settled; ROI only when odds exist (flat 1u) */
     (async function(){
       const box = document.querySelector('.win30');
       if (!box) return;
 
-      const url = box.getAttribute('data-endpoint');
-      const accEl = document.getElementById('win30-accuracy');
-      const statsEl = document.getElementById('win30-stats');
+      const url = box.getAttribute('data-endpoint'); // /api/rpc?action=free-picks-results&limit=200
+      const accEl  = document.getElementById('win30-accuracy');
+      const statsEl= document.getElementById('win30-stats');
 
-      // Build first day of current month in UTC to match YMD comparisons
+      // First day of current month (UTC for safe YMD compares)
       const now   = new Date();
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-
-      function ymd(d){ return d.toISOString().slice(0,10); }
+      const ymd = d => d.toISOString().slice(0,10);
       const startYMD = ymd(start);
       const endYMD   = ymd(now);
 
       try {
         const r = await fetch(url, { cache: 'no-store' });
-        const data = await r.json(); // { days, summary }
+        const data = await r.json();                 // { days:[{date,picks:[...]}], ... }
         const days = Array.isArray(data?.days) ? data.days : [];
 
-        const monthDays = days.filter(d => typeof d.date === 'string' && d.date >= startYMD && d.date <= endYMD);
+        const monthDays = days.filter(d => typeof d.date === 'string'
+                                       && d.date >= startYMD && d.date <= endYMD);
 
+        // Win%: all settled (win/lose)
         let wins = 0, losses = 0;
+
+        // ROI: only picks with numeric odds, flat 1u
+        let roiStakePicks = 0;
+        let profit = 0; // units
+
         for (const d of monthDays) {
           const picks = Array.isArray(d.picks) ? d.picks : [];
           for (const p of picks) {
-            const st = (p.status || '').toLowerCase();
+            const st   = String(p.status || '').toLowerCase();
+            const odds = Number(p.odds);
+
+            // Win% (settled only)
             if (st === 'win') wins += 1;
-            else if (st === 'loss' || st === 'lose') losses += 1;
+            else if (st === 'lose' || st === 'loss') losses += 1;
+
+            // ROI (only if odds is finite)
+            if (Number.isFinite(odds)) {
+              if (st === 'win') { profit += Math.max(0, odds - 1); roiStakePicks += 1; }
+              else if (st === 'lose' || st === 'loss') { profit -= 1; roiStakePicks += 1; }
+              // push/void ignored
+            }
           }
         }
-        const total = wins + losses;
-        const acc = total ? Math.round((wins / total) * 100) : 0;
 
-        accEl.textContent = `${acc}%`;
-        statsEl.textContent = `${wins} wins / ${losses} losses (${total} picks) · Current month`;
+        const settled = wins + losses;
+        const winRate = settled ? (wins / settled) * 100 : 0;
+        const roi     = roiStakePicks ? (profit / roiStakePicks) * 100 : 0;
+
+        if (accEl)   accEl.textContent  = `${winRate.toFixed(1)}%`;
+        if (statsEl) statsEl.textContent = `Picks: ${settled} · ROI: ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% · Current month`;
       } catch (e) {
-        accEl.textContent = '—';
-        statsEl.textContent = 'No monthly data';
+        if (accEl)   accEl.textContent  = '—';
+        if (statsEl) statsEl.textContent = 'Monthly stats unavailable';
       }
     })();
 
