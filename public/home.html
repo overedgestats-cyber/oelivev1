@@ -95,11 +95,11 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       </p>
     </section>
 
-    <!-- NEW: Last 30 days win-rate widget -->
+    <!-- UPDATED: This month (calendar MTD) win-rate widget -->
     <section class="section">
       <div class="win30 card" data-endpoint="/api/rpc?action=free-picks-results&limit=60">
         <div class="w-row">
-          <strong>Last 30 days</strong>
+          <strong>This month</strong>
           <span class="w-pill" id="win30-accuracy">…</span>
         </div>
         <div class="w-sub" id="win30-stats">Loading…</div>
@@ -189,7 +189,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
 
-    /* Win-rate widget: compute last 30 calendar days from RPC {days} */
+    /* Win-rate widget: compute CURRENT MONTH (calendar MTD) from RPC {days} */
     (async function(){
       const box = document.querySelector('.win30');
       if (!box) return;
@@ -198,23 +198,23 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       const accEl = document.getElementById('win30-accuracy');
       const statsEl = document.getElementById('win30-stats');
 
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(start.getDate() - 29);
+      // Build first day of current month in UTC to match YMD comparisons
+      const now   = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
       function ymd(d){ return d.toISOString().slice(0,10); }
       const startYMD = ymd(start);
-      const endYMD   = ymd(today);
+      const endYMD   = ymd(now);
 
       try {
         const r = await fetch(url, { cache: 'no-store' });
         const data = await r.json(); // { days, summary }
         const days = Array.isArray(data?.days) ? data.days : [];
 
-        const recent = days.filter(d => typeof d.date === 'string' && d.date >= startYMD && d.date <= endYMD);
+        const monthDays = days.filter(d => typeof d.date === 'string' && d.date >= startYMD && d.date <= endYMD);
 
         let wins = 0, losses = 0;
-        for (const d of recent) {
+        for (const d of monthDays) {
           const picks = Array.isArray(d.picks) ? d.picks : [];
           for (const p of picks) {
             const st = (p.status || '').toLowerCase();
@@ -226,10 +226,10 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
         const acc = total ? Math.round((wins / total) * 100) : 0;
 
         accEl.textContent = `${acc}%`;
-        statsEl.textContent = `${wins} wins / ${losses} losses (${total} picks)`;
+        statsEl.textContent = `${wins} wins / ${losses} losses (${total} picks) · Current month`;
       } catch (e) {
         accEl.textContent = '—';
-        statsEl.textContent = 'No recent data';
+        statsEl.textContent = 'No monthly data';
       }
     })();
 
