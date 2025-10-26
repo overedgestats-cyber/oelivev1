@@ -13,16 +13,21 @@
   <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
 
   <style>
-    :root{
-      --card-bg:#0e1420; --card-br:#2a2f3a; --text:#e5e7eb;
-      --muted:rgba(229,231,235,.75);
-      --shadow:0 6px 18px rgba(17,24,39,.25), inset 0 1px 0 rgba(255,255,255,.05);
-    }
+    :root{ --card-bg:#0e1420; --card-br:#2a2f3a; --text:#e5e7eb; --muted:rgba(229,231,235,.75);
+           --shadow:0 6px 18px rgba(17,24,39,.25), inset 0 1px 0 rgba(255,255,255,.05); }
     body{color:var(--text)}
     .muted-sm{opacity:.8;font-size:.92rem}
     .card{background:var(--card-bg);border:1px solid var(--card-br);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px}
 
-    /* Month toolbar + accordion */
+    /* KPI cards */
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;margin:.5rem 0 1rem}
+    .kpi{display:flex;flex-direction:column}
+    .kpi .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;opacity:.85;font-weight:800}
+    .kpi .value{margin-top:4px;font-size:1.6rem;line-height:1;font-weight:900}
+    @media (max-width:900px){ .kpis{grid-template-columns:repeat(2,minmax(160px,1fr))} }
+    @media (max-width:520px){ .kpis{grid-template-columns:1fr} }
+
+    /* Toolbar + accordion */
     .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
     select{padding:.4rem .55rem;border:1px solid var(--card-br);border-radius:.5rem;background:#0b1120;color:var(--text)}
 
@@ -44,10 +49,14 @@
     .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
     .wl-win{background:#063; color:#d1fae5;border:1px solid #064e3b}
     .wl-lose{background:#5a1111;color:#fee2e2;border:1px solid #991b1b}
-  </style>
 
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)} gtag('js',new Date()); gtag('config','G-88C4MQ3EF8');</script>
+    /* ROI calc */
+    .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+    .pill{display:inline-block;padding:.22rem .55rem;border:1px solid var(--card-br);border-radius:999px;font-weight:800}
+    .sim input[type="number"], .sim select{
+      padding:.45rem .6rem;border:1px solid var(--card-br);border-radius:8px;background:#0b1120;color:var(--text);min-width:120px
+    }
+  </style>
 </head>
 <script src="/pixel.js" defer></script>
 <script src="/social.js" defer></script>
@@ -75,9 +84,53 @@
 
   <main class="section" style="max-width:1000px">
     <h1>Free Picks — Results</h1>
-    <p class="muted-sm">Transparent record of outcomes. Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
+    <p class="muted-sm">Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
 
-    <!-- Only the toolbar + line + monthly lists remain -->
+    <!-- Four headline cards -->
+    <div class="kpis">
+      <div class="card kpi"><div class="label">Yearly Win %</div><div class="value" id="y-win">—</div></div>
+      <div class="card kpi"><div class="label">Yearly ROI (1u)</div><div class="value" id="y-roi">—</div></div>
+      <div class="card kpi"><div class="label">Current Month Win %</div><div class="value" id="m-win">—</div></div>
+      <div class="card kpi"><div class="label">Current Month ROI (1u)</div><div class="value" id="m-roi">—</div></div>
+    </div>
+
+    <!-- ROI Calculator -->
+    <section class="card sim">
+      <h2 style="margin:0 0 .35rem">ROI Calculator</h2>
+      <div class="row" style="margin:.35rem 0 .75rem">
+        <label><strong>Stake per pick</strong></label>
+        <input type="number" id="simStake" step="0.1" min="0" value="1">
+        <label><strong>Range</strong></label>
+        <select id="simRange">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="all">All</option>
+        </select>
+        <button class="btn small" id="simRun" type="button">Run</button>
+        <button class="btn secondary small" id="simExport" type="button">Export Bet Slip (CSV)</button>
+      </div>
+      <div class="row">
+        <span class="pill">Picks: <strong id="simPicks">—</strong></span>
+        <span class="pill">Wins: <strong id="simWins">—</strong></span>
+        <span class="pill">Losses: <strong id="simLosses">—</strong></span>
+        <span class="pill">Win%: <strong id="simWinrate">—</strong></span>
+        <span class="pill">Stake: <strong id="simStakeSum">—</strong></span>
+        <span class="pill">P/L (u): <strong id="simPnL">—</strong></span>
+        <span class="pill">ROI: <strong id="simROI">—</strong></span>
+      </div>
+    </section>
+
+    <!-- Historical by market -->
+    <section class="card" style="padding:14px 16px; margin:.5rem 0 1.25rem">
+      <h2 style="margin:0 0 .35rem">Historical Win% & ROI by Market</h2>
+      <p class="muted-sm">Based on the results shown on this page (flat 1u when odds are present).</p>
+      <table class="tbl" id="roiMarketTbl">
+        <thead><tr><th>Market</th><th>Picks</th><th>Win%</th><th>ROI</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Month filter + accordion -->
     <div class="toolbar">
       <label for="monthSelect" class="muted-sm"><strong>Monthly view:</strong></label>
       <select id="monthSelect"></select>
@@ -98,7 +151,6 @@
     </div>
   </footer>
 
-  <!-- Page logic -->
   <script src="/results.js" defer></script>
 </body>
 </html>

@@ -57,14 +57,11 @@
       max-width:1100px;margin:8px auto 24px;padding:12px 16px;border:1px solid var(--line);
       border-radius:14px;background:rgba(255,255,255,.02)
     }
-    .perf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .perf-grid.two{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    @media (max-width:640px){ .perf-grid.two{grid-template-columns:1fr} }
     .perf-item{display:flex;flex-direction:column;gap:4px}
     .perf-item .k{opacity:.7;font-size:.92rem}
     .perf-item .v{font-weight:800;font-size:1.1rem}
-
-    /* two-col version for WR+ROI only */
-    .perf-grid.two{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-    @media (max-width:640px){ .perf-grid.two{grid-template-columns:1fr} }
 
     .section-tight{max-width:900px;margin:0 auto}
     .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
@@ -89,8 +86,7 @@
 </script>
 <script src="/pixel.js" defer></script>
 <script src="/social.js" defer></script>
-<!-- bump cache-buster -->
-<script src="/winrate.js?v=6" defer></script>
+<!-- removed: <script src="/winrate.js?v=6" defer></script> -->
 
 <body>
   <header class="site-header">
@@ -308,7 +304,11 @@
             if (pill) pill.textContent = `${winPct.toFixed(1)}%`;
           }
 
-          if (sub) sub.textContent = `${now.toLocaleString('en-US',{month:'long',year:'numeric'})} — Picks: ${picksTotal} · Win%: ${winPct.toFixed(1)}% · ROI: ${roiPct.toFixed(1)}%`;
+          if (sub) {
+            const monthName = now.toLocaleString('en-US',{month:'long',year:'numeric'});
+            const roiTxt = `${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(1)}%`;
+            sub.textContent = `${monthName} — Picks: ${picksTotal} · Win%: ${winPct.toFixed(1)}% · ROI: ${roiTxt}`;
+          }
         });
       } catch(e){
         const tiles = document.querySelectorAll('.perf-band .win30');
