@@ -57,11 +57,14 @@
       max-width:1100px;margin:8px auto 24px;padding:12px 16px;border:1px solid var(--line);
       border-radius:14px;background:rgba(255,255,255,.02)
     }
-    .perf-grid.two{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-    @media (max-width:640px){ .perf-grid.two{grid-template-columns:1fr} }
+    .perf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
     .perf-item{display:flex;flex-direction:column;gap:4px}
     .perf-item .k{opacity:.7;font-size:.92rem}
     .perf-item .v{font-weight:800;font-size:1.1rem}
+
+    /* two-col version for WR+ROI only */
+    .perf-grid.two{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    @media (max-width:640px){ .perf-grid.two{grid-template-columns:1fr} }
 
     .section-tight{max-width:900px;margin:0 auto}
     .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
@@ -86,7 +89,8 @@
 </script>
 <script src="/pixel.js" defer></script>
 <script src="/social.js" defer></script>
-<!-- removed: <script src="/winrate.js?v=6" defer></script> -->
+<!-- bump cache-buster -->
+<script src="/winrate.js?v=6" defer></script>
 
 <body>
   <header class="site-header">
@@ -210,6 +214,9 @@
     </div>
   </footer>
 
+  <!-- load manual results + expose month metrics -->
+  <script src="/results.js"></script>
+
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
 
@@ -248,70 +255,25 @@
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
 
-    /* === Current-month perf (Win% + ROI) computed from results slice === */
-    (async function(){
-      try{
-        // Build month range: [YYYY-MM-01, today]
-        const now = new Date();
-        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-        const ymd = d => d.toISOString().slice(0,10);
-        const from = ymd(start);
-        const to   = ymd(now);
+    /* === Current-month perf (Win% + ROI) from results.js === */
+    (function(){
+      const m = window.OE_CURRENT_MONTH;
+      const tiles = document.querySelectorAll('.perf-band .win30');
 
-        // Pull only the current month’s days
-        const url = `/api/rpc?action=free-picks-results&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=400`;
-        const r = await fetch(url, { cache: 'no-store' });
-        const data = await r.json();
-        const days = Array.isArray(data?.days) ? data.days : [];
-
-        // Aggregate
-        let picksTotal = 0;
-        let wins = 0, losses = 0;
-        let stakeCount = 0, pnl = 0;
-
-        for (const d of days) {
-          const picks = Array.isArray(d.picks) ? d.picks : [];
-          picksTotal += picks.length;
-
-          for (const p of picks) {
-            const st = String(p.status || '').toLowerCase();
-            const o  = Number(p.odds);
-
-            if (st === 'win') wins++;
-            else if (st === 'loss' || st === 'lose') losses++;
-
-            if (Number.isFinite(o)) {
-              if (st === 'win') { pnl += (o - 1); stakeCount += 1; }
-              else if (st === 'loss' || st === 'lose') { pnl -= 1; stakeCount += 1; }
-            }
-          }
-        }
-
-        const settled = wins + losses;
-        const winPct  = settled ? ((wins / settled) * 100) : 0;
-        const roiPct  = stakeCount ? ((pnl / stakeCount) * 100) : 0;
-
-        // Render into the two tiles
-        const tiles = document.querySelectorAll('.perf-band .win30');
+      if (m) {
         tiles.forEach(tile => {
           const pill  = tile.querySelector('.v');
           const sub   = tile.querySelector('.w-sub');
           const metric= (tile.getAttribute('data-metric') || '').toLowerCase();
 
           if (metric === 'roi') {
-            if (pill) pill.textContent = `${roiPct.toFixed(1)}%`;
+            if (pill) pill.textContent = `${m.roiPct}%`;
           } else {
-            if (pill) pill.textContent = `${winPct.toFixed(1)}%`;
+            if (pill) pill.textContent = `${m.winPct}%`;
           }
-
-          if (sub) {
-            const monthName = now.toLocaleString('en-US',{month:'long',year:'numeric'});
-            const roiTxt = `${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(1)}%`;
-            sub.textContent = `${monthName} — Picks: ${picksTotal} · Win%: ${winPct.toFixed(1)}% · ROI: ${roiTxt}`;
-          }
+          if (sub) sub.textContent = `${m.month} — Picks: ${m.picks} · Win%: ${m.winPct}% · ROI: ${m.roiPct}%`;
         });
-      } catch(e){
-        const tiles = document.querySelectorAll('.perf-band .win30');
+      } else {
         tiles.forEach(tile => {
           const pill = tile.querySelector('.v');
           const sub  = tile.querySelector('.w-sub');

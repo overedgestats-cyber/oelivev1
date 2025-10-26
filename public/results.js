@@ -6,21 +6,21 @@
 
   // ======== MANUAL SEED (edit daily) ========
   const MANUAL_RESULTS = [
-      // 2025-10-25
-  { date:"2025-10-25", home:"Smiltene",           away:"Riga Mariners",   market:"Over 2.5", odds:1.40, status:"win" },
-  { date:"2025-10-25", home:"Sarpsborg 08 FF",    away:"KFUM Oslo",       market:"Over 2.5", odds:1.80, status:"win" },
+    // 2025-10-25
+    { date:"2025-10-25", home:"Smiltene",           away:"Riga Mariners",   market:"Over 2.5", odds:1.40, status:"win" },
+    { date:"2025-10-25", home:"Sarpsborg 08 FF",    away:"KFUM Oslo",       market:"Over 2.5", odds:1.80, status:"win" },
 
-  // 2025-10-24
-  { date:"2025-10-24", home:"Denbigh Town",       away:"Ruthin Town",     market:"Over 2.5", odds:1.36, status:"win" },
-  { date:"2025-10-24", home:"AF Elbasani",        away:"Bylis",           market:"Under 2.5", odds:1.53, status:"lose" },
+    // 2025-10-24
+    { date:"2025-10-24", home:"Denbigh Town",       away:"Ruthin Town",     market:"Over 2.5", odds:1.36, status:"win" },
+    { date:"2025-10-24", home:"AF Elbasani",        away:"Bylis",           market:"Under 2.5", odds:1.53, status:"lose" },
 
-  // 2025-10-23
-  { date:"2025-10-23", home:"Wofoo Tai Po",       away:"Beijing Guoan",   market:"Over 2.5", odds:1.75, status:"win" },
-  { date:"2025-10-23", home:"Công An Nhân Dân",   away:"Macarthu",        market:"Over 2.5", odds:1.50, status:"lose" },
+    // 2025-10-23
+    { date:"2025-10-23", home:"Wofoo Tai Po",       away:"Beijing Guoan",   market:"Over 2.5", odds:1.75, status:"win" },
+    { date:"2025-10-23", home:"Công An Nhân Dân",   away:"Macarthu",        market:"Over 2.5", odds:1.50, status:"lose" },
 
-  // 2025-10-22
-  { date:"2025-10-22", home:"Eintracht Frankfurt",away:"Liverpool",       market:"Over 2.5", odds:1.33, status:"win" },
-  { date:"2025-10-22", home:"Brønshøj",           away:"Odense",          market:"Over 2.5", odds:1.60, status:"win" },
+    // 2025-10-22
+    { date:"2025-10-22", home:"Eintracht Frankfurt",away:"Liverpool",       market:"Over 2.5", odds:1.33, status:"win" },
+    { date:"2025-10-22", home:"Brønshøj",           away:"Odense",          market:"Over 2.5", odds:1.60, status:"win" },
 
     // 2025-10-21
     { date:"2025-10-21", home:"Tesla Stropkov",     away:"Liptovsky Mikulas", market:"Over 2.5", odds:1.50, status:"win" },
@@ -37,31 +37,32 @@
     // 2025-10-17
     { date:"2025-10-17", home:"Wests APIA", away:"Sydney United", market:"Under 2.5", odds:2.03, status:"lose" },
     { date:"2025-10-17", home:"Linköping",  away:"AIK",            market:"Over 2.5", odds:1.61, status:"win" },
-        // 2025-10-16
-{ date:"2025-10-16", home:"PSG W",           away:"Real Madrid W",     market:"Over 2.5",  odds:1.53, status:"win" },
-{ date:"2025-10-16", home:"Ferencvaros W",   away:"Sparta Praha W",    market:"Over 2.5",  odds:1.73, status:"win" },
 
-// 2025-10-15
-{ date:"2025-10-15", home:"Vålerenga W",     away:"VfL Wolfsburg W",   market:"Over 2.5",  odds:1.36, status:"win" },
-{ date:"2025-10-15", home:"Älvsjö AIK W",    away:"Brommapojkarna W",  market:"Over 2.5",  odds:1.45, status:"win" },
+    // 2025-10-16
+    { date:"2025-10-16", home:"PSG W",           away:"Real Madrid W",     market:"Over 2.5",  odds:1.53, status:"win" },
+    { date:"2025-10-16", home:"Ferencvaros W",   away:"Sparta Praha W",    market:"Over 2.5",  odds:1.73, status:"win" },
 
-// 2025-10-14
-{ date:"2025-10-14", home:"Ivory Coast",     away:"Kenya",             market:"Under 2.5", odds:1.82, status:"lose" },
-{ date:"2025-10-14", home:"Senegal",         away:"Mauritania",        market:"Under 2.5", odds:2.00, status:"lose" },
+    // 2025-10-15
+    { date:"2025-10-15", home:"Vålerenga W",     away:"VfL Wolfsburg W",   market:"Over 2.5",  odds:1.36, status:"win" },
+    { date:"2025-10-15", home:"Älvsjö AIK W",    away:"Brommapojkarna W",  market:"Over 2.5",  odds:1.45, status:"win" },
+
+    // 2025-10-14
+    { date:"2025-10-14", home:"Ivory Coast",     away:"Kenya",             market:"Under 2.5", odds:1.82, status:"lose" },
+    { date:"2025-10-14", home:"Senegal",         away:"Mauritania",        market:"Under 2.5", odds:2.00, status:"lose" },
 
     // 2025-10-12
-{ date:"2025-10-12", home:"Växjö",              away:"Piteå W",            market:"Over 2.5",  odds:1.67, status:"win" },
-{ date:"2025-10-12", home:"La Unión Atlético",  away:"Linares Deportivo",  market:"Under 2.5", odds:1.44, status:"lose" },
+    { date:"2025-10-12", home:"Växjö",              away:"Piteå W",            market:"Over 2.5",  odds:1.67, status:"win" },
+    { date:"2025-10-12", home:"La Unión Atlético",  away:"Linares Deportivo",  market:"Under 2.5", odds:1.44, status:"lose" },
 
-// 2025-10-13
-{ date:"2025-10-13", home:"Deportivo Cali W",   away:"Sao Paulo W",        market:"Under 2.5", odds:1.65, status:"win" },
-{ date:"2025-10-13", home:"Carshalton Athletic",away:"Burgess",            market:"Over 2.5",  odds:1.65, status:"win" },
-
+    // 2025-10-13
+    { date:"2025-10-13", home:"Deportivo Cali W",   away:"Sao Paulo W",        market:"Under 2.5", odds:1.65, status:"win" },
+    { date:"2025-10-13", home:"Carshalton Athletic",away:"Burgess",            market:"Over 2.5",  odds:1.65, status:"win" },
 
     // 2025-10-11
-{ date:"2025-10-11", home:"Gresford Athletic", away:"Buckley Town", market:"Over 2.5", odds:1.36, status:"win" },
-{ date:"2025-10-11", home:"Zürich II", away:"Cham", market:"Over 2.5", odds:1.44, status:"lose" },
-// 2025-10-10
+    { date:"2025-10-11", home:"Gresford Athletic", away:"Buckley Town", market:"Over 2.5", odds:1.36, status:"win" },
+    { date:"2025-10-11", home:"Zürich II", away:"Cham", market:"Over 2.5", odds:1.44, status:"lose" },
+
+    // 2025-10-10
     { date:"2025-10-10", home:"Sudan",   away:"Mauritania",       market:"Under 2.5", odds:1.40, status:"win" },
     { date:"2025-10-10", home:"Clyde",   away:"Kilmarnock II",    market:"Over 2.5",  odds:1.40, status:"win" },
 
@@ -207,6 +208,20 @@
     const mStats = computeStats(thisMonth);
     setText("m-win", fmtPct(mStats.winPct));
     setText("m-roi", fmtPct(mStats.roiPct));
+
+    // 👉 Expose minimal metrics for other pages (home + index)
+    window.OE_CURRENT_MONTH = {
+      month: monthLabel(ym),
+      picks: mStats.settled,
+      winPct: mStats.winPct ? +mStats.winPct.toFixed(1) : 0,
+      roiPct: mStats.roiPct ? +mStats.roiPct.toFixed(1) : 0,
+    };
+    window.OE_YTD = {
+      year: String(year),
+      picks: yStats.settled,
+      winPct: yStats.winPct ? +yStats.winPct.toFixed(1) : 0,
+      roiPct: yStats.roiPct ? +yStats.roiPct.toFixed(1) : 0,
+    };
 
     // ===== ROI Calculator =====
     const elStake = $("simStake");
