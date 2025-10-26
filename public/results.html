@@ -14,101 +14,36 @@
 
   <style>
     :root{
-      --card-bg:#0e1420;
-      --card-br:#2a2f3a;
-      --text:#e5e7eb;
+      --card-bg:#0e1420; --card-br:#2a2f3a; --text:#e5e7eb;
       --muted:rgba(229,231,235,.75);
       --shadow:0 6px 18px rgba(17,24,39,.25), inset 0 1px 0 rgba(255,255,255,.05);
     }
     body{color:var(--text)}
-    .muted{opacity:.75}
-    .muted-sm{opacity:.75;font-size:.92rem}
+    .muted-sm{opacity:.8;font-size:.92rem}
     .card{background:var(--card-bg);border:1px solid var(--card-br);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px}
 
-    .kpi-grid{
-      display:grid;gap:14px;margin:.5rem 0 1rem;
-      grid-template-columns:repeat(6, minmax(140px,1fr));
-      grid-template-areas:
-        "total wins losses . . ."
-        "mwin  mwin  mroi   mroi  . ."
-        "ywin  ywin  yroi   yroi  . .";
-    }
-    .kpi{display:flex;flex-direction:column;justify-content:center}
-    .kpi .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;opacity:.85;font-weight:800}
-    .kpi .value{margin-top:4px;font-size:1.6rem;line-height:1;font-weight:900}
+    /* Month toolbar + accordion */
+    .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
+    select{padding:.4rem .55rem;border:1px solid var(--card-br);border-radius:.5rem;background:#0b1120;color:var(--text)}
 
-    .kpi.total  {grid-area:total}
-    .kpi.wins   {grid-area:wins}
-    .kpi.losses {grid-area:losses}
-    .kpi.mwin   {grid-area:mwin}
-    .kpi.mroi   {grid-area:mroi}
-    .kpi.ywin   {grid-area:ywin}
-    .kpi.yroi   {grid-area:yroi}
+    .months details{border:1px solid var(--card-br);background:var(--card-bg);border-radius:12px;box-shadow:var(--shadow);margin:.5rem 0 1rem;overflow:hidden}
+    .months summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+    .months summary::-webkit-details-marker{display:none}
+    .months summary::after{content:"▾";opacity:.8;transition:transform .15s ease}
+    .months details[open] summary::after{transform:rotate(180deg)}
+    .months .m-title{font-weight:800}
+    .months .m-stats{opacity:.85;font-size:.92rem}
+    .months .m-inner{padding:0 16px 14px}
 
-    @media (max-width: 1024px){
-      .kpi-grid{
-        grid-template-columns:repeat(2, minmax(140px,1fr));
-        grid-template-areas:
-          "total wins"
-          "losses losses"
-          "mwin  mwin"
-          "mroi  mroi"
-          "ywin  ywin"
-          "yroi  yroi";
-      }
-    }
-
-    .extras{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:14px;margin:.5rem 0 1.25rem}
-    @media (max-width: 1024px){ .extras{grid-template-columns:repeat(2,minmax(220px,1fr))} }
-    @media (max-width: 560px) { .extras{grid-template-columns:1fr} }
-    .extras .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;opacity:.85;font-weight:800}
-    .extras .value{margin-top:2px;font-size:1.3rem;font-weight:900}
-
-    .sim .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 .75rem}
-    .sim input[type="number"], .sim select{
-      padding:.45rem .6rem;border:1px solid var(--card-br);border-radius:8px;background:#0b1120;color:var(--text);min-width:120px
-    }
-    .pill{display:inline-block;padding:.22rem .55rem;border:1px solid var(--card-br);border-radius:999px;font-weight:800}
-
+    /* table */
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
     .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid var(--card-br);vertical-align:top}
     .tbl th{text-align:left;font-weight:800;opacity:.85}
 
+    /* WL pills */
     .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
     .wl-win{background:#063; color:#d1fae5;border:1px solid #064e3b}
     .wl-lose{background:#5a1111;color:#fee2e2;border:1px solid #991b1b}
-
-    .date-head{margin-top:1.2rem;font-weight:800}
-    .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
-    select{padding:.4rem .55rem;border:1px solid var(--card-br);border-radius:.5rem;background:#0b1120;color:var(--text)}
-
-    .months details{
-      border:1px solid var(--card-br);
-      background:var(--card-bg);
-      border-radius:12px;
-      box-shadow:var(--shadow);
-      margin:.5rem 0 1rem;
-      overflow:hidden;
-    }
-    .months summary{
-      list-style:none;
-      cursor:pointer;
-      padding:12px 16px;
-      display:flex;
-      align-items:baseline;
-      justify-content:space-between;
-      gap:12px;
-    }
-    .months summary::-webkit-details-marker{display:none}
-    .months summary::after{
-      content:"▾";
-      opacity:.8;
-      transition:transform .15s ease;
-    }
-    .months details[open] summary::after{ transform:rotate(180deg); }
-    .months .m-title{font-weight:800}
-    .months .m-stats{opacity:.8; font-size:.92rem}
-    .months .m-inner{padding:0 16px 14px}
   </style>
 
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-88C4MQ3EF8"></script>
@@ -140,64 +75,9 @@
 
   <main class="section" style="max-width:1000px">
     <h1>Free Picks — Results</h1>
-    <p class="muted">Transparent record of outcomes. Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
+    <p class="muted-sm">Transparent record of outcomes. Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
 
-    <div id="summary" class="kpi-grid">
-      <div class="card kpi total"><div class="label">Total</div><div class="value" id="s-total">—</div></div>
-      <div class="card kpi wins"><div class="label">Wins</div><div class="value" id="s-wins">—</div></div>
-      <div class="card kpi losses"><div class="label">Losses</div><div class="value" id="s-losses">—</div></div>
-
-      <div class="card kpi mwin"><div class="label">Monthly Win % (30d)</div><div class="value" id="s-mwin">—</div></div>
-      <div class="card kpi mroi"><div class="label">Monthly ROI (1u, 30d)</div><div class="value" id="s-mroi">—</div></div>
-
-      <div class="card kpi ywin"><div class="label">YTD Win %</div><div class="value" id="s-ywin">—</div></div>
-      <div class="card kpi yroi"><div class="label">YTD ROI (1u)</div><div class="value" id="s-yroi">—</div></div>
-    </div>
-
-    <!-- Current month (calendar) -->
-    <section class="card" style="margin:.5rem 0 1.25rem">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <strong>Current month — Free Picks</strong>
-        <span class="pill" id="cm-pill">…</span>
-      </div>
-      <div class="muted-sm" id="cm-line" style="margin-top:.35rem">Loading…</div>
-    </section>
-
-    <section class="card sim">
-      <h2 style="margin:0 0 .35rem">ROI Simulator</h2>
-      <p class="muted-sm">“If I staked a flat amount on every pick in the selected period…”</p>
-      <div class="row">
-        <label><strong>Stake per pick</strong></label>
-        <input type="number" id="simStake" step="0.1" min="0" value="1">
-        <label><strong>Range</strong></label>
-        <select id="simRange">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="all">All</option>
-        </select>
-        <button class="btn small" id="simRun" type="button">Run</button>
-        <button class="btn secondary small" id="simExport" type="button">Export Bet Slip (CSV)</button>
-      </div>
-      <div class="out">
-        <span class="pill">Picks: <strong id="simPicks">—</strong></span>
-        <span class="pill">Wins: <strong id="simWins">—</strong></span>
-        <span class="pill">Losses: <strong id="simLosses">—</strong></span>
-        <span class="pill">Win%: <strong id="simWinrate">—</strong></span>
-        <span class="pill">Stake: <strong id="simStakeSum">—</strong></span>
-        <span class="pill">P/L (u): <strong id="simPnL">—</strong></span>
-        <span class="pill">ROI: <strong id="simROI">—</strong></span>
-      </div>
-    </section>
-
-    <section class="card" style="padding:14px 16px; margin:.5rem 0 1.25rem">
-      <h2 style="margin:0 0 .35rem">Historical ROI by Market</h2>
-      <p class="muted-sm">Aggregated from the results on this page (flat 1u on picks with odds).</p>
-      <table class="tbl" id="roiMarketTbl">
-        <thead><tr><th>Market</th><th>Picks</th><th>Win%</th><th>ROI</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
+    <!-- Only the toolbar + line + monthly lists remain -->
     <div class="toolbar">
       <label for="monthSelect" class="muted-sm"><strong>Monthly view:</strong></label>
       <select id="monthSelect"></select>
@@ -219,31 +99,6 @@
   </footer>
 
   <!-- Page logic -->
-  <script>
-    document.getElementById('y').textContent = new Date().getFullYear();
-
-    // Current month line
-    (async function(){
-      try{
-        const r = await fetch('/api/rpc?action=current-month-free-picks', { cache: 'no-store' });
-        const j = await r.json();
-        const pill = document.getElementById('cm-pill');
-        const line = document.getElementById('cm-line');
-        if (j?.ok) {
-          if (pill) pill.textContent = `${j.winPct}%`;
-          if (line) line.textContent = `${j.month} — Picks: ${j.picks} · Win%: ${j.winPct}% · ROI: ${j.roiPct}%`;
-        } else {
-          if (pill) pill.textContent = '—';
-          if (line) line.textContent = 'Monthly stats unavailable';
-        }
-      } catch(e){
-        const pill = document.getElementById('cm-pill');
-        const line = document.getElementById('cm-line');
-        if (pill) pill.textContent = '—';
-        if (line) line.textContent = 'Monthly stats unavailable';
-      }
-    })();
-  </script>
   <script src="/results.js" defer></script>
 </body>
 </html>
