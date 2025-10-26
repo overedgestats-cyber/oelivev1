@@ -56,10 +56,8 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="/pixel.js" defer></script>
-<script src="/social.js" defer></script>
+script src="/social.js" defer></script>
 <script src="/winrate.js?v=5" defer></script>
-
-
 
 <body>
   <header class="site-header">
@@ -95,12 +93,11 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
       </p>
     </section>
 
-    <!-- UPDATED: This month (calendar MTD) widget — Free Picks only -->
+    <!-- This month (calendar MTD) widget — Free Picks only -->
     <section class="section">
-      <!-- CHANGED data-endpoint to the new RPC action -->
-      <div class="win30 card" data-endpoint="/api/rpc?action=current-month-free-picks">
+      <div class="win30 card">
         <div class="w-row">
-          <strong>This month — Free Picks</strong>
+          <strong>Current month — Free Picks</strong>
           <span class="w-pill" id="win30-accuracy">…</span>
         </div>
         <div class="w-sub" id="win30-stats">Loading…</div>
@@ -190,27 +187,54 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
 
-    /* Monthly widget (Free Picks MTD via new RPC) */
+    /* Monthly widget (Free Picks — CURRENT CALENDAR MONTH) */
     (async function(){
-      const box = document.querySelector('.win30');
-      if (!box) return;
-
-      const url = box.getAttribute('data-endpoint'); // /api/rpc?action=current-month-free-picks
       const accEl  = document.getElementById('win30-accuracy');
       const statsEl= document.getElementById('win30-stats');
 
+      // Build month range: [YYYY-MM-01, today]
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const ymd = d => d.toISOString().slice(0,10);
+      const from = ymd(start);
+      const to   = ymd(now);
+
       try {
+        const url = `/api/rpc?action=free-picks-results&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=400`;
         const r = await fetch(url, { cache: 'no-store' });
-        const j = await r.json(); // { ok, month, picks, wins, winPct, roiPct, pl }
-        if (!j?.ok) throw new Error('bad');
+        const data = await r.json(); // { days:[{date,picks:[...]}], summary:{...} } but scoped to month
+        const days = Array.isArray(data?.days) ? data.days : [];
 
-        // Pill shows Win%
-        if (accEl) accEl.textContent = `${j.winPct}%`;
+        // Aggregate
+        let picksTotal = 0;     // all picks (settled + pending)
+        let wins = 0, losses = 0;
+        let stakeCount = 0, pnl = 0; // ROI flat 1u on odds-only
 
-        // Subline shows full month line
-        if (statsEl) {
-          statsEl.textContent = `${j.month} — Picks: ${j.picks} · Win%: ${j.winPct}% · ROI: ${j.roiPct}%`;
+        for (const d of days) {
+          const picks = Array.isArray(d.picks) ? d.picks : [];
+          picksTotal += picks.length;
+
+          for (const p of picks) {
+            const st = String(p.status || '').toLowerCase();
+            const o  = Number(p.odds);
+
+            if (st === 'win') wins++;
+            else if (st === 'loss' || st === 'lose') losses++;
+
+            if (Number.isFinite(o)) {
+              if (st === 'win') { pnl += (o - 1); stakeCount += 1; }
+              else if (st === 'loss' || st === 'lose') { pnl -= 1; stakeCount += 1; }
+            }
+          }
         }
+
+        const settled = wins + losses;
+        const winPct  = settled ? ((wins / settled) * 100) : 0;
+        const roiPct  = stakeCount ? ((pnl / stakeCount) * 100) : 0;
+
+        // Render
+        if (accEl)   accEl.textContent  = `${winPct.toFixed(1)}%`;
+        if (statsEl) statsEl.textContent = `${now.toLocaleString('en-US', { month:'long', year:'numeric' })} — Picks: ${picksTotal} · Win%: ${winPct.toFixed(1)}% · ROI: ${roiPct >= 0 ? '' : ''}${roiPct.toFixed(1)}%`;
       } catch (e) {
         if (accEl)   accEl.textContent  = '—';
         if (statsEl) statsEl.textContent = 'Monthly stats unavailable';

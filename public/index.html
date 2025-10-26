@@ -130,16 +130,14 @@
     <div class="perf-grid two">
       <div class="perf-item">
         <span class="k">Win rate (this month)</span>
-        <!-- UPDATED endpoint to current-month RPC -->
-        <div class="win30" data-endpoint="/api/rpc?action=current-month-free-picks">
+        <div class="win30">
           <span class="v w-pill">…</span>
           <div class="w-sub muted-sm">Loading…</div>
         </div>
       </div>
       <div class="perf-item">
         <span class="k">ROI (1u, this month)</span>
-        <!-- UPDATED endpoint to current-month RPC -->
-        <div class="win30" data-endpoint="/api/rpc?action=current-month-free-picks" data-metric="roi">
+        <div class="win30" data-metric="roi">
           <span class="v w-pill">…</span>
           <div class="w-sub muted-sm">Loading…</div>
         </div>
@@ -254,27 +252,63 @@
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
 
-    /* === Current-month perf (Win% + ROI) from RPC === */
+    /* === Current-month perf (Win% + ROI) computed from results slice === */
     (async function(){
       try{
-        const r = await fetch('/api/rpc?action=current-month-free-picks', { cache: 'no-store' });
-        const j = await r.json(); // { ok, month, picks, wins, winPct, roiPct, pl }
+        // Build month range: [YYYY-MM-01, today]
+        const now = new Date();
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const ymd = d => d.toISOString().slice(0,10);
+        const from = ymd(start);
+        const to   = ymd(now);
+
+        // Pull only the current month’s days
+        const url = `/api/rpc?action=free-picks-results&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=400`;
+        const r = await fetch(url, { cache: 'no-store' });
+        const data = await r.json();
+        const days = Array.isArray(data?.days) ? data.days : [];
+
+        // Aggregate
+        let picksTotal = 0;
+        let wins = 0, losses = 0;
+        let stakeCount = 0, pnl = 0;
+
+        for (const d of days) {
+          const picks = Array.isArray(d.picks) ? d.picks : [];
+          picksTotal += picks.length;
+
+          for (const p of picks) {
+            const st = String(p.status || '').toLowerCase();
+            const o  = Number(p.odds);
+
+            if (st === 'win') wins++;
+            else if (st === 'loss' || st === 'lose') losses++;
+
+            if (Number.isFinite(o)) {
+              if (st === 'win') { pnl += (o - 1); stakeCount += 1; }
+              else if (st === 'loss' || st === 'lose') { pnl -= 1; stakeCount += 1; }
+            }
+          }
+        }
+
+        const settled = wins + losses;
+        const winPct  = settled ? ((wins / settled) * 100) : 0;
+        const roiPct  = stakeCount ? ((pnl / stakeCount) * 100) : 0;
+
+        // Render into the two tiles
         const tiles = document.querySelectorAll('.perf-band .win30');
         tiles.forEach(tile => {
           const pill  = tile.querySelector('.v');
           const sub   = tile.querySelector('.w-sub');
           const metric= (tile.getAttribute('data-metric') || '').toLowerCase();
-          if (j?.ok) {
-            if (metric === 'roi') {
-              if (pill) pill.textContent = `${j.roiPct}%`;
-            } else {
-              if (pill) pill.textContent = `${j.winPct}%`;
-            }
-            if (sub) sub.textContent = `${j.month} — Picks: ${j.picks} · Win%: ${j.winPct}% · ROI: ${j.roiPct}%`;
+
+          if (metric === 'roi') {
+            if (pill) pill.textContent = `${roiPct.toFixed(1)}%`;
           } else {
-            if (pill) pill.textContent = '—';
-            if (sub) sub.textContent = 'Monthly stats unavailable';
+            if (pill) pill.textContent = `${winPct.toFixed(1)}%`;
           }
+
+          if (sub) sub.textContent = `${now.toLocaleString('en-US',{month:'long',year:'numeric'})} — Picks: ${picksTotal} · Win%: ${winPct.toFixed(1)}% · ROI: ${roiPct.toFixed(1)}%`;
         });
       } catch(e){
         const tiles = document.querySelectorAll('.perf-band .win30');
@@ -282,7 +316,7 @@
           const pill = tile.querySelector('.v');
           const sub  = tile.querySelector('.w-sub');
           if (pill) pill.textContent = '—';
-          if (sub) sub.textContent = 'Monthly stats unavailable';
+          if (sub) sub.textContent   = 'Monthly stats unavailable';
         });
       }
     })();

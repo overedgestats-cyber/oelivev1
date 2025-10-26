@@ -13,7 +13,6 @@
   <link rel="icon" type="image/png" sizes="512x512" href="/overedge-logo-512.png">
 
   <style>
-    /* ===== Base (dark) ===== */
     :root{
       --card-bg:#0e1420;
       --card-br:#2a2f3a;
@@ -26,7 +25,6 @@
     .muted-sm{opacity:.75;font-size:.92rem}
     .card{background:var(--card-bg);border:1px solid var(--card-br);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px}
 
-    /* ===== KPI GRID with explicit rows ===== */
     .kpi-grid{
       display:grid;gap:14px;margin:.5rem 0 1rem;
       grid-template-columns:repeat(6, minmax(140px,1fr));
@@ -47,7 +45,6 @@
     .kpi.ywin   {grid-area:ywin}
     .kpi.yroi   {grid-area:yroi}
 
-    /* Responsive: stack gracefully */
     @media (max-width: 1024px){
       .kpi-grid{
         grid-template-columns:repeat(2, minmax(140px,1fr));
@@ -61,26 +58,22 @@
       }
     }
 
-    /* ===== Extras row (same card style) ===== */
     .extras{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:14px;margin:.5rem 0 1.25rem}
     @media (max-width: 1024px){ .extras{grid-template-columns:repeat(2,minmax(220px,1fr))} }
     @media (max-width: 560px) { .extras{grid-template-columns:1fr} }
     .extras .label{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;opacity:.85;font-weight:800}
     .extras .value{margin-top:2px;font-size:1.3rem;font-weight:900}
 
-    /* ===== Simulator (card) ===== */
     .sim .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 .75rem}
     .sim input[type="number"], .sim select{
       padding:.45rem .6rem;border:1px solid var(--card-br);border-radius:8px;background:#0b1120;color:var(--text);min-width:120px
     }
     .pill{display:inline-block;padding:.22rem .55rem;border:1px solid var(--card-br);border-radius:999px;font-weight:800}
 
-    /* ===== Tables ===== */
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
     .tbl th,.tbl td{padding:.6rem .6rem;border-bottom:1px solid var(--card-br);vertical-align:top}
     .tbl th{text-align:left;font-weight:800;opacity:.85}
 
-    /* WL pills */
     .wl-pill{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:800;font-size:.8rem}
     .wl-win{background:#063; color:#d1fae5;border:1px solid #064e3b}
     .wl-lose{background:#5a1111;color:#fee2e2;border:1px solid #991b1b}
@@ -89,7 +82,6 @@
     .toolbar{display:flex;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
     select{padding:.4rem .55rem;border:1px solid var(--card-br);border-radius:.5rem;background:#0b1120;color:var(--text)}
 
-    /* ===== Month accordion (new) ===== */
     .months details{
       border:1px solid var(--card-br);
       background:var(--card-bg);
@@ -150,7 +142,6 @@
     <h1>Free Picks — Results</h1>
     <p class="muted">Transparent record of outcomes. Win% from settled picks (push excluded). ROI assumes flat 1u when odds are present.</p>
 
-    <!-- ===== TOP KPIs (fixed 3 rows) ===== -->
     <div id="summary" class="kpi-grid">
       <div class="card kpi total"><div class="label">Total</div><div class="value" id="s-total">—</div></div>
       <div class="card kpi wins"><div class="label">Wins</div><div class="value" id="s-wins">—</div></div>
@@ -163,7 +154,7 @@
       <div class="card kpi yroi"><div class="label">YTD ROI (1u)</div><div class="value" id="s-yroi">—</div></div>
     </div>
 
-    <!-- ===== NEW: Current calendar month line (server-computed) ===== -->
+    <!-- Current month (calendar) -->
     <section class="card" style="margin:.5rem 0 1.25rem">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <strong>Current month — Free Picks</strong>
@@ -172,7 +163,6 @@
       <div class="muted-sm" id="cm-line" style="margin-top:.35rem">Loading…</div>
     </section>
 
-    <!-- ===== ROI Simulator (card) ===== -->
     <section class="card sim">
       <h2 style="margin:0 0 .35rem">ROI Simulator</h2>
       <p class="muted-sm">“If I staked a flat amount on every pick in the selected period…”</p>
@@ -199,7 +189,6 @@
       </div>
     </section>
 
-    <!-- ===== Historical ROI by Market ===== -->
     <section class="card" style="padding:14px 16px; margin:.5rem 0 1.25rem">
       <h2 style="margin:0 0 .35rem">Historical ROI by Market</h2>
       <p class="muted-sm">Aggregated from the results on this page (flat 1u on picks with odds).</p>
@@ -209,14 +198,12 @@
       </table>
     </section>
 
-    <!-- ===== Month Picker ===== -->
     <div class="toolbar">
       <label for="monthSelect" class="muted-sm"><strong>Monthly view:</strong></label>
       <select id="monthSelect"></select>
       <span class="muted-sm" id="monthStats"></span>
     </div>
 
-    <!-- ===== Monthly Lists (accordion container) ===== -->
     <div id="list">Loading…</div>
   </main>
 
@@ -233,10 +220,9 @@
 
   <!-- Page logic -->
   <script>
-    // footer year
     document.getElementById('y').textContent = new Date().getFullYear();
 
-    // Current month line (server-computed via rpc)
+    // Current month line
     (async function(){
       try{
         const r = await fetch('/api/rpc?action=current-month-free-picks', { cache: 'no-store' });
