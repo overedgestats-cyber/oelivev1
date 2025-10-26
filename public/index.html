@@ -130,14 +130,16 @@
     <div class="perf-grid two">
       <div class="perf-item">
         <span class="k">Win rate (this month)</span>
-        <div class="win30" data-endpoint="/api/rpc?action=free-picks-results&limit=200">
+        <!-- UPDATED endpoint to current-month RPC -->
+        <div class="win30" data-endpoint="/api/rpc?action=current-month-free-picks">
           <span class="v w-pill">…</span>
           <div class="w-sub muted-sm">Loading…</div>
         </div>
       </div>
       <div class="perf-item">
         <span class="k">ROI (1u, this month)</span>
-        <div class="win30" data-endpoint="/api/rpc?action=free-picks-results&limit=200" data-metric="roi">
+        <!-- UPDATED endpoint to current-month RPC -->
+        <div class="win30" data-endpoint="/api/rpc?action=current-month-free-picks" data-metric="roi">
           <span class="v w-pill">…</span>
           <div class="w-sub muted-sm">Loading…</div>
         </div>
@@ -252,6 +254,39 @@
     }
     document.addEventListener('DOMContentLoaded', loadPreview);
 
+    /* === Current-month perf (Win% + ROI) from RPC === */
+    (async function(){
+      try{
+        const r = await fetch('/api/rpc?action=current-month-free-picks', { cache: 'no-store' });
+        const j = await r.json(); // { ok, month, picks, wins, winPct, roiPct, pl }
+        const tiles = document.querySelectorAll('.perf-band .win30');
+        tiles.forEach(tile => {
+          const pill  = tile.querySelector('.v');
+          const sub   = tile.querySelector('.w-sub');
+          const metric= (tile.getAttribute('data-metric') || '').toLowerCase();
+          if (j?.ok) {
+            if (metric === 'roi') {
+              if (pill) pill.textContent = `${j.roiPct}%`;
+            } else {
+              if (pill) pill.textContent = `${j.winPct}%`;
+            }
+            if (sub) sub.textContent = `${j.month} — Picks: ${j.picks} · Win%: ${j.winPct}% · ROI: ${j.roiPct}%`;
+          } else {
+            if (pill) pill.textContent = '—';
+            if (sub) sub.textContent = 'Monthly stats unavailable';
+          }
+        });
+      } catch(e){
+        const tiles = document.querySelectorAll('.perf-band .win30');
+        tiles.forEach(tile => {
+          const pill = tile.querySelector('.v');
+          const sub  = tile.querySelector('.w-sub');
+          if (pill) pill.textContent = '—';
+          if (sub) sub.textContent = 'Monthly stats unavailable';
+        });
+      }
+    })();
+
     /* === Hero Bet teaser loader (blur for Free, reveal for Pro) === */
     (async function loadHeroTeaser(){
       try{
@@ -296,9 +331,6 @@
       }
     })();
   </script>
-
-  <!-- REMOVED: old 30-day inline perf script -->
-  <!-- New perf numbers come from /winrate.js?v=6 -->
 
   <!-- Shared navbar auth module -->
   <script type="module" src="/auth.js"></script>

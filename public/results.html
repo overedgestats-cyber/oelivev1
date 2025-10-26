@@ -163,7 +163,14 @@
       <div class="card kpi yroi"><div class="label">YTD ROI (1u)</div><div class="value" id="s-yroi">—</div></div>
     </div>
 
-  
+    <!-- ===== NEW: Current calendar month line (server-computed) ===== -->
+    <section class="card" style="margin:.5rem 0 1.25rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <strong>Current month — Free Picks</strong>
+        <span class="pill" id="cm-pill">…</span>
+      </div>
+      <div class="muted-sm" id="cm-line" style="margin-top:.35rem">Loading…</div>
+    </section>
 
     <!-- ===== ROI Simulator (card) ===== -->
     <section class="card sim">
@@ -225,6 +232,32 @@
   </footer>
 
   <!-- Page logic -->
+  <script>
+    // footer year
+    document.getElementById('y').textContent = new Date().getFullYear();
+
+    // Current month line (server-computed via rpc)
+    (async function(){
+      try{
+        const r = await fetch('/api/rpc?action=current-month-free-picks', { cache: 'no-store' });
+        const j = await r.json();
+        const pill = document.getElementById('cm-pill');
+        const line = document.getElementById('cm-line');
+        if (j?.ok) {
+          if (pill) pill.textContent = `${j.winPct}%`;
+          if (line) line.textContent = `${j.month} — Picks: ${j.picks} · Win%: ${j.winPct}% · ROI: ${j.roiPct}%`;
+        } else {
+          if (pill) pill.textContent = '—';
+          if (line) line.textContent = 'Monthly stats unavailable';
+        }
+      } catch(e){
+        const pill = document.getElementById('cm-pill');
+        const line = document.getElementById('cm-line');
+        if (pill) pill.textContent = '—';
+        if (line) line.textContent = 'Monthly stats unavailable';
+      }
+    })();
+  </script>
   <script src="/results.js" defer></script>
 </body>
 </html>

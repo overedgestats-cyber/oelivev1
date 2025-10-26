@@ -1,4 +1,4 @@
-// /api/rpc.js  (PART 1 / 4)
+// /api/rpc.js  (single file)
 // One endpoint, multiple actions via ?action=...
 
 const API_BASE = "https://v3.football.api-sports.io";
@@ -152,25 +152,36 @@ function stableSortFixtures(fixtures = []) {
     return ad.localeCompare(bd);
   });
 }
-
 function setNoEdgeCache(res) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
 }
 
+// --- NEW: Month helpers + unit P/L (calendar month metrics) ---
+function ymdStr(d){ return new Date(d).toISOString().slice(0,10); }
+function monthRangeYYYYMMDD(now = new Date()){
+  const fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate   = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  return { from: ymdStr(fromDate), to: ymdStr(toDate) };
+}
+function unitPL(status, odds){
+  const st = String(status || "").toLowerCase();
+  const o  = Number(odds);
+  if (!Number.isFinite(o) || o <= 1) return { staked: 0, pl: 0 };
+  if (st === "win")  return { staked: 1, pl: (o - 1) };
+  if (st === "loss" || st === "lose") return { staked: 1, pl: -1 };
+  return { staked: 0, pl: 0 };
+}
+
 // --- Calibrated pick confidence (distinct from raw model prob)
 function calibratedConfidence(sideProb, H, A) {
-  // volatility from differences and defensive suppression
   const vol =
     0.50 * Math.abs(H.avgFor - A.avgFor) +
     0.20 * Math.abs(H.ppg - A.ppg) +
     0.10 * Math.abs(H.cleanSheetRate - A.cleanSheetRate) +
     0.10 * Math.abs(H.failToScoreRate - A.failToScoreRate);
 
-  // base from distance to 50/50; amplify a bit, subtract volatility
   const base = 0.50 + (sideProb - 0.50) * 1.35 - 0.10 * vol;
-
-  // clamp to [0.53, 0.90] to keep it distinct from model prob
   return Math.max(0.53, Math.min(0.90, base));
 }
 
@@ -374,7 +385,6 @@ function reasonCornersRich(fx, H, A, pick, confPct) {
 
 /* ---- NEW: separate model probability vs adjusted confidence ---- */
 function computeOUModelProb(H, A) {
-  // baseline model prob purely from O/U rates
   const overP  = H.over25Rate * 0.5 + A.over25Rate * 0.5;
   const underP = H.under25Rate * 0.5 + A.under25Rate * 0.5;
   const pick = overP >= underP ? "Over 2.5" : "Under 2.5";
@@ -382,7 +392,6 @@ function computeOUModelProb(H, A) {
   return { pick, modelProb: clampRange(model, 0.51, 0.95), overP, underP };
 }
 function adjustOUConfidence(pick, modelProb, H, A) {
-  // contextual nudges: clean sheets / FTS / home-away splits / PPG gap
   let adj = modelProb;
   const csGap = Math.abs(H.cleanSheetRate - A.cleanSheetRate);
   const ftsAvg = (H.failToScoreRate + A.failToScoreRate) / 2;
@@ -422,7 +431,6 @@ function adjustBTTSConfidence(pick, modelProb, H, A) {
   }
   return pct(clampRange(adj, 0.52, 0.97));
 }
-// /api/rpc.js  (PART 2 / 4)
 
 /* -------------------- Team stats + odds utilities -------------------- */
 async function teamLastN(teamId, n = 12) {
@@ -532,7 +540,6 @@ async function scoreFixtureForOU25(fx) {
   if (!homeId || !awayId) return null;
   const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
-  // model probability vs calibrated confidence
   const m = computeOUModelProb(H, A);
   const sideProb = m.pick === "Over 2.5" ? m.overP : m.underP;
   const modelProbPct = pct(sideProb);
@@ -550,8 +557,8 @@ async function scoreFixtureForOU25(fx) {
     home: fx?.teams?.home?.name,
     away: fx?.teams?.away?.name,
     market: m.pick,
-    confidencePct: confPct,     // calibrated
-    modelProbPct,               // raw model prob (from sideProb)
+    confidencePct: confPct,
+    modelProbPct,
     odds: odds ? odds[m.pick === "Over 2.5" ? "over25" : "under25"] : null,
     reasoning: reasonOURich(fx, H, A, m.pick, confPct, modelProbPct),
   };
@@ -587,7 +594,6 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
 }
 
 /* ------------------------- Hero Bet (value) -------------------------- */
-// keep 1X2 lean helper (used only for Pro Board)
 function onex2Lean(home, away) {
   const ha = 0.20;
   const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
@@ -606,7 +612,6 @@ async function scoreHeroCandidates(fx) {
   const candidates = [];
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
-  // OU model + calibrated confidence
   const mOU = computeOUModelProb(H, A);
   if (mOU.pick === "Over 2.5" && odds?.over25 && odds.over25 >= 2.0 && withinBand(mOU.overP)) {
     const sideProb = mOU.overP;
@@ -645,7 +650,6 @@ async function scoreHeroCandidates(fx) {
     });
   }
 
-  // BTTS with calibrated confidence (surrogate prob = bttsP or 1-bttsP)
   const mBT = computeBTTSModelProb(H, A);
   if (mBT.pick === "BTTS: Yes" && odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(mBT.bttsP)) {
     const sideProb = mBT.bttsP;
@@ -754,7 +758,6 @@ async function buildProBoard({ date, tz }) {
       if (!homeId || !awayId) continue;
       const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
-      // OU (keep existing adjust logic, but pass modelProbPct into reasoning)
       const mOU = computeOUModelProb(H, A);
       const ouConfPct = adjustOUConfidence(mOU.pick, mOU.modelProb, H, A);
       const ou = {
@@ -764,7 +767,6 @@ async function buildProBoard({ date, tz }) {
         reasoning: reasonOURich(fx, H, A, mOU.pick, ouConfPct, pct(mOU.modelProb)),
       };
 
-      // BTTS
       const mBT = computeBTTSModelProb(H, A);
       const bttsConfPct = adjustBTTSConfidence(mBT.pick, mBT.modelProb, H, A);
       const btts = {
@@ -774,7 +776,6 @@ async function buildProBoard({ date, tz }) {
         reasoning: reasonBTTSRich(fx, H, A, mBT.pick, bttsConfPct),
       };
 
-      // 1X2 (approx conf=model)
       const onex2 = onex2Lean(H, A);
       const onex2ConfPct = pct(onex2.conf);
       const onex2Rec = {
@@ -812,6 +813,7 @@ async function buildProBoard({ date, tz }) {
   });
   return { date, timezone: tz, groups };
 }
+
 /* --------------- Pro Board grouped by country (flags) ---------------- */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
@@ -888,11 +890,11 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
 
   const groups = Array.from(byCountry.values())
     .sort((a,b)=> a.country.localeCompare(b.country))
-    .map(c => ({
-      country: c.country, flag: c.flag,
-      leagues: Array.from(c.leagues.values())
+    .map(c => ([
+      c.country, c.flag, Array.from(c.leagues.values())
         .sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))
-    }));
+    ]))
+    .map(([country, flag, leagues]) => ({ country, flag, leagues }));
 
   return { date, timezone: tz, groups };
 }
@@ -978,7 +980,6 @@ async function pbgGet(date, tz, market){
 async function pbgSet(date, tz, market, payload){
   try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
-// /api/rpc.js  (PART 4 / 4)
 
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
@@ -1091,6 +1092,60 @@ export default async function handler(req, res) {
     }
 
     /* ======== READERS FOR WIDGETS ======== */
+
+    // NEW: calendar-month summary for Free Picks (Win% + ROI)
+    if (action === "current-month-free-picks") {
+      try {
+        if (!db) return res.status(200).json({ ok:true, month:null, picks:0, wins:0, winPct:0, roiPct:0, pl:0 });
+
+        const { from, to } = monthRangeYYYYMMDD(new Date());
+        let q = db.collection("free_picks_results")
+          .where("date", ">=", from)
+          .where("date", "<=", to)
+          .orderBy("date", "asc");
+        const snap = await q.get();
+
+        let picks = 0, wins = 0;
+        let staked = 0, pl = 0;
+
+        snap.forEach((doc) => {
+          const d = doc.data() || {};
+          const arr = Array.isArray(d.picks) ? d.picks : [];
+          for (const p of arr) {
+            const st = String(p.status || "").toLowerCase();
+            if (!st || st === "pending") continue;
+
+            if (st === "win" || st === "loss" || st === "lose") {
+              picks += 1;
+              if (st === "win") wins += 1;
+            }
+
+            const r = unitPL(st, p.odds);
+            staked += r.staked;
+            pl     += r.pl;
+          }
+        });
+
+        const winPct = picks ? Math.round((wins / picks) * 1000) / 10 : 0;
+        const roiPct = staked ? Math.round((pl / staked) * 1000) / 10 : 0;
+
+        const monthLabel = new Date().toLocaleString("en-GB", { month: "long", year: "numeric" });
+
+        return res.status(200).json({
+          ok: true,
+          month: monthLabel,
+          picks,
+          wins,
+          winPct,
+          roiPct,
+          pl: Math.round(pl * 100) / 100
+        });
+      } catch (e) {
+        console.error("current-month-free-picks error:", e?.message || e);
+        return res.status(200).json({ ok:false, error:"aggregation_failed" });
+      }
+    }
+
     if (action === "free-picks-results") {
       try {
         const from  = (req.query.from  || "").toString().slice(0, 10) || null;
@@ -1203,25 +1258,26 @@ export default async function handler(req, res) {
       const payload = await pickHeroBet({ date, tz, market });
 
       try {
-        const h = payload?.heroBet;
-        if (h && h.home && h.away) {
-          const toStore = [{
-            date,
-            matchTime: h.matchTime || null,
-            country: h.country || null,
-            league: h.league || null,
-            home: h.home,
-            away: h.away,
-            market: h.market || null,
-            selection: h.selection || h.market,
-            odds: (typeof h.odds === "number" ? h.odds : null),
-            fixtureId: h.fixtureId || null,
-            source: "hero-bet",
-            status: "pending"
-          }];
-          await writeDailyPicks("hero-bet", date, toStore);
-        }
-      } catch (e) {}
+  const h = payload?.heroBet;
+  if (h && h.home && h.away) {
+    const toStore = [{
+      date,
+      matchTime: h.matchTime || null,
+      country: h.country || null,
+      league: h.league || null,
+      home: h.home,
+      away: h.away,
+      market: h.market || null,
+      selection: h.selection || h.market,
+      odds: (typeof h.odds === "number" ? h.odds : null),
+      fixtureId: h.fixtureId || null,
+      source: "hero-bet",
+      status: "pending"
+    }];
+    await writeDailyPicks("hero-bet", date, toStore);
+  }
+} catch (e) {}
+
 
       putCachedPP(key, payload);
       await ppSet(date, tz, market, payload);
