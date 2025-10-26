@@ -1,44 +1,36 @@
-// /public/results.js
-// Results page logic: manual seed + optional API merge, safe DOM updates.
+// public/results.js — Minimal monthly renderer (no KPIs, no simulator, no market table)
 
 (function () {
   const y = document.getElementById("y");
   if (y) y.textContent = new Date().getFullYear();
 
-  // ----- SAFE DOM HELPERS -----
-  const $ = (id) => document.getElementById(id);
-  const setText = (id, val) => {
-    const n = $(id);
-    if (n) n.textContent = val;
-  };
-
-  // ======== MANUAL SEED ========
+  // ======== MANUAL SEED (keep editing this daily) ========
   const MANUAL_RESULTS = [
     // 2025-10-16
-{ date:"2025-10-16", home:"PSG W",           away:"Real Madrid W",     market:"Over 2.5",  odds:1.53, status:"win" },
-{ date:"2025-10-16", home:"Ferencvaros W",   away:"Sparta Praha W",    market:"Over 2.5",  odds:1.73, status:"win" },
+    { date:"2025-10-16", home:"PSG W",           away:"Real Madrid W",     market:"Over 2.5",  odds:1.53, status:"win" },
+    { date:"2025-10-16", home:"Ferencvaros W",   away:"Sparta Praha W",    market:"Over 2.5",  odds:1.73, status:"win" },
 
-// 2025-10-15
-{ date:"2025-10-15", home:"Vålerenga W",     away:"VfL Wolfsburg W",   market:"Over 2.5",  odds:1.36, status:"win" },
-{ date:"2025-10-15", home:"Älvsjö AIK W",    away:"Brommapojkarna W",  market:"Over 2.5",  odds:1.45, status:"win" },
+    // 2025-10-15
+    { date:"2025-10-15", home:"Vålerenga W",     away:"VfL Wolfsburg W",   market:"Over 2.5",  odds:1.36, status:"win" },
+    { date:"2025-10-15", home:"Älvsjö AIK W",    away:"Brommapojkarna W",  market:"Over 2.5",  odds:1.45, status:"win" },
 
-// 2025-10-14
-{ date:"2025-10-14", home:"Ivory Coast",     away:"Kenya",             market:"Under 2.5", odds:1.82, status:"lose" },
-{ date:"2025-10-14", home:"Senegal",         away:"Mauritania",        market:"Under 2.5", odds:2.00, status:"lose" },
+    // 2025-10-14
+    { date:"2025-10-14", home:"Ivory Coast",     away:"Kenya",             market:"Under 2.5", odds:1.82, status:"lose" },
+    { date:"2025-10-14", home:"Senegal",         away:"Mauritania",        market:"Under 2.5", odds:2.00, status:"lose" },
 
     // 2025-10-12
-{ date:"2025-10-12", home:"Växjö",              away:"Piteå W",            market:"Over 2.5",  odds:1.67, status:"win" },
-{ date:"2025-10-12", home:"La Unión Atlético",  away:"Linares Deportivo",  market:"Under 2.5", odds:1.44, status:"lose" },
+    { date:"2025-10-12", home:"Växjö",              away:"Piteå W",            market:"Over 2.5",  odds:1.67, status:"win" },
+    { date:"2025-10-12", home:"La Unión Atlético",  away:"Linares Deportivo",  market:"Under 2.5", odds:1.44, status:"lose" },
 
-// 2025-10-13
-{ date:"2025-10-13", home:"Deportivo Cali W",   away:"Sao Paulo W",        market:"Under 2.5", odds:1.65, status:"win" },
-{ date:"2025-10-13", home:"Carshalton Athletic",away:"Burgess",            market:"Over 2.5",  odds:1.65, status:"win" },
+    // 2025-10-13
+    { date:"2025-10-13", home:"Deportivo Cali W",   away:"Sao Paulo W",        market:"Under 2.5", odds:1.65, status:"win" },
+    { date:"2025-10-13", home:"Carshalton Athletic",away:"Burgess",            market:"Over 2.5",  odds:1.65, status:"win" },
 
-    
     // 2025-10-11
-{ date:"2025-10-11", home:"Gresford Athletic", away:"Buckley Town", market:"Over 2.5", odds:1.36, status:"win" },
-{ date:"2025-10-11", home:"Zürich II", away:"Cham", market:"Over 2.5", odds:1.44, status:"lose" },
-// 2025-10-10
+    { date:"2025-10-11", home:"Gresford Athletic", away:"Buckley Town", market:"Over 2.5", odds:1.36, status:"win" },
+    { date:"2025-10-11", home:"Zürich II", away:"Cham", market:"Over 2.5", odds:1.44, status:"lose" },
+
+    // 2025-10-10
     { date:"2025-10-10", home:"Sudan",   away:"Mauritania",       market:"Under 2.5", odds:1.40, status:"win" },
     { date:"2025-10-10", home:"Clyde",   away:"Kilmarnock II",    market:"Over 2.5",  odds:1.40, status:"win" },
 
@@ -113,318 +105,122 @@
   ];
 
   // ---------- Helpers ----------
+  const $ = (id) => document.getElementById(id);
   const fmtPct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
+  const toDate = (s) => { const [y,m,d] = String(s).split("-").map(Number); return new Date(y, m-1, d); };
+  const monthKey = (s) => s.slice(0, 7); // YYYY-MM
+  const monthLabel = (s) => new Date(s + "-01").toLocaleString(undefined, { month: "long", year: "numeric" });
 
-  // Exclude VOID/PUSH from win%, stake and ROI
+  // stats: ignore push/void in win% and ROI; flat 1u where odds is numeric
   function computeStats(picks) {
     let wins = 0, losses = 0, stake = 0, pnl = 0;
     for (const p of picks) {
-      const s = String(p.status || "").toLowerCase();
-      if (s === "win") {
-        wins++;
-        if (typeof p.odds === "number") { stake += 1; pnl += p.odds - 1; }
-      } else if (s === "lose" || s === "loss") {
-        losses++;
-        if (typeof p.odds === "number") { stake += 1; pnl -= 1; }
+      const st = String(p.status || "").toLowerCase();
+      if (st === "win") {
+        wins++; if (typeof p.odds === "number") { stake += 1; pnl += (p.odds - 1); }
+      } else if (st === "lose" || st === "loss") {
+        losses++; if (typeof p.odds === "number") { stake += 1; pnl -= 1; }
       }
-      // void/push: ignored
+      // push/void ignored
     }
     const settled = wins + losses;
-    const winRate = settled ? (wins / settled) * 100 : null;
-    const roiPct  = stake ? (pnl / stake) * 100 : null;
-    return { wins, losses, settled, winRate, roiPct, stake, pnl };
+    const winPct = settled ? (wins / settled) * 100 : null;
+    const roiPct = stake ? (pnl / stake) * 100 : null;
+    return { settled, wins, losses, winPct, roiPct };
   }
 
-  function streaks(picks) {
-    // best W streak (oldest->newest)
-    let best = 0, cur = 0;
-    for (const p of picks) {
-      const s = String(p.status || "").toLowerCase();
-      if (s === "win") { cur += 1; best = Math.max(best, cur); }
-      else if (s === "lose" || s === "loss") { cur = 0; }
-    }
-    // current streak from newest back (W as +, L as -)
-    let current = 0;
-    for (let i = picks.length - 1; i >= 0; i--) {
-      const s = String(picks[i].status || "").toLowerCase();
-      if (s === "win") { if (current >= 0) current += 1; else break; }
-      else if (s === "lose" || s === "loss") { if (current <= 0) current -= 1; else break; }
-      else break;
-    }
-    return { best, current };
-  }
-
-  function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d; }
-  function toDate(s) { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, m - 1, d); }
-  function inLastNDays(p, n) { return toDate(p.date) >= daysAgo(n); }
-
-  // ---------- Fetch remote (/api/results) then merge (safe) ----------
-  async function fetchRemote(days = 180) {
-    try {
-      const r = await fetch(`/api/results?kind=free&days=${encodeURIComponent(days)}`, { cache: "no-store" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      return Array.isArray(data?.picks) ? data.picks : [];
-    } catch { return []; }
-  }
-
-  function dedupeMerge(manual, remote) {
-    const map = new Map();
-    const keyOf = (p) => `${p.date}#${p.home}#${p.away}#${String(p.market || "").toLowerCase()}`;
-    manual.forEach((p) => map.set(keyOf(p), p));
-    remote.forEach((p) => map.set(keyOf(p), p));
-    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }
-
-  (async function init() {
-    const remote = await fetchRemote(180); // [] if API 500s
-    const MERGED = dedupeMerge(MANUAL_RESULTS, remote);
-
+  (function init() {
     // Only show from Sep 2025 onward (your seed)
     const MIN_MONTH = "2025-09";
-    const ALLOWED_RESULTS = MERGED.filter((r) => (r.date || "") >= MIN_MONTH);
+    const ALL = MANUAL_RESULTS
+      .filter(r => (r.date || "") >= MIN_MONTH)
+      .sort((a,b) => a.date.localeCompare(b.date));
 
-    // ===== Summary KPIs =====
-    const allStats = computeStats(ALLOWED_RESULTS);
-    setText("s-total", String(ALLOWED_RESULTS.length));
-    setText("s-wins", String(allStats.wins));
-    setText("s-losses", String(allStats.losses));
-
-    // Monthly (last 30d)
-    const last30 = ALLOWED_RESULTS.filter((p) => inLastNDays(p, 30));
-    const s30 = computeStats(last30);
-    setText("s-mwin", fmtPct(s30.winRate));
-    setText("s-mroi", fmtPct(s30.roiPct));
-
-    // YTD
-    const year = new Date().getFullYear();
-    const yearPicks = ALLOWED_RESULTS.filter((r) => String(r.date || "").startsWith(String(year)));
-    const yStats = computeStats(yearPicks.length ? yearPicks : ALLOWED_RESULTS);
-    setText("s-ywin", fmtPct(yStats.winRate));
-    setText("s-yroi", fmtPct(yStats.roiPct));
-
-    // ===== Historical ROI by Market =====
-    const tb = document.querySelector("#roiMarketTbl tbody");
-    if (tb) {
-      const m = new Map();
-      for (const p of ALLOWED_RESULTS) {
-        const key = p.market || "—";
-        if (!m.has(key)) m.set(key, []);
-        m.get(key).push(p);
-      }
-      const rows = [];
-      for (const [market, arr] of m.entries()) {
-        const s = computeStats(arr);
-        rows.push({ market, picks: s.settled, win: s.winRate, roi: s.roiPct });
-      }
-      rows.sort((a, b) => (b.roi ?? -1) - (a.roi ?? -1));
-      tb.innerHTML = rows
-        .map(
-          (r) => `
-        <tr>
-          <td><strong>${r.market}</strong></td>
-          <td>${r.picks}</td>
-          <td>${r.win != null ? r.win.toFixed(1) + "%" : "—"}</td>
-          <td>${r.roi != null ? r.roi.toFixed(1) + "%" : "—"}</td>
-        </tr>`
-        )
-        .join("");
-    }
-
-    // ===== ROI Simulator =====
-    const elStake = $("simStake");
-    const elRange = $("simRange");
-    const simRunBtn = $("simRun");
-    const simExport = $("simExport");
-
-    function filterRange(range) {
-      if (range === "all") return ALLOWED_RESULTS;
-      const n = Number(range) || 30;
-      return ALLOWED_RESULTS.filter((p) => inLastNDays(p, n));
-    }
-
-    function runSimulator() {
-      if (!elStake || !elRange) return;
-      const stake = Math.max(0, Number(elStake.value) || 0);
-      const range = elRange.value;
-      const picks = filterRange(range).filter((p) => typeof p.odds === "number");
-
-      let wins = 0, losses = 0, stTot = 0, pnl = 0;
-      for (const p of picks) {
-        const s = String(p.status || "").toLowerCase();
-        if (s === "win") {
-          wins++; stTot += stake; pnl += stake * (p.odds - 1);
-        } else if (s === "lose" || s === "loss") {
-          losses++; stTot += stake; pnl -= stake;
-        }
-        // void/push: no stake, no pnl
-      }
-
-      const settled = wins + losses;
-      const winrate = settled ? (wins / settled) * 100 : null;
-      const roi = stTot ? (pnl / stTot) * 100 : null;
-
-      setText("simPicks", String(settled));
-      setText("simWins", String(wins));
-      setText("simLosses", String(losses));
-      setText("simWinrate", fmtPct(winrate));
-      setText("simStakeSum", stTot.toFixed(2));
-      setText("simPnL", pnl.toFixed(2));
-      setText("simROI", fmtPct(roi));
-
-      window.__simLast = { picks, stake };
-    }
-
-    function exportCSV() {
-      const data = window.__simLast || { picks: [], stake: 1 };
-      const stake = data.stake || 1;
-      const rows = [["Date", "Home", "Away", "Market", "Odds", "Result", "Stake", "Return"]];
-      for (const p of data.picks) {
-        const s = String(p.status || "").toLowerCase();
-        const ret = s === "win" ? stake * p.odds : s === "lose" || s === "loss" ? 0 : "";
-        rows.push([
-          p.date, p.home, p.away, p.market,
-          typeof p.odds === "number" ? p.odds.toFixed(2) : "",
-          s.toUpperCase(), stake, ret
-        ]);
-      }
-      const csv = rows
-        .map((r) =>
-          r.map((v) => {
-              const x = v == null ? "" : String(v);
-              return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x;
-            })
-            .join(",")
-        )
-        .join("\n");
-
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "overedge_bet_slip.csv";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
-    }
-
-    if (simRunBtn) simRunBtn.addEventListener("click", runSimulator);
-    if (simExport) simExport.addEventListener("click", exportCSV);
-    runSimulator();
-
-    // ===== Month dropdown + accordion list =====
+    // Group by month
     const byMonth = new Map();
-    ALLOWED_RESULTS.forEach((p) => {
-      const d = new Date(p.date);
-      const key = d.toLocaleDateString(undefined, { year: "numeric", month: "long" }); // e.g., "October 2025"
-      if (!byMonth.has(key)) byMonth.set(key, []);
-      byMonth.get(key).push(p);
-    });
+    for (const p of ALL) {
+      const k = monthKey(p.date);
+      if (!byMonth.has(k)) byMonth.set(k, []);
+      byMonth.get(k).push(p);
+    }
 
-    const monthKeys = Array.from(byMonth.keys()).sort((a, b) => new Date(b) - new Date(a));
+    const keys = Array.from(byMonth.keys()).sort().reverse(); // newest first
 
     // Populate dropdown
-    const monthSelect = $("monthSelect");
-    if (monthSelect) {
-      const allOpt = document.createElement("option");
-      allOpt.value = "all";
-      allOpt.textContent = "All months";
-      monthSelect.appendChild(allOpt);
+    const selectEl = $("monthSelect");
+    const statsEl  = $("monthStats");
+    const listEl   = $("list");
+    if (listEl) listEl.classList.add("months");
 
-      monthKeys.forEach((k) => {
-        const opt = document.createElement("option");
-        opt.value = k;
-        opt.textContent = k;
-        monthSelect.appendChild(opt);
-      });
-
-      monthSelect.value = monthKeys[0] || "all";
+    if (selectEl) {
+      selectEl.innerHTML =
+        `<option value="all">All months</option>` +
+        keys.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+      // default "All months"
+      selectEl.value = "all";
     }
 
-    const host = $("list");
-    if (host) host.classList.add("months");
-
-    function computeMonthStats(picks) {
+    function headerLine(picks) {
       const s = computeStats(picks);
-      return `Picks: <strong>${s.settled}</strong> · Win%: <strong>${fmtPct(s.winRate)}</strong> · ROI: <strong>${fmtPct(s.roiPct)}</strong>`;
+      return `Picks: ${s.settled} · Win%: ${fmtPct(s.winPct)} · ROI: ${fmtPct(s.roiPct)}`;
     }
 
-    function showMonthStats(key) {
-      let picks;
-      if (key === "all" || !key) picks = ALLOWED_RESULTS;
-      else picks = byMonth.get(key) || [];
-      const target = $("monthStats");
-      if (target) target.innerHTML = picks.length ? computeMonthStats(picks) : "No data";
-    }
+    function render(filterKey = "all") {
+      // update short line
+      if (statsEl) {
+        const picks = (filterKey === "all")
+          ? ALL
+          : (byMonth.get(filterKey) || []);
+        statsEl.textContent = headerLine(picks);
+      }
 
-    function renderMonths(selected = "all") {
-      if (!host) return;
-      host.innerHTML = "";
+      // render accordions
+      if (!listEl) return;
+      const showKeys = (filterKey === "all") ? keys : keys.filter(k => k === filterKey);
+      listEl.innerHTML = showKeys.map((k, idx) => {
+        const picks = byMonth.get(k) || [];
 
-      monthKeys.forEach((key, idx) => {
-        if (selected !== "all" && key !== selected) return;
+        // group by exact date
+        const dayGroups = {};
+        picks.forEach(p => { (dayGroups[p.date] ||= []).push(p); });
+        const days = Object.keys(dayGroups).sort((a,b) => b.localeCompare(a));
 
-        const list = byMonth.get(key) || [];
-
-        // group by exact date yyyy-mm-dd
-        const grouped = {};
-        list.forEach((p) => ((grouped[p.date] ||= []).push(p)));
-        const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-
-        const details = document.createElement("details");
-        details.open = selected === "all" ? idx === 0 : true;
-
-        const summary = document.createElement("summary");
-        summary.innerHTML = `
-          <span class="m-title">${key}</span>
-          <span class="m-stats">${computeMonthStats(list)}</span>
+        return `
+          <details ${filterKey === "all" ? (idx === 0 ? "open" : "") : "open"}>
+            <summary>
+              <span class="m-title">${monthLabel(k)}</span>
+              <span class="m-stats">Picks: <strong>${computeStats(picks).settled}</strong> ·
+                Win%: <strong>${fmtPct(computeStats(picks).winPct)}</strong> ·
+                ROI: <strong>${fmtPct(computeStats(picks).roiPct)}</strong>
+              </span>
+            </summary>
+            <div class="m-inner">
+              <table class="tbl">
+                <thead><tr><th style="width:110px">Date</th><th>Picks</th></tr></thead>
+                <tbody>
+                  ${days.map(d => {
+                    const arr = dayGroups[d];
+                    const lines = arr.map(p => {
+                      const s = String(p.status || "").toLowerCase();
+                      const wl = s === "win" ? '<span class="wl-pill wl-win">WIN</span>'
+                               : (s === "lose" || s === "loss") ? '<span class="wl-pill wl-lose">LOSE</span>'
+                               : '<span class="wl-pill">PUSH</span>';
+                      const odds = (typeof p.odds === "number") ? ` @ ${p.odds}` : "";
+                      return `${wl} ${p.market || ""} — <strong>${p.home}</strong> vs <strong>${p.away}</strong>${odds}`;
+                    }).join("<br/>");
+                    return `<tr><td>${d}</td><td>${lines}</td></tr>`;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          </details>
         `;
-        details.appendChild(summary);
-
-        const inner = document.createElement("div");
-        inner.className = "m-inner";
-
-        dates.forEach((d) => {
-          const picks = grouped[d];
-          const block = document.createElement("div");
-          block.innerHTML = `
-            <div class="muted-sm" style="margin:.35rem 0 .2rem;"><strong>${d}</strong></div>
-            <table class="tbl">
-              <thead>
-                <tr><th>Match</th><th>Market</th><th>Odds</th><th>Result</th></tr>
-              </thead>
-              <tbody>
-                ${picks.map((p) => `
-                  <tr>
-                    <td><strong>${p.home}</strong> vs <strong>${p.away}</strong></td>
-                    <td><strong>${p.market || (p.selection ? p.selection : "")}</strong></td>
-                    <td>${typeof p.odds === "number" ? p.odds.toFixed(2) : "—"}</td>
-                    <td>${(function (status) {
-                      const s = String(status || "").toLowerCase();
-                      if (s === "win") return '<span class="wl-pill wl-win">WIN</span>';
-                      if (s === "loss" || s === "lose") return '<span class="wl-pill wl-lose">LOSE</span>';
-                      return "—";
-                    })(p.status)}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          `;
-          inner.appendChild(block);
-        });
-
-        details.appendChild(inner);
-        host.appendChild(details);
-      });
-
-      showMonthStats(selected);
+      }).join('');
     }
 
-    // Initial render + dropdown binding
-    const initial = monthSelect ? monthSelect.value : "all";
-    renderMonths(initial);
-    if (monthSelect) {
-      monthSelect.addEventListener("change", (e) => renderMonths(e.target.value));
+    render("all");
+    if (selectEl) {
+      selectEl.addEventListener("change", e => render(e.target.value || "all"));
     }
   })();
 })();
