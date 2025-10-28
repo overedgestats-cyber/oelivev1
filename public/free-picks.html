@@ -38,6 +38,14 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     gtag('js', new Date());
     gtag('config', 'G-88C4MQ3EF8');
   </script>
+
+  <!-- Minimal styles for ROI block (uses your existing tokens/components) -->
+  <style>
+    #roiCalc .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 .75rem}
+    #roiCalc input[type="number"]{
+      padding:.45rem .6rem;border:1px solid var(--line);border-radius:8px;background:#0b1120;color:var(--text);min-width:120px
+    }
+  </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script>
@@ -81,6 +89,28 @@ document.addEventListener('DOMContentLoaded', () => {
     <p class="muted">Updated daily. We post the two highest-confidence Over/Under 2.5 selections — backed by precise research and data, not gut.</p>
 
     <div id="list">Loading…</div>
+
+    <!-- Potential Winnings / ROI Calculator (Free Picks) -->
+    <section class="card" id="roiCalc" style="margin-top:12px; display:none">
+      <h2 style="margin:0 0 .35rem">Potential Winnings</h2>
+      <p class="muted-sm" id="roiCalcNote">Based on today’s free picks (odds required).</p>
+
+      <div class="row">
+        <label><strong>Stake</strong></label>
+        <input type="number" id="roiStake" step="0.1" min="0" value="1">
+      </div>
+
+      <div id="roiSingles" style="margin:.5rem 0 1rem"></div>
+
+      <div id="roiParlay" class="pill" style="display:none;padding:.5rem .7rem;border-radius:10px;font-weight:800"></div>
+
+      <div id="roiTotals" style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
+        <span class="pill">Total stake: <strong id="roiStakeSum">—</strong></span>
+        <span class="pill">Potential return: <strong id="roiReturn">—</strong></span>
+        <span class="pill">Potential profit: <strong id="roiProfit">—</strong></span>
+        <span class="pill">ROI: <strong id="roiROI">—</strong></span>
+      </div>
+    </section>
   </section>
 </main>
 
@@ -129,6 +159,84 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
+  // ===== ROI Calculator =====
+  (function(){
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n) => Number.isFinite(n) ? n.toFixed(2) : '—';
+
+    window.__initFreePicksROICalc = function initFreePicksROICalc(picks){
+      const withOdds = (Array.isArray(picks) ? picks : []).filter(p => Number.isFinite(Number(p.odds)));
+      const host = $('roiCalc');
+      if (!host) return;
+
+      if (!withOdds.length) {
+        host.style.display = 'none';
+        return;
+      }
+      host.style.display = '';
+
+      const singlesEl = $('roiSingles');
+      const parlayEl  = $('roiParlay');
+      const stakeIn   = $('roiStake');
+      const stakeSum  = $('roiStakeSum');
+      const retEl     = $('roiReturn');
+      const profEl    = $('roiProfit');
+      const roiEl     = $('roiROI');
+
+      function compute(){
+        const stake = Math.max(0, Number(stakeIn.value) || 0);
+
+        // Singles
+        const singleRows = withOdds.map(p => {
+          const name = [p.home, p.away].filter(Boolean).join(' vs ');
+          const odds = Number(p.odds);
+          const ret  = stake * odds;
+          const prof = ret - stake;
+          return `
+            <div class="card" style="padding:.6rem .7rem;border-radius:10px;margin:.3rem 0">
+              <div style="font-weight:700">${name}</div>
+              <div class="muted-sm">${p.market || ''}${p.selection ? (' — ' + p.selection) : ''} @ ${fmt(odds)}</div>
+              <div class="muted-sm">Stake: ${fmt(stake)} · Return: <strong>${fmt(ret)}</strong> · Profit: <strong>${fmt(prof)}</strong></div>
+            </div>
+          `;
+        }).join('');
+        singlesEl.innerHTML = singleRows;
+
+        // Singles totals (placing both singles)
+        const singlesStake  = stake * withOdds.length;
+        const singlesReturn = withOdds.reduce((s,p)=> s + stake * Number(p.odds), 0);
+        const singlesProfit = singlesReturn - singlesStake;
+
+        // 2-leg parlay (if 2+ picks)
+        if (withOdds.length >= 2) {
+          const comboOdds = withOdds.reduce((m,p)=> m * Number(p.odds), 1);
+          const parlayStake = stake;
+          const parlayReturn = stake * comboOdds;
+          const parlayProfit = parlayReturn - parlayStake;
+          parlayEl.style.display = '';
+          parlayEl.innerHTML = `Two-leg parlay @ <strong>${fmt(comboOdds)}</strong> — Stake: ${fmt(parlayStake)} · Return: <strong>${fmt(parlayReturn)}</strong> · Profit: <strong>${fmt(parlayProfit)}</strong>`;
+        } else {
+          parlayEl.style.display = 'none';
+        }
+
+        // Totals = singles total (clear & conservative)
+        const totStake  = singlesStake;
+        const totReturn = singlesReturn;
+        const totProfit = singlesProfit;
+        const totROI    = totStake ? (totProfit / totStake) * 100 : 0;
+
+        stakeSum.textContent = fmt(totStake);
+        retEl.textContent    = fmt(totReturn);
+        profEl.textContent   = fmt(totProfit);
+        roiEl.textContent    = (Number.isFinite(totROI) ? totROI.toFixed(1) : '—') + '%';
+      }
+
+      stakeIn.addEventListener('input', compute);
+      compute();
+    };
+  })();
+  // ===== /ROI Calculator =====
+
   async function loadPicks(){
     const tgt = document.getElementById('list');
     try{
@@ -140,11 +248,16 @@ document.addEventListener('DOMContentLoaded', () => {
       LAST_FREE_PICKS = picks; // save for export
       if(!picks.length){
         tgt.innerHTML = `<p class="muted">No confident picks available yet today.</p>`;
+        // hide ROI calc if no picks/odds
+        if (window.__initFreePicksROICalc) __initFreePicksROICalc([]);
         return;
       }
       tgt.innerHTML = picks.map(pickCard).join("");
+      // initialize ROI calc with today’s picks
+      if (window.__initFreePicksROICalc) __initFreePicksROICalc(picks);
     }catch{
       document.getElementById('list').innerHTML = "<p>Could not load free picks.</p>";
+      if (window.__initFreePicksROICalc) __initFreePicksROICalc([]);
     }
   }
 
