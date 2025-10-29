@@ -1159,37 +1159,49 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, stored: payload?.heroBet ? 1 : 0 });
     }
 
-    for (const m of markets) {
-  const payload = await buildProBoardGrouped({ date, tz, market: m });
-  try {
-    const recs = [];
-    for (const g of (payload?.groups || [])) {
-      for (const L of (g.leagues || [])) {
-        for (const fx of (L.fixtures || [])) {
-          const r = fx?.recommendation;
-          if (!r || !fx?.home?.name || !fx?.away?.name) continue;
-          recs.push({
-            date,
-            matchTime: fx.time || null,
-            country: g.country || null,
-            league: L.leagueName || null,
-            home: fx.home.name,
-            away: fx.away.name,
-            market: r.market || null,
-            selection: r.pick || null,
-            odds: (typeof r.odds === "number" ? r.odds : null), // <— now captured
-            fixtureId: fx.fixtureId || null,
-            source: "pro-board",
-            status: "pending"
-          });
+    if (action === "capture-pro-board") {
+  if (!process.env.API_FOOTBALL_KEY) {
+    return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
+  }
+  const tz = req.query.tz || "Europe/Sofia";
+  const date = req.query.date || ymd();
+  const markets = ["ou_goals", "btts", "one_x_two", "ou_cards", "ou_corners"];
+  let stored = 0;
+
+  for (const m of markets) {
+    const payload = await buildProBoardGrouped({ date, tz, market: m });
+    try {
+      const recs = [];
+      for (const g of (payload?.groups || [])) {
+        for (const L of (g.leagues || [])) {
+          for (const fx of (L.fixtures || [])) {
+            const r = fx?.recommendation;
+            if (!r || !fx?.home?.name || !fx?.away?.name) continue;
+            recs.push({
+              date,
+              matchTime: fx.time || null,
+              country: g.country || null,
+              league: L.leagueName || null,
+              home: fx.home.name,
+              away: fx.away.name,
+              market: r.market || null,
+              selection: r.pick || null,
+              odds: (typeof r.odds === "number" ? r.odds : null),
+              fixtureId: fx.fixtureId || null,
+              source: "pro-board",
+              status: "pending"
+            });
+          }
         }
       }
-    }
-    if (recs.length) {
-      await writeDailyPicks("pro-board", date, recs);
-      stored += recs.length;
-    }
-  } catch (e) {}
+      if (recs.length) {
+        await writeDailyPicks("pro-board", date, recs);
+        stored += recs.length;
+      }
+    } catch (e) {}
+  }
+
+  return res.status(200).json({ ok: true, stored });
 }
 
 
