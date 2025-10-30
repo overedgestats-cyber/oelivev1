@@ -6,6 +6,10 @@
 
   // ======== MANUAL SEED (edit daily) ========
   const MANUAL_RESULTS = [
+    // 2025-10-29
+{ date:"2025-10-29", home:"Brann",    away:"Bodø/Glimt", market:"Over 2.5", odds:1.44, status:"win" },
+{ date:"2025-10-29", home:"Luzern II", away:"SC Kriens",  market:"Over 2.5", odds:1.48, status:"win" },
+
     // 2025-10-26
 { date:"2025-10-26", home:"Real Madrid",  away:"Barcelona",     market:"Over 2.5",  odds:1.30, status:"win"  },
 { date:"2025-10-26", home:"Verona",       away:"Cagliari",      market:"Under 2.5", odds:1.53, status:"loss" },
