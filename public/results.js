@@ -6,6 +6,50 @@
 
   // ======== MANUAL SEED (edit daily) ========
   const MANUAL_RESULTS = [
+    // -----------------------
+// NOVEMBER 2025 RESULTS
+// -----------------------
+
+// 2025-11-01
+{ date:"2025-11-01", home:"Växjö", away:"Brommapojkarna W", market:"Over 2.5", odds:1.55, status:"lose" },
+{ date:"2025-11-01", home:"Valerenga", away:"Bodø/Glimt", market:"Over 2.5", odds:1.60, status:"win" },
+
+// 2025-11-02
+{ date:"2025-11-02", home:"Rosengard W", away:"Alingsas W", market:"Over 2.5", odds:1.44, status:"lose" },
+{ date:"2025-11-02", home:"Heracles", away:"PEC Zwolle", market:"Over 2.5", odds:1.75, status:"win" },
+
+// 2025-11-03
+{ date:"2025-11-03", home:"Dinamo Tirana", away:"Teuta Durres", market:"Under 2.5", odds:1.67, status:"win" },
+{ date:"2025-11-03", home:"LKS Lodz", away:"Slask Wroclaw", market:"Over 2.5", odds:1.65, status:"win" },
+
+// 2025-11-04
+{ date:"2025-11-04", home:"Union Berlin W", away:"VfL Wolfsburg W", market:"Over 2.5", odds:1.50, status:"win" },
+{ date:"2025-11-04", home:"Buriram United", away:"Shanghai SIPG", market:"Over 2.5", odds:1.50, status:"lose" },
+
+// 2025-11-05
+{ date:"2025-11-05", home:"Eintracht Frankfurt W", away:"FC Koln W", market:"Over 2.5", odds:1.40, status:"lose" },
+{ date:"2025-11-05", home:"Tatran Presov W", away:"Ruzomberok W", market:"Over 2.5", odds:1.55, status:"win" },
+
+// 2025-11-06
+{ date:"2025-11-06", home:"Beijing Guoan", away:"Wofoo Tai Po", market:"Over 2.5", odds:1.36, status:"win" },
+{ date:"2025-11-06", home:"1899 Hoffenheim W", away:"SC Freiburg W", market:"Over 2.5", odds:1.44, status:"win" },
+
+// 2025-11-07
+{ date:"2025-11-07", home:"Malzenice", away:"Pohronie", market:"Over 2.5", odds:1.44, status:"lose" },
+{ date:"2025-11-07", home:"Odense", away:"Silkeorg", market:"Over 2.5", odds:1.62, status:"lose" },
+
+// 2025-11-08
+{ date:"2025-11-08", home:"Rezekme FA", away:"Progress / AFA Olaine", market:"Over 2.5", odds:1.55, status:"win" },
+{ date:"2025-11-08", home:"Winterthur", away:"Grasshoppers", market:"Over 2.5", odds:1.70, status:"lose" },
+
+// 2025-11-09
+{ date:"2025-11-09", home:"Rosenborg", away:"Valerenga", market:"Over 2.5", odds:1.48, status:"lose" },
+{ date:"2025-11-09", home:"Sirius", away:"IFK Varnamo", market:"Over 2.5", odds:1.30, status:"win" },
+
+// 2025-11-11
+{ date:"2025-11-11", home:"Lewes", away:"Carshalton", market:"Over 2.5", odds:1.62, status:"win" },
+{ date:"2025-11-11", home:"Roma W", away:"Valerenga W", market:"Over 2.5", odds:1.50, status:"lose" },
+
     // 2025-10-30
 { date:"2025-10-30", home:"Tyshkivka",        away:"Yarud Mariupol’",           market:"Over 2.5", odds:1.55, status:"win" },
 { date:"2025-10-30", home:"Rijnsburgse Boys", away:"NEC Nijmegen",              market:"Over 2.5", odds:1.62, status:"win" },
