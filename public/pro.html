@@ -170,7 +170,7 @@
           <span class="label">Legend:</span>
           <span class="badge-chip badge-model">
             Model probability
-            <span class="tooltip" tabindex="0" data-tip="How often our model expects this exact selection to hit based on recent form and team stats.">ⓘ</span>
+            <span class="tooltip" tabindex="0" data-tip="How often our algorithm expects this exact selection to hit based on recent form and team stats.">ⓘ</span>
           </span>
           <span class="badge-chip badge-conf">
             Pick confidence
@@ -297,12 +297,32 @@
     function heroCard(h){
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
+
+      // --- derive fair odds, edge & simple stake guide from model prob + odds ---
+      const modelProb = (typeof p.modelProbPct === 'number' && p.modelProbPct > 0 && p.modelProbPct < 100)
+        ? (p.modelProbPct / 100)
+        : null;
+
+      let fair = null;
+      let edge = null;
+      let stakeGuide = null;
+
+      if (modelProb && typeof p.odds === 'number' && p.odds > 1) {
+        fair = 1 / modelProb;
+        edge = p.odds - fair;
+
+        const conf = p.confidencePct || 0;
+        if (conf >= 80 && edge >= 0.20) stakeGuide = "High";
+        else if (conf >= 70 && edge >= 0.10) stakeGuide = "Medium";
+        else stakeGuide = "Low";
+      }
+
       const chips = [];
       if (typeof p.modelProbPct === 'number') chips.push(`<span class="badge-chip badge-model">Model ${p.modelProbPct}%</span>`);
       if (typeof p.confidencePct === 'number') chips.push(`<span class="badge-chip badge-conf">Confidence ${p.confidencePct}%</span>`);
-      if (typeof p.fairOdds === 'number') chips.push(`<span class="badge-chip badge-fair">Fair ${p.fairOdds.toFixed(2)}</span>`);
-      if (typeof p.edge === 'number') chips.push(`<span class="badge-chip badge-edge">Edge ${(p.edge >= 0 ? '+' : '')}${p.edge.toFixed(2)}</span>`);
-      if (p.stakeGuide) chips.push(`<span class="badge-chip badge-stake">Stake ${p.stakeGuide}</span>`);
+      if (typeof fair === 'number') chips.push(`<span class="badge-chip badge-fair">Fair ${fair.toFixed(2)}</span>`);
+      if (typeof edge === 'number') chips.push(`<span class="badge-chip badge-edge">Edge ${(edge >= 0 ? '+' : '')}${edge.toFixed(2)}</span>`);
+      if (stakeGuide) chips.push(`<span class="badge-chip badge-stake">Stake ${stakeGuide}</span>`);
 
       const trend = p.histTrend || p.trend || p.reasoning || "";
       const priceStr = (typeof p.odds === 'number' && p.odds > 1)
@@ -382,10 +402,17 @@
             const edge  = (typeof rec.edge === 'number') ? rec.edge : null;
             const stake = rec.stakeGuide || null;
 
-            const trend = fx.trend || rec?.histTrend || rec?.trend || rec?.note || "";
+            const trend =
+              fx.reasoning ||
+              rec.reasoning ||
+              rec.histTrend ||
+              rec.trend ||
+              rec.note ||
+              "";
 
-            const xgLine = (typeof fx.xgHome === 'number' && typeof fx.xgAway === 'number')
-              ? `<div class="xg-line">xG: ${fx.xgHome.toFixed(2)} – ${fx.xgAway.toFixed(2)}</div>`
+            const hasXg = fx.xg && typeof fx.xg.home === 'number' && typeof fx.xg.away === 'number';
+            const xgLine = hasXg
+              ? `<div class="xg-line">xG: ${fx.xg.home.toFixed(2)} – ${fx.xg.away.toFixed(2)}</div>`
               : "";
 
             const left = document.createElement('div');
@@ -396,7 +423,7 @@
                 ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}<span class="team">${fx.away?.name || ""}</span>
               </div>
               ${xgLine}
-              ${trend ? `<div class="reason">${trend}</div>` : (fx.reasoning ? `<div class="reason">${fx.reasoning}</div>` : ``)}
+              ${trend ? `<div class="reason">${trend}</div>` : ``}
             `;
 
             const meta = document.createElement('div');
@@ -409,7 +436,7 @@
               <div style="margin-top:.35rem; display:flex; gap:.35rem; justify-content:flex-end; flex-wrap:wrap">
                 <span class="badge-chip badge-model">
                   Model ${typeof model==='number' ? `${model}%` : '—'}
-                  <span class="tooltip" tabindex="0" data-tip="Model probability: how often our model expects this selection to hit based on recent form and team stats.">ⓘ</span>
+                  <span class="tooltip" tabindex="0" data-tip="Model probability: how often our algorithm expects this selection to hit based on recent form and team stats.">ⓘ</span>
                 </span>
                 <span class="badge-chip badge-conf">
                   Confidence ${typeof conf==='number' ? `${conf}%` : '—'}

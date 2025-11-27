@@ -612,7 +612,9 @@ async function scoreHeroCandidates(fx) {
   const candidates = [];
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
+  // ---------- OU 2.5 ----------
   const mOU = computeOUModelProb(H, A);
+
   if (mOU.pick === "Over 2.5" && odds?.over25 && odds.over25 >= 2.0 && withinBand(mOU.overP)) {
     const sideProb = mOU.overP;
     const confPct = pct(calibratedConfidence(sideProb, H, A));
@@ -627,10 +629,12 @@ async function scoreHeroCandidates(fx) {
       market: "Over 2.5",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
+      odds: Number(odds.over25),                             // 🔹 store odds
       valueScore: Number((sideProb * odds.over25).toFixed(4)),
       reasoning: reasonOURich(fx, H, A, "Over 2.5", confPct, pct(sideProb)),
     });
   }
+
   if (mOU.pick === "Under 2.5" && odds?.under25 && odds.under25 >= 2.0 && withinBand(mOU.underP)) {
     const sideProb = mOU.underP;
     const confPct = pct(calibratedConfidence(sideProb, H, A));
@@ -645,12 +649,15 @@ async function scoreHeroCandidates(fx) {
       market: "Under 2.5",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
+      odds: Number(odds.under25),                            // 🔹 store odds
       valueScore: Number((sideProb * odds.under25).toFixed(4)),
       reasoning: reasonOURich(fx, H, A, "Under 2.5", confPct, pct(sideProb)),
     });
   }
 
+  // ---------- BTTS ----------
   const mBT = computeBTTSModelProb(H, A);
+
   if (mBT.pick === "BTTS: Yes" && odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(mBT.bttsP)) {
     const sideProb = mBT.bttsP;
     const confPct = pct(calibratedConfidence(sideProb, H, A));
@@ -665,10 +672,12 @@ async function scoreHeroCandidates(fx) {
       market: "BTTS",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
+      odds: Number(odds.bttsYes),                             // 🔹 store odds
       valueScore: Number((sideProb * odds.bttsYes).toFixed(4)),
       reasoning: reasonBTTSRich(fx, H, A, "BTTS: Yes", confPct),
     });
   }
+
   if (mBT.pick === "BTTS: No" && odds?.bttsNo && odds.bttsNo >= 2.0 && withinBand(1 - mBT.bttsP)) {
     const sideProb = 1 - mBT.bttsP;
     const confPct = pct(calibratedConfidence(sideProb, H, A));
@@ -683,6 +692,7 @@ async function scoreHeroCandidates(fx) {
       market: "BTTS",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
+      odds: Number(odds.bttsNo),                              // 🔹 store odds
       valueScore: Number((sideProb * odds.bttsNo).toFixed(4)),
       reasoning: reasonBTTSRich(fx, H, A, "BTTS: No", confPct),
     });
@@ -690,6 +700,7 @@ async function scoreHeroCandidates(fx) {
 
   return candidates;
 }
+
 
 async function pickHeroBet({ date, tz, market = "auto" }) {
   const m0 = (market || "auto").toString().toLowerCase();
