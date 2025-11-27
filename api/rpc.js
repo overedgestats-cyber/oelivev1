@@ -745,7 +745,7 @@ function allowedForProBoard(league = {}) {
   return rx.some(r => r.test(name));
 }
 
-/** Build classic (flat) Pro Board; markets: OU Goals, BTTS, 1X2 (NO odds) */
+/** Build classic (flat) Pro Board; markets: OU Goals, BTTS, 1X2 (NO odds) + xG */
 async function buildProBoard({ date, tz }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
@@ -757,6 +757,11 @@ async function buildProBoard({ date, tz }) {
       const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
       if (!homeId || !awayId) continue;
       const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
+
+      // --- xG proxy from scoring rates ---
+      const xgHome  = Number(H.avgFor.toFixed(2));
+      const xgAway  = Number(A.avgFor.toFixed(2));
+      const xgTotal = Number((H.avgFor + A.avgFor).toFixed(2));
 
       const mOU = computeOUModelProb(H, A);
       const ouConfPct = adjustOUConfidence(mOU.pick, mOU.modelProb, H, A);
@@ -797,6 +802,7 @@ async function buildProBoard({ date, tz }) {
         matchTime: clockFromISO(fx?.fixture?.date),
         home: fx?.teams?.home?.name || "",
         away: fx?.teams?.away?.name || "",
+        xg: { home: xgHome, away: xgAway, total: xgTotal },  // <-- NEW xG block
         markets: { ou25: ou, btts: btts, onex2: onex2Rec },
         best: { market: cands[0]?.market || "ou25" }
       });
@@ -814,7 +820,7 @@ async function buildProBoard({ date, tz }) {
   return { date, timezone: tz, groups };
 }
 
-/* --------------- Pro Board grouped by country (flags) ---------------- */
+/* --------------- Pro Board grouped by country (flags + xG) ---------------- */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
@@ -840,8 +846,18 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
 
       const hId = fx?.teams?.home?.id, aId = fx?.teams?.away?.id;
       let rec = null, why = "";
+      let xg = null;
+
       if (hId && aId) {
         const [H, A] = await Promise.all([teamLastN(hId), teamLastN(aId)]);
+
+        // --- xG proxy (per team + total) ---
+        xg = {
+          home: Number(H.avgFor.toFixed(2)),
+          away: Number(A.avgFor.toFixed(2)),
+          total: Number((H.avgFor + A.avgFor).toFixed(2)),
+        };
+
         if (market === "ou_goals") {
           const mOU = computeOUModelProb(H, A);
           const sideProb = mOU.pick === "Over 2.5" ? mOU.overP : mOU.underP;
@@ -861,19 +877,8 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
           const confPct = pct(ox.conf);
           why = reason1X2Rich(fx, H, A, ox.pick, confPct);
           rec = { market: "1X2", pick: ox.pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
-        } else if (market === "ou_cards") {
-          const avg = (H.avgAg + A.avgAg + H.avgFor + A.avgFor) / 4;
-          const pick = avg >= CARDS_BASELINE ? "Over 5.5" : "Under 4.5";
-          const confPct = pct(clampRange(0.55 + Math.abs(avg - CARDS_BASELINE) * 0.06, 0.52, 0.9));
-          why = reasonCardsRich(fx, H, A, pick, confPct);
-          rec = { market: "OU Cards", pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
-        } else if (market === "ou_corners") {
-          const pressure = (H.avgFor + A.avgFor) * 2.2 + (H.avgAg + A.avgAg) * 0.6;
-          const pick = pressure >= CORNERS_BASELINE ? "Over 10.5" : "Under 9.5";
-          const confPct = pct(clampRange(0.55 + Math.abs(pressure - CORNERS_BASELINE) * 0.05, 0.52, 0.9));
-          why = reasonCornersRich(fx, H, A, pick, confPct);
-          rec = { market: "OU Corners", pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
         }
+        // NOTE: ou_cards / ou_corners REMOVED from Pro board as requested
       }
 
       L.fixtures.push({
@@ -882,6 +887,7 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
         leagueId, leagueName, leagueShort, country, flag,
         home: { id: fx.teams?.home?.id, name: fx.teams?.home?.name, logo: fx.teams?.home?.logo },
         away: { id: fx.teams?.away?.id, name: fx.teams?.away?.name, logo: fx.teams?.away?.logo },
+        xg,                // <-- NEW xG attached to grouped fixtures
         recommendation: rec,
         reasoning: why
       });
@@ -969,7 +975,7 @@ async function pbGet(date, tz){
   catch {} return null;
 }
 async function pbSet(date, tz, payload){
-  try { await kvSet(pbRedisKey(date, tz), JSON.stringify(payload), 22 * 60 * 60); } catch {}
+  try { await kvSet(pbRedisKey(date, tz, payload), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
 function pbgRedisKey(date, tz, market){ return `proboardg:${date}:${tz}:${market}`; }
 async function pbgGet(date, tz, market){
@@ -1053,7 +1059,8 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
 
-      const markets = ["ou_goals", "btts", "one_x_two", "ou_cards", "ou_corners"];
+      // Only OU Goals, BTTS, 1X2 now (cards/corners removed)
+      const markets = ["ou_goals", "btts", "one_x_two"];
       let stored = 0;
 
       for (const m of markets) {
@@ -1258,26 +1265,25 @@ export default async function handler(req, res) {
       const payload = await pickHeroBet({ date, tz, market });
 
       try {
-  const h = payload?.heroBet;
-  if (h && h.home && h.away) {
-    const toStore = [{
-      date,
-      matchTime: h.matchTime || null,
-      country: h.country || null,
-      league: h.league || null,
-      home: h.home,
-      away: h.away,
-      market: h.market || null,
-      selection: h.selection || h.market,
-      odds: (typeof h.odds === "number" ? h.odds : null),
-      fixtureId: h.fixtureId || null,
-      source: "hero-bet",
-      status: "pending"
-    }];
-    await writeDailyPicks("hero-bet", date, toStore);
-  }
-} catch (e) {}
-
+        const h = payload?.heroBet;
+        if (h && h.home && h.away) {
+          const toStore = [{
+            date,
+            matchTime: h.matchTime || null,
+            country: h.country || null,
+            league: h.league || null,
+            home: h.home,
+            away: h.away,
+            market: h.market || null,
+            selection: h.selection || h.market,
+            odds: (typeof h.odds === "number" ? h.odds : null),
+            fixtureId: h.fixtureId || null,
+            source: "hero-bet",
+            status: "pending"
+          }];
+          await writeDailyPicks("hero-bet", date, toStore);
+        }
+      } catch (e) {}
 
       putCachedPP(key, payload);
       await ppSet(date, tz, market, payload);
@@ -1308,7 +1314,7 @@ export default async function handler(req, res) {
       if (!process.env.API_FOOTBALL_KEY) return res.status(500).json({ error: "Missing API_FOOTBALL_KEY" });
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
-      const market = (req.query.market || "ou_goals").toString().toLowerCase();
+      const market = (req.query.market || "ou_goals").toString().toLowerCase(); // ou_goals | btts | one_x_two
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
       const key = pbgCacheKey(date, tz, market);
 
