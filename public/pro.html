@@ -98,6 +98,7 @@
     .tooltip:hover::after, .tooltip:focus::after{ opacity:1; }
 
     .reason{ grid-column:1 / -1; margin-top:.35rem; font-size:.92rem; color:#5b6b82; white-space:pre-wrap; }
+    .xg-line { margin-top:.15rem; font-size:.85rem; color:#64748b; }
   </style>
 </head>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -141,7 +142,9 @@
     <!-- PRO CONTENT -->
     <section id="proContent" class="section" style="display:none">
       <h1>Pro Board</h1>
-      <p class="muted">Hero Bet of the Day and full team stats (5/10/15). Filters for Over/Under, BTTS, Cards, Corners, Shots, Goals.</p>
+      <p class="muted">
+        Hero Bet of the Day and full team stats (5/10/15). Filters for Over/Under Goals, BTTS and 1X2 across top leagues.
+      </p>
 
       <section class="section" style="padding-top:.5rem">
         <h2>Hero Bet of the Day</h2>
@@ -156,8 +159,6 @@
             <label for="boardMarket" class="muted-sm">Market:</label>
             <select id="boardMarket" class="market">
               <option value="ou_goals">Under/Over Goals</option>
-              <option value="ou_cards">Under/Over Cards</option>
-              <option value="ou_corners">Under/Over Corners</option>
               <option value="one_x_two">1X2</option>
               <option value="btts">BTTS — Yes/No</option>
             </select>
@@ -304,13 +305,18 @@
       if (p.stakeGuide) chips.push(`<span class="badge-chip badge-stake">Stake ${p.stakeGuide}</span>`);
 
       const trend = p.histTrend || p.trend || p.reasoning || "";
+      const priceStr = (typeof p.odds === 'number' && p.odds > 1)
+        ? ` @ <span style="font-weight:700">${p.odds.toFixed(2)}</span>`
+        : "";
 
       return `
         <div class="grid-2">
           <div>
             <div style="font-weight:600">${p.country ? `${p.country} — ` : ""}${p.league}</div>
             <div class="muted-sm">${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong></div>
-            <div class="muted-sm" style="margin-top:.25rem"><strong>${p.selection || p.market || "—"}</strong></div>
+            <div class="muted-sm" style="margin-top:.25rem">
+              <strong>${p.selection || p.market || "—"}</strong>${priceStr}
+            </div>
           </div>
           <div style="text-align:right; display:flex; gap:.35rem; flex-wrap:wrap; justify-content:flex-end">
             ${chips.join('')}
@@ -378,6 +384,10 @@
 
             const trend = fx.trend || rec?.histTrend || rec?.trend || rec?.note || "";
 
+            const xgLine = (typeof fx.xgHome === 'number' && typeof fx.xgAway === 'number')
+              ? `<div class="xg-line">xG: ${fx.xgHome.toFixed(2)} – ${fx.xgAway.toFixed(2)}</div>`
+              : "";
+
             const left = document.createElement('div');
             left.innerHTML = `
               <div class="teams">
@@ -385,6 +395,7 @@
                 <span class="sep">vs</span>
                 ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}<span class="team">${fx.away?.name || ""}</span>
               </div>
+              ${xgLine}
               ${trend ? `<div class="reason">${trend}</div>` : (fx.reasoning ? `<div class="reason">${fx.reasoning}</div>` : ``)}
             `;
 
