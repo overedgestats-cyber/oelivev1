@@ -257,7 +257,7 @@ function isYouthFixture(fx = {}) {
   return hit(ln) || hit(h) || hit(a);
 }
 
-/* ===== Rich reasoning text ===== */
+/* ===== Rich reasoning text (kept for Free Picks / Hero) ===== */
 const CARDS_BASELINE = 4.8;
 const CORNERS_BASELINE = 9.7;
 const fmtN = (x, d = 1) => (Number.isFinite(x) ? Number(x).toFixed(d) : "-");
@@ -268,10 +268,9 @@ function reasonOURich(fx, H, A, pick, confPct, modelProbPct) {
   const h = fx.teams?.home?.name || "Home";
   const a = fx.teams?.away?.name || "Away";
 
-  // Core signals
   const over = (H.over25Rate + A.over25Rate) / 2;
   const btts = (H.bttsRate + A.bttsRate) / 2;
-  const pace = (H.avgFor + A.avgFor + H.avgAg + A.avgAg) / 2; // simple tempo proxy
+  const pace = (H.avgFor + A.avgFor + H.avgAg + A.avgAg) / 2;
   const parity = Math.abs(H.ppg - A.ppg) <= 0.30 ? "evenly matched"
                   : (H.ppg > A.ppg ? `${h} edge` : `${a} edge`);
   const csBoth = (H.cleanSheetRate + A.cleanSheetRate) / 2;
@@ -435,38 +434,84 @@ function adjustBTTSConfidence(pick, modelProb, H, A) {
 /* -------------------- Team stats + odds utilities -------------------- */
 async function teamLastN(teamId, n = 12) {
   const rows = await apiGet("/fixtures", { team: teamId, last: n });
+
   let gp = 0, goalsFor = 0, goalsAg = 0, over25 = 0, under25 = 0, btts = 0;
   let wins = 0, draws = 0, losses = 0, cs = 0, fts = 0;
   let homeG = 0, awayG = 0, o25Home = 0, o25Away = 0;
 
+  // NEW: split home / away detail
+  let homeGF = 0, homeGA = 0, awayGF = 0, awayGA = 0;
+  let homeCS = 0, homeFTS = 0, awayCS = 0, awayFTS = 0;
+  let homePoints = 0, awayPoints = 0;
+
   for (const r of rows) {
-    const gh = r?.goals?.home ?? 0, ga = r?.goals?.away ?? 0, total = gh + ga;
+    const gh = r?.goals?.home ?? 0;
+    const ga = r?.goals?.away ?? 0;
+    const total = gh + ga;
+
     const isHome = r?.teams?.home?.id === teamId;
-    const tf = isHome ? gh : ga;
-    const ta = isHome ? ga : gh;
+    const tf = isHome ? gh : ga; // team goals for
+    const ta = isHome ? ga : gh; // team goals against
 
     gp += 1;
-    goalsFor += tf; goalsAg += ta;
+    goalsFor += tf;
+    goalsAg += ta;
 
     if (total >= 3) over25 += 1;
     if (total <= 2) under25 += 1;
     if (gh > 0 && ga > 0) btts += 1;
 
-    if (tf > ta) wins += 1; else if (tf === ta) draws += 1; else losses += 1;
+    if (tf > ta)      wins  += 1;
+    else if (tf === ta) draws += 1;
+    else              losses += 1;
 
-    if (ta === 0) cs += 1;
+    if (ta === 0) cs  += 1;
     if (tf === 0) fts += 1;
 
-    if (isHome) { homeG += 1; if (total >= 3) o25Home += 1; }
-    else { awayG += 1; if (total >= 3) o25Away += 1; }
+    if (isHome) {
+      homeG += 1;
+      homeGF += tf;
+      homeGA += ta;
+      if (total >= 3) o25Home += 1;
+      if (ta === 0)   homeCS  += 1;
+      if (tf === 0)   homeFTS += 1;
+      if (tf > ta) homePoints += 3;
+      else if (tf === ta) homePoints += 1;
+    } else {
+      awayG += 1;
+      awayGF += tf;
+      awayGA += ta;
+      if (total >= 3) o25Away += 1;
+      if (ta === 0)   awayCS  += 1;
+      if (tf === 0)   awayFTS += 1;
+      if (tf > ta) awayPoints += 3;
+      else if (tf === ta) awayPoints += 1;
+    }
   }
 
-  const ppg = gp ? (wins * 3 + draws * 1) / gp : 0;
+  const avgFor = gp ? goalsFor / gp : 0;
+  const avgAg  = gp ? goalsAg  / gp : 0;
+  const ppg    = gp ? (wins * 3 + draws) / gp : 0;
+
+  const avgForHome = homeG ? homeGF / homeG : avgFor;
+  const avgAgHome  = homeG ? homeGA / homeG : avgAg;
+  const avgForAway = awayG ? awayGF / awayG : avgFor;
+  const avgAgAway  = awayG ? awayGA / awayG : avgAg;
+
+  const cleanSheetRate     = gp     ? cs  / gp     : 0;
+  const failToScoreRate    = gp     ? fts / gp     : 0;
+  const cleanSheetRateHome = homeG  ? homeCS / homeG : 0;
+  const cleanSheetRateAway = awayG  ? awayCS / awayG : 0;
+  const failToScoreRateHome = homeG ? homeFTS / homeG : 0;
+  const failToScoreRateAway = awayG ? awayFTS / awayG : 0;
+  const ppgHome            = homeG  ? homePoints / homeG : 0;
+  const ppgAway            = awayG  ? awayPoints / awayG : 0;
 
   return {
+    // existing aggregates
     games: gp,
-    avgFor: gp ? goalsFor / gp : 0,
-    avgAg: gp ? goalsAg / gp : 0,
+    avgFor,
+    avgAg,
     over25Rate: gp ? over25 / gp : 0,
     under25Rate: gp ? under25 / gp : 0,
     bttsRate: gp ? btts / gp : 0,
@@ -475,11 +520,33 @@ async function teamLastN(teamId, n = 12) {
     winRate:   gp ? wins  / gp : 0,
     drawRate:  gp ? draws / gp : 0,
     lossRate:  gp ? losses/ gp : 0,
-    cleanSheetRate:  gp ? cs  / gp : 0,
-    failToScoreRate: gp ? fts / gp : 0,
+    cleanSheetRate,
+    failToScoreRate,
 
     o25HomeRate: homeG ? o25Home / homeG : 0,
     o25AwayRate: awayG ? o25Away / awayG : 0,
+
+    // new splits & totals
+    homeGames: homeG,
+    awayGames: awayG,
+
+    goalsForHome: homeGF,
+    goalsAgainstHome: homeGA,
+    goalsForAway: awayGF,
+    goalsAgainstAway: awayGA,
+
+    avgForHome,
+    avgAgHome,
+    avgForAway,
+    avgAgAway,
+
+    cleanSheetRateHome,
+    cleanSheetRateAway,
+    failToScoreRateHome,
+    failToScoreRateAway,
+
+    ppgHome,
+    ppgAway,
   };
 }
 
@@ -629,7 +696,7 @@ async function scoreHeroCandidates(fx) {
       market: "Over 2.5",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
-      odds: Number(odds.over25),                             // 🔹 store odds
+      odds: Number(odds.over25),
       valueScore: Number((sideProb * odds.over25).toFixed(4)),
       reasoning: reasonOURich(fx, H, A, "Over 2.5", confPct, pct(sideProb)),
     });
@@ -649,7 +716,7 @@ async function scoreHeroCandidates(fx) {
       market: "Under 2.5",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
-      odds: Number(odds.under25),                            // 🔹 store odds
+      odds: Number(odds.under25),
       valueScore: Number((sideProb * odds.under25).toFixed(4)),
       reasoning: reasonOURich(fx, H, A, "Under 2.5", confPct, pct(sideProb)),
     });
@@ -672,7 +739,7 @@ async function scoreHeroCandidates(fx) {
       market: "BTTS",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
-      odds: Number(odds.bttsYes),                             // 🔹 store odds
+      odds: Number(odds.bttsYes),
       valueScore: Number((sideProb * odds.bttsYes).toFixed(4)),
       reasoning: reasonBTTSRich(fx, H, A, "BTTS: Yes", confPct),
     });
@@ -692,7 +759,7 @@ async function scoreHeroCandidates(fx) {
       market: "BTTS",
       confidencePct: confPct,
       modelProbPct: pct(sideProb),
-      odds: Number(odds.bttsNo),                              // 🔹 store odds
+      odds: Number(odds.bttsNo),
       valueScore: Number((sideProb * odds.bttsNo).toFixed(4)),
       reasoning: reasonBTTSRich(fx, H, A, "BTTS: No", confPct),
     });
@@ -700,7 +767,6 @@ async function scoreHeroCandidates(fx) {
 
   return candidates;
 }
-
 
 async function pickHeroBet({ date, tz, market = "auto" }) {
   const m0 = (market || "auto").toString().toLowerCase();
@@ -769,7 +835,7 @@ async function buildProBoard({ date, tz }) {
       if (!homeId || !awayId) continue;
       const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
 
-      // --- xG proxy from scoring rates ---
+      // xG proxy from scoring rates
       const xgHome  = Number(H.avgFor.toFixed(2));
       const xgAway  = Number(A.avgFor.toFixed(2));
       const xgTotal = Number((H.avgFor + A.avgFor).toFixed(2));
@@ -813,7 +879,7 @@ async function buildProBoard({ date, tz }) {
         matchTime: clockFromISO(fx?.fixture?.date),
         home: fx?.teams?.home?.name || "",
         away: fx?.teams?.away?.name || "",
-        xg: { home: xgHome, away: xgAway, total: xgTotal },  // <-- NEW xG block
+        xg: { home: xgHome, away: xgAway, total: xgTotal },
         markets: { ou25: ou, btts: btts, onex2: onex2Rec },
         best: { market: cands[0]?.market || "ou25" }
       });
@@ -831,7 +897,7 @@ async function buildProBoard({ date, tz }) {
   return { date, timezone: tz, groups };
 }
 
-/* --------------- Pro Board grouped by country (flags + xG) ---------------- */
+/* --------------- Pro Board grouped by country (flags + xG + stats) ---------------- */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
@@ -850,66 +916,135 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
         .replace(/\s*\(Regular Season\)\s*/i, "")
         .replace(/\s*Group\s+[A-Z]\s*$/i, "");
 
-      if (!byCountry.has(country)) byCountry.set(country, { country, flag, leagues: new Map() });
+      if (!byCountry.has(country)) {
+        byCountry.set(country, { country, flag, leagues: new Map() });
+      }
       const c = byCountry.get(country);
-      if (!c.leagues.has(leagueId)) c.leagues.set(leagueId, { leagueId, leagueName, leagueShort, fixtures: [] });
+      if (!c.leagues.has(leagueId)) {
+        c.leagues.set(leagueId, { leagueId, leagueName, leagueShort, fixtures: [] });
+      }
       const L = c.leagues.get(leagueId);
 
-      const hId = fx?.teams?.home?.id, aId = fx?.teams?.away?.id;
-      let rec = null, why = "";
-      let xg = null;
+      const hId = fx?.teams?.home?.id;
+      const aId = fx?.teams?.away?.id;
+
+      let rec = null;
+      let stats = null;
+      let xgHome = null;
+      let xgAway = null;
 
       if (hId && aId) {
         const [H, A] = await Promise.all([teamLastN(hId), teamLastN(aId)]);
 
-        // --- xG proxy (per team + total) ---
-        xg = {
-          home: Number(H.avgFor.toFixed(2)),
-          away: Number(A.avgFor.toFixed(2)),
-          total: Number((H.avgFor + A.avgFor).toFixed(2)),
-        };
+        // xG proxy (per game) – from attacking output
+        xgHome = Number((H.avgFor || 0).toFixed(2));
+        xgAway = Number((A.avgFor || 0).toFixed(2));
+        const xgTotal = Number((xgHome + xgAway).toFixed(2));
 
+        // Model recommendation per selected market
         if (market === "ou_goals") {
           const mOU = computeOUModelProb(H, A);
           const sideProb = mOU.pick === "Over 2.5" ? mOU.overP : mOU.underP;
-          const confPct = pct(calibratedConfidence(sideProb, H, A));
           const modelPct = pct(sideProb);
-          why = reasonOURich(fx, H, A, mOU.pick, confPct, modelPct);
-          rec = { market: "OU Goals", pick: mOU.pick, confidencePct: confPct, modelProbPct: modelPct, trend: why };
+          const confPct = pct(calibratedConfidence(sideProb, H, A));
+          rec = {
+            market: "OU Goals",
+            pick: mOU.pick,
+            confidencePct: confPct,
+            modelProbPct: modelPct,
+          };
         } else if (market === "btts") {
           const mBT = computeBTTSModelProb(H, A);
           const sideProb = mBT.pick.endsWith("Yes") ? mBT.bttsP : (1 - mBT.bttsP);
-          const confPct = pct(calibratedConfidence(sideProb, H, A));
           const modelPct = pct(sideProb);
-          why = reasonBTTSRich(fx, H, A, mBT.pick, confPct);
-          rec = { market: "BTTS", pick: mBT.pick, confidencePct: confPct, modelProbPct: modelPct, trend: why };
+          const confPct = pct(calibratedConfidence(sideProb, H, A));
+          rec = {
+            market: "BTTS",
+            pick: mBT.pick,
+            confidencePct: confPct,
+            modelProbPct: modelPct,
+          };
         } else if (market === "one_x_two") {
           const ox = onex2Lean(H, A);
           const confPct = pct(ox.conf);
-          why = reason1X2Rich(fx, H, A, ox.pick, confPct);
-          rec = { market: "1X2", pick: ox.pick, confidencePct: confPct, modelProbPct: confPct, trend: why };
+          rec = {
+            market: "1X2",
+            pick: ox.pick,
+            confidencePct: confPct,
+            modelProbPct: confPct,
+          };
         }
-        // NOTE: ou_cards / ou_corners REMOVED from Pro board as requested
+
+        // Compact stats pack for UI
+        stats = {
+          sampleSize: Math.max(H.games || 0, A.games || 0) || null,
+          home: {
+            xg: xgHome,
+            avgGoalsFor: H.avgForHome ?? H.avgFor ?? 0,
+            avgGoalsAgainst: H.avgAgHome ?? H.avgAg ?? 0,
+            cleanSheetRate: H.cleanSheetRateHome ?? H.cleanSheetRate ?? 0,
+            failToScoreRate: H.failToScoreRateHome ?? H.failToScoreRate ?? 0,
+            ppg: H.ppgHome ?? H.ppg ?? 0,
+            goalsFor: H.goalsForHome ?? 0,
+            goalsAgainst: H.goalsAgainstHome ?? 0,
+            over25Rate: H.o25HomeRate ?? 0,
+            bttsRate: H.bttsRate ?? 0,
+          },
+          away: {
+            xg: xgAway,
+            avgGoalsFor: A.avgForAway ?? A.avgFor ?? 0,
+            avgGoalsAgainst: A.avgAgAway ?? A.avgAg ?? 0,
+            cleanSheetRate: A.cleanSheetRateAway ?? A.cleanSheetRate ?? 0,
+            failToScoreRate: A.failToScoreRateAway ?? A.failToScoreRate ?? 0,
+            ppg: A.ppgAway ?? A.ppg ?? 0,
+            goalsFor: A.goalsForAway ?? 0,
+            goalsAgainst: A.goalsAgainstAway ?? 0,
+            over25Rate: A.o25AwayRate ?? 0,
+            bttsRate: A.bttsRate ?? 0,
+          },
+          matchup: {
+            xgTotal,
+            bttsLikelihood: clamp01(((H.bttsRate || 0) + (A.bttsRate || 0)) / 2),
+            over25Likelihood: clamp01(((H.over25Rate || 0) + (A.over25Rate || 0)) / 2),
+          },
+        };
       }
 
       L.fixtures.push({
         fixtureId: fx.fixture?.id,
         time: clockFromISO(fx.fixture?.date),
-        leagueId, leagueName, leagueShort, country, flag,
-        home: { id: fx.teams?.home?.id, name: fx.teams?.home?.name, logo: fx.teams?.home?.logo },
-        away: { id: fx.teams?.away?.id, name: fx.teams?.away?.name, logo: fx.teams?.away?.logo },
-        xg,                // <-- NEW xG attached to grouped fixtures
+        leagueId,
+        leagueName,
+        leagueShort,
+        country,
+        flag,
+        home: {
+          id: fx.teams?.home?.id,
+          name: fx.teams?.home?.name,
+          logo: fx.teams?.home?.logo,
+        },
+        away: {
+          id: fx.teams?.away?.id,
+          name: fx.teams?.away?.name,
+          logo: fx.teams?.away?.logo,
+        },
+        xgHome,
+        xgAway,
+        stats,
         recommendation: rec,
-        reasoning: why
       });
-    } catch {}
+    } catch {
+      // ignore individual fixture errors
+    }
   }
 
   const groups = Array.from(byCountry.values())
-    .sort((a,b)=> a.country.localeCompare(b.country))
-    .map(c => ([
-      c.country, c.flag, Array.from(c.leagues.values())
-        .sort((a,b)=> (a.leagueName || "").localeCompare(b.leagueName || ""))
+    .sort((a, b) => a.country.localeCompare(b.country))
+    .map((c) => ([
+      c.country,
+      c.flag,
+      Array.from(c.leagues.values())
+        .sort((a, b) => (a.leagueName || "").localeCompare(b.leagueName || "")),
     ]))
     .map(([country, flag, leagues]) => ({ country, flag, leagues }));
 
@@ -986,13 +1121,15 @@ async function pbGet(date, tz){
   catch {} return null;
 }
 async function pbSet(date, tz, payload){
-  try { await kvSet(pbRedisKey(date, tz, payload), JSON.stringify(payload), 22 * 60 * 60); } catch {}
+  try { await kvSet(pbRedisKey(date, tz), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
 function pbgRedisKey(date, tz, market){ return `proboardg:${date}:${tz}:${market}`; }
 async function pbgGet(date, tz, market){
-  try { const v = await kvGet(pbgRedisKey(date, tz, market)); 
-    if  (v && typeof v.result === "string" && v.result) return JSON.parse(v.result);
-} catch {} return null;
+  try {
+    const v = await kvGet(pbgRedisKey(date, tz, market)); 
+    if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result);
+  } catch {} 
+  return null;
 }
 async function pbgSet(date, tz, market, payload){
   try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}

@@ -359,6 +359,17 @@
 
     boardMarketSel.addEventListener('change', loadBoardGrouped);
 
+    // helpers for stats formatting
+    const fmtPct = (v) =>
+      (typeof v === 'number' && !Number.isNaN(v))
+        ? `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`
+        : '—';
+
+    const fmtNum1 = (v) =>
+      (typeof v === 'number' && !Number.isNaN(v))
+        ? v.toFixed(1)
+        : '—';
+
     function renderGroupedBoard(payload){
       if (!payload || !payload.groups || !payload.groups.length) {
         boardEl.innerHTML = "<p>No matches found today.</p>";
@@ -398,22 +409,46 @@
             const pickLabel = `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}`;
             const conf = (typeof rec.confidencePct === 'number') ? rec.confidencePct : null;
             const model = (typeof rec.modelProbPct === 'number') ? rec.modelProbPct : conf;
+
             const fair  = (typeof rec.fairOdds === 'number') ? rec.fairOdds.toFixed(2) : null;
             const edge  = (typeof rec.edge === 'number') ? rec.edge : null;
             const stake = rec.stakeGuide || null;
 
-            const trend =
-              fx.reasoning ||
-              rec.reasoning ||
-              rec.histTrend ||
-              rec.trend ||
-              rec.note ||
-              "";
+            const s = fx.stats || null;
 
-            const hasXg = fx.xg && typeof fx.xg.home === 'number' && typeof fx.xg.away === 'number';
+            const hasXg = (typeof fx.xgHome === 'number' && typeof fx.xgAway === 'number')
+              || (fx.xg && typeof fx.xg.home === 'number' && typeof fx.xg.away === 'number');
+
+            const xgH = fx.xg?.home ?? fx.xgHome;
+            const xgA = fx.xg?.away ?? fx.xgAway;
+
             const xgLine = hasXg
-              ? `<div class="xg-line">xG: ${fx.xg.home.toFixed(2)} – ${fx.xg.away.toFixed(2)}</div>`
+              ? `<div class="xg-line">xG: ${fmtNum1(xgH)} – ${fmtNum1(xgA)}</div>`
               : "";
+
+            let statsHtml = "";
+            if (s) {
+              statsHtml = `
+                <div class="reason">
+                  <div style="font-weight:600; margin-bottom:.15rem;">Last ${s.sampleSize || 'N'} matches</div>
+                  <div class="muted-sm">
+                    <strong>${fx.home?.name || ''}</strong>
+                    · GF ${fmtNum1(s.home.avgGoalsFor)} / GA ${fmtNum1(s.home.avgGoalsAgainst)}
+                    · CS ${fmtPct(s.home.cleanSheetRate)} · FTS ${fmtPct(s.home.failToScoreRate)}
+                    · PPG ${fmtNum1(s.home.ppg)}
+                  </div>
+                  <div class="muted-sm">
+                    <strong>${fx.away?.name || ''}</strong>
+                    · GF ${fmtNum1(s.away.avgGoalsFor)} / GA ${fmtNum1(s.away.avgGoalsAgainst)}
+                    · CS ${fmtPct(s.away.cleanSheetRate)} · FTS ${fmtPct(s.away.failToScoreRate)}
+                    · PPG ${fmtNum1(s.away.ppg)}
+                  </div>
+                  <div class="muted-sm">
+                    Matchup: O2.5 ~ ${fmtPct(s.matchup.over25Likelihood)} · BTTS ~ ${fmtPct(s.matchup.bttsLikelihood)}
+                  </div>
+                </div>
+              `;
+            }
 
             const left = document.createElement('div');
             left.innerHTML = `
@@ -423,7 +458,7 @@
                 ${fx.away?.logo ? `<img class="logo" src="${fx.away.logo}" alt="">` : ""}<span class="team">${fx.away?.name || ""}</span>
               </div>
               ${xgLine}
-              ${trend ? `<div class="reason">${trend}</div>` : ``}
+              ${statsHtml}
             `;
 
             const meta = document.createElement('div');
