@@ -75,6 +75,14 @@
       border:1px solid #e6e8ee;
       border-radius:16px;
       box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
+      cursor:pointer;
+    }
+    /* ✅ NEW: highlight selected rows */
+    .fixture-row.is-selected{
+      border-color:#cfe4ff;
+      box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.10);
+      outline:2px solid rgba(29,78,216,.12);
+      background:#f8fbff;
     }
 
     .fixture-meta{ text-align:right; min-width:300px; align-self:start; }
@@ -165,6 +173,26 @@
       flex-wrap:wrap;
     }
 
+    /* ✅ NEW: slip bar */
+    .slipbar{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:14px;
+      width:min(980px, calc(100% - 24px));
+      background:#ffffff;
+      border:1px solid #e6e8ee;
+      border-radius:16px;
+      box-shadow: 0 8px 30px rgba(12,18,32,.18);
+      padding:.6rem .7rem;
+      display:flex;
+      align-items:center;
+      gap:.6rem;
+      z-index:9999;
+    }
+    .slipbar .spacer{ flex:1; }
+    .slipbar .toast{ font-size:.9rem; opacity:.75; display:none; }
+
     /* ✅ Mobile: stack nicely */
     @media (max-width: 860px){
       .fixture-row{ grid-template-columns: 1fr; }
@@ -250,12 +278,22 @@
             Pick confidence
             <span class="tooltip" tabindex="0" data-tip="Our conviction in recommending this pick today. Blends model probability with slate quality and variance controls.">ⓘ</span>
           </span>
+          <span class="muted-sm" style="margin-left:auto">Tip: tap a row to add it to your slip.</span>
         </div>
 
         <div id="board" class="pro-board">Loading…</div>
       </section>
     </section>
   </main>
+
+  <!-- ✅ NEW: Slip builder bar -->
+  <div id="slipBar" class="slipbar" style="display:none">
+    <span id="selCount" class="badge pill" style="display:none"></span>
+    <div class="spacer"></div>
+    <button id="btnCopySlip" class="btn small" type="button">Copy slip</button>
+    <button id="btnClearSlip" class="btn small secondary" type="button">Clear</button>
+    <span id="copyToast" class="toast">Copied</span>
+  </div>
 
   <footer class="site-footer">
     <span>© <span id="y"></span> OverEdge — Data beats gut</span>
@@ -284,22 +322,82 @@
     const navAuth = document.getElementById('nav-auth');
     const navPlan = document.getElementById('nav-plan');
 
+    // ✅ Slip UI
+    const slipBar = document.getElementById('slipBar');
+    const selCountEl = document.getElementById('selCount');
+    const btnCopySlip = document.getElementById('btnCopySlip');
+    const btnClearSlip = document.getElementById('btnClearSlip');
+    const copyToast = document.getElementById('copyToast');
+
     let auth = null;
     let currentUser = null;
-
-    // (kept harmless; it no-ops if the counter element is absent)
-    function updateSelCount(){
-      const el = document.getElementById('selCount');
-      if (!el) return;
-      const n = document.querySelectorAll('.pick-checkbox:checked').length;
-      el.textContent = `${n} selected`;
-      el.style.display = n ? 'inline' : 'none';
-    }
 
     function tzGuess(){
       try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Sofia"; }
       catch { return "Europe/Sofia"; }
     }
+
+    // ✅ Slip helpers
+    function toast(msg = "Copied"){
+      copyToast.textContent = msg;
+      copyToast.style.display = "inline";
+      clearTimeout(window.__oeToastT);
+      window.__oeToastT = setTimeout(()=>{ copyToast.style.display="none"; }, 1100);
+    }
+
+    function updateSelCount(){
+      const boxes = Array.from(document.querySelectorAll('.pick-checkbox'));
+      const checked = boxes.filter(b => b.checked);
+
+      // update row highlight
+      boxes.forEach(cb => {
+        const row = cb.closest('.fixture-row');
+        if (row) row.classList.toggle('is-selected', !!cb.checked);
+      });
+
+      const n = checked.length;
+      selCountEl.textContent = `${n} selected`;
+      selCountEl.style.display = n ? 'inline-flex' : 'none';
+      slipBar.style.display = n ? 'flex' : 'none';
+    }
+
+    function buildSlipText(){
+      const checked = Array.from(document.querySelectorAll('.pick-checkbox:checked'));
+      const lines = checked.map(cb => {
+        const row = cb.closest('.fixture-row');
+        const home = row?.dataset?.home || "";
+        const away = row?.dataset?.away || "";
+        const pick = row?.dataset?.pick || "";
+        const time = row?.dataset?.time || "";
+        const comp = row?.dataset?.comp || "";
+        const bits = [];
+        if (time) bits.push(time);
+        if (comp) bits.push(comp);
+        bits.push(`${home} vs ${away}`);
+        if (pick) bits.push(`— ${pick}`);
+        return bits.join(" · ");
+      });
+
+      // Nice header line
+      const head = `OverEdge Slip (${new Date().toLocaleDateString("en-GB")})`;
+      return [head, ...lines].join("\n");
+    }
+
+    btnCopySlip.addEventListener('click', async () => {
+      try {
+        const text = buildSlipText();
+        await navigator.clipboard.writeText(text);
+        toast("Copied");
+      } catch {
+        toast("Copy failed");
+        alert("Could not copy. Your browser may block clipboard access.");
+      }
+    });
+
+    btnClearSlip.addEventListener('click', () => {
+      document.querySelectorAll('.pick-checkbox').forEach(cb => cb.checked = false);
+      updateSelCount();
+    });
 
     async function initFirebase() {
       const cfg = await fetch('/api/rpc?action=public-config').then(r => r.json()).then(d => d.firebase || {});
@@ -340,6 +438,7 @@
     function showLocked(){
       locked.style.display = 'block';
       proContent.style.display = 'none';
+      slipBar.style.display = 'none';
     }
     function showPro(){
       locked.style.display = 'none';
@@ -415,7 +514,7 @@
             ${chips.join('')}
           </div>
         </div>
-        <div style="margin-top:.5rem; white-space:pre-wrap">${trend}</div>
+        <div style="margin-top:.5rem">${trend}</div>
       `;
     }
 
@@ -446,8 +545,10 @@
     function renderGroupedBoard(payload){
       if (!payload || !payload.groups || !payload.groups.length) {
         boardEl.innerHTML = "<p>No matches found today.</p>";
+        updateSelCount();
         return;
       }
+
       const container = document.createDocumentFragment();
 
       payload.groups.forEach(group => {
@@ -482,10 +583,6 @@
             const pickLabel = `${rec.market}${rec.pick ? ` — ${rec.pick}` : ""}`;
             const conf = (typeof rec.confidencePct === 'number') ? rec.confidencePct : null;
             const model = (typeof rec.modelProbPct === 'number') ? rec.modelProbPct : conf;
-
-            const fair  = (typeof rec.fairOdds === 'number') ? rec.fairOdds.toFixed(2) : null;
-            const edge  = (typeof rec.edge === 'number') ? rec.edge : null;
-            const stake = rec.stakeGuide || null;
 
             const s = fx.stats || null;
 
@@ -563,9 +660,6 @@
                   Confidence ${typeof conf==='number' ? `${conf}%` : '—'}
                   <span class="tooltip" tabindex="0" data-tip="Pick confidence: our conviction in recommending this today (model + slate quality + variance controls).">ⓘ</span>
                 </span>
-                ${fair ? `<span class="badge-chip badge-fair">Fair ${fair}<span class="tooltip" tabindex="0" data-tip="Fair odds derived from our model probability (1 / p).">ⓘ</span></span>` : ``}
-                ${typeof edge === 'number' ? `<span class="badge-chip badge-edge">Edge ${(edge>=0?'+':'')}${edge.toFixed(2)}<span class="tooltip" tabindex="0" data-tip="Value vs market (book odds – fair odds). Positive = value.">ⓘ</span></span>` : ``}
-                ${stake ? `<span class="badge-chip badge-stake">Stake ${stake}<span class="tooltip" tabindex="0" data-tip="Stake guide based on confidence and edge (e.g., Low / Medium / High).">ⓘ</span></span>` : ``}
               </div>
             `;
 
@@ -573,7 +667,24 @@
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.className = 'pick-checkbox';
+            cb.setAttribute('aria-label', 'Add pick to slip');
             right.appendChild(cb);
+
+            // ✅ attach dataset for slip copy
+            row.dataset.home = fx.home?.name || "";
+            row.dataset.away = fx.away?.name || "";
+            row.dataset.time = fx.time || "";
+            row.dataset.comp = L.leagueName || "";
+            row.dataset.pick = pickLabel;
+
+            // ✅ click row toggles checkbox (but not when clicking checkbox itself)
+            row.addEventListener('click', (e) => {
+              const t = e.target;
+              if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON' || t.tagName === 'A' || t.closest('button') || t.closest('a'))) return;
+              cb.checked = !cb.checked;
+              updateSelCount();
+            });
+
             cb.addEventListener('change', updateSelCount);
 
             row.appendChild(left);
@@ -599,11 +710,14 @@
       try {
         boardEl.innerHTML = "Loading…";
         const market = boardMarketSel.value;
+
+        // NOTE: keeping refresh=1 since you had it; remove if you want caching to work harder.
         const res = await fetch(`/api/rpc?action=pro-board-grouped&market=${encodeURIComponent(market)}&tz=${encodeURIComponent(tzGuess())}&refresh=1`);
         const data = await res.json();
         renderGroupedBoard(data);
       } catch {
         boardEl.innerHTML = "<p>Could not load Pro Board.</p>";
+        updateSelCount();
       }
     }
 

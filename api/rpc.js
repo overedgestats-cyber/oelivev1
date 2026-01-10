@@ -218,7 +218,7 @@ const EURO_COUNTRIES = [
   "Faroe Islands","Andorra","San Marino","Gibraltar"
 ];
 const CUP_TOKENS = ["cup","pokal","beker","taça","taca","kup","kupa","cupa","coppa","copa","karik","knvb","dfb","scottish cup"];
-const DENY_TIER_TOKENS = ["oberliga","regionalliga","3. liga","iii liga","liga 3","third division","liga 4","fourth","fifth","amateur","county","ykkönen","2. divisjon avd","reserve","reserves"," ii"," b team"," b-team"," b-team"];
+const DENY_TIER_TOKENS = ["oberliga","regionalliga","3. liga","iii liga","liga 3","third division","liga 4","fourth","fifth","amateur","county","ykkönen","2. divisjon avd","reserve","reserves"," ii"," b team"," b-team"," b-team"," b-team"];
 const TIER1_PATTERNS = [/premier/i, /super\s?lig(?![ae])/i, /super\s?league(?!\s?2)/i, /bundesliga(?!.*2)/i, /la\s?liga(?!\s?2)/i, /serie\s?a/i, /ligue\s?1/i, /eredivisie/i, /ekstraklasa/i, /allsvenskan/i, /eliteserien/i, /superliga(?!\s?2)/i];
 const TIER2_PATTERNS = [/championship/i, /2\.\s?bundesliga/i, /bundesliga\s?2/i, /la\s?liga\s?2/i, /segunda/i, /segund/i, /serie\s?b/i, /ligue\s?2/i, /eerste\s?divisie/i, /liga\s?portugal\s?2/i, /challenger\s?pro\s?league/i, /challenge\s?league/i, /1\.\s?lig/i, /2\.\s?liga/i, /superettan/i, /obos/i, /i\s?liga(?!\s?2)/i, /prva\s?liga/i, /super\s?league\s?2/i];
 function isEuroCountry(c = "") { return EURO_COUNTRIES.includes(c); }
@@ -600,7 +600,6 @@ async function getOddsMap(fixtureId) {
     return out;
   } catch { return null; }
 }
-
 /* ------------------------ Free Picks (OU 2.5) ------------------------ */
 async function scoreFixtureForOU25(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
@@ -898,7 +897,13 @@ async function buildProBoard({ date, tz }) {
 }
 
 /* --------------- Pro Board grouped by country (flags + xG + stats) ---------------- */
-async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
+/**
+ * ✅ UPDATED:
+ * - supports n=5|10|15 window
+ * - always returns ALL 3 picks in fx.recos
+ * - keeps fx.recommendation for current selected market (compat)
+ */
+async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
   fixtures = fixtures.filter(fx => !isYouthFixture(fx));
   fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
@@ -929,51 +934,33 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
       const aId = fx?.teams?.away?.id;
 
       let rec = null;
+      let recos = null;   // ✅ NEW: all 3 picks
       let stats = null;
       let xgHome = null;
       let xgAway = null;
 
       if (hId && aId) {
-        const [H, A] = await Promise.all([teamLastN(hId), teamLastN(aId)]);
+        const N = [5,10,15].includes(Number(n)) ? Number(n) : 15;
+        const [H, A] = await Promise.all([teamLastN(hId, N), teamLastN(aId, N)]);
 
         // xG proxy (per game) – from attacking output
         xgHome = Number((H.avgFor || 0).toFixed(2));
         xgAway = Number((A.avgFor || 0).toFixed(2));
         const xgTotal = Number((xgHome + xgAway).toFixed(2));
 
-        // Model recommendation per selected market
-        if (market === "ou_goals") {
-          const mOU = computeOUModelProb(H, A);
-          const sideProb = mOU.pick === "Over 2.5" ? mOU.overP : mOU.underP;
-          const modelPct = pct(sideProb);
-          const confPct = pct(calibratedConfidence(sideProb, H, A));
-          rec = {
-            market: "OU Goals",
-            pick: mOU.pick,
-            confidencePct: confPct,
-            modelProbPct: modelPct,
-          };
-        } else if (market === "btts") {
-          const mBT = computeBTTSModelProb(H, A);
-          const sideProb = mBT.pick.endsWith("Yes") ? mBT.bttsP : (1 - mBT.bttsP);
-          const modelPct = pct(sideProb);
-          const confPct = pct(calibratedConfidence(sideProb, H, A));
-          rec = {
-            market: "BTTS",
-            pick: mBT.pick,
-            confidencePct: confPct,
-            modelProbPct: modelPct,
-          };
-        } else if (market === "one_x_two") {
-          const ox = onex2Lean(H, A);
-          const confPct = pct(ox.conf);
-          rec = {
-            market: "1X2",
-            pick: ox.pick,
-            confidencePct: confPct,
-            modelProbPct: confPct,
-          };
-        }
+        // Always compute all 3 picks
+        const mOU = computeOUModelProb(H, A);
+        const mBT = computeBTTSModelProb(H, A);
+        const ox  = onex2Lean(H, A);
+
+        recos = {
+          ou_goals: { market: "OU Goals", pick: mOU.pick },
+          btts:     { market: "BTTS",     pick: mBT.pick },
+          one_x_two:{ market: "1X2",      pick: ox.pick },
+        };
+
+        // Selected recommendation (compat with old UI)
+        rec = recos[market] || recos.ou_goals;
 
         // Compact stats pack for UI
         stats = {
@@ -984,7 +971,7 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
             avgGoalsAgainst: H.avgAgHome ?? H.avgAg ?? 0,
             cleanSheetRate: H.cleanSheetRateHome ?? H.cleanSheetRate ?? 0,
             failToScoreRate: H.failToScoreRateHome ?? H.failToScoreRate ?? 0,
-            ppg: H.ppgHome ?? H.ppg ?? 0,
+            pointsPerGame: H.ppgHome ?? H.ppg ?? 0, // ✅ nicer name for UI
             goalsFor: H.goalsForHome ?? 0,
             goalsAgainst: H.goalsAgainstHome ?? 0,
             over25Rate: H.o25HomeRate ?? 0,
@@ -996,7 +983,7 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
             avgGoalsAgainst: A.avgAgAway ?? A.avgAg ?? 0,
             cleanSheetRate: A.cleanSheetRateAway ?? A.cleanSheetRate ?? 0,
             failToScoreRate: A.failToScoreRateAway ?? A.failToScoreRate ?? 0,
-            ppg: A.ppgAway ?? A.ppg ?? 0,
+            pointsPerGame: A.ppgAway ?? A.ppg ?? 0, // ✅ nicer name for UI
             goalsFor: A.goalsForAway ?? 0,
             goalsAgainst: A.goalsAgainstAway ?? 0,
             over25Rate: A.o25AwayRate ?? 0,
@@ -1031,7 +1018,8 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals" }) {
         xgHome,
         xgAway,
         stats,
-        recommendation: rec,
+        recos,               // ✅ NEW: all 3 picks for the UI
+        recommendation: rec, // (selected market pick for old UI)
       });
     } catch {
       // ignore individual fixture errors
@@ -1105,7 +1093,9 @@ function putCachedPBG(key, payload){ PROBOARDG_CACHE.set(key, { payload, exp: Da
 
 function ppCacheKey(date, tz, market){ return `pp|${date}|${tz}|${market}`; }
 function pbCacheKey(date, tz){ return `pb|${date}|${tz}`; }
-function pbgCacheKey(date, tz, market){ return `pbg|${date}|${tz}|${market}`; }
+
+// ✅ UPDATED: include n in cache key
+function pbgCacheKey(date, tz, market, n){ return `pbg|${date}|${tz}|${market}|n${n}`; }
 
 function ppRedisKey(date, tz, market){ return `propick:${date}:${tz}:${market}`; }
 async function ppGet(date, tz, market){
@@ -1123,18 +1113,19 @@ async function pbGet(date, tz){
 async function pbSet(date, tz, payload){
   try { await kvSet(pbRedisKey(date, tz), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
-function pbgRedisKey(date, tz, market){ return `proboardg:${date}:${tz}:${market}`; }
-async function pbgGet(date, tz, market){
+
+// ✅ UPDATED: include n in redis key
+function pbgRedisKey(date, tz, market, n){ return `proboardg:${date}:${tz}:${market}:n${n}`; }
+async function pbgGet(date, tz, market, n){
   try {
-    const v = await kvGet(pbgRedisKey(date, tz, market)); 
+    const v = await kvGet(pbgRedisKey(date, tz, market, n)); 
     if (v && typeof v.result === "string" && v.result) return JSON.parse(v.result);
   } catch {} 
   return null;
 }
-async function pbgSet(date, tz, market, payload){
-  try { await kvSet(pbgRedisKey(date, tz, market), JSON.stringify(payload), 22 * 60 * 60); } catch {}
+async function pbgSet(date, tz, market, n, payload){
+  try { await kvSet(pbgRedisKey(date, tz, market, n), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
-
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
   try {
@@ -1207,12 +1198,12 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
 
-      // Only OU Goals, BTTS, 1X2 now (cards/corners removed)
+      // Only OU Goals, BTTS, 1X2 now
       const markets = ["ou_goals", "btts", "one_x_two"];
       let stored = 0;
 
       for (const m of markets) {
-        const payload = await buildProBoardGrouped({ date, tz, market: m });
+        const payload = await buildProBoardGrouped({ date, tz, market: m, n: 15 });
         try {
           const recs = [];
           for (const g of (payload?.groups || [])) {
@@ -1248,7 +1239,6 @@ export default async function handler(req, res) {
 
     /* ======== READERS FOR WIDGETS ======== */
 
-    // NEW: calendar-month summary for Free Picks (Win% + ROI)
     if (action === "current-month-free-picks") {
       try {
         if (!db) return res.status(200).json({ ok:true, month:null, picks:0, wins:0, winPct:0, roiPct:0, pl:0 });
@@ -1463,17 +1453,22 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
       const market = (req.query.market || "ou_goals").toString().toLowerCase(); // ou_goals | btts | one_x_two
+
+      // ✅ NEW: 5/10/15 window
+      const nRaw = Number(req.query.n || 15);
+      const n = [5,10,15].includes(nRaw) ? nRaw : 15;
+
       const refresh = ["1","true","yes"].includes((req.query.refresh || "").toString().toLowerCase());
-      const key = pbgCacheKey(date, tz, market);
+      const key = pbgCacheKey(date, tz, market, n);
 
       if (!refresh) {
-        const persisted = await pbgGet(date, tz, market);
+        const persisted = await pbgGet(date, tz, market, n);
         if (persisted) { putCachedPBG(key, persisted); return res.status(200).json(persisted); }
         const cached = getCachedPBG(key);
         if (cached) return res.status(200).json(cached);
       }
 
-      const payload = await buildProBoardGrouped({ date, tz, market });
+      const payload = await buildProBoardGrouped({ date, tz, market, n });
 
       try {
         const recs = [];
@@ -1503,7 +1498,7 @@ export default async function handler(req, res) {
       } catch (e) {}
 
       putCachedPBG(key, payload);
-      await pbgSet(date, tz, market, payload);
+      await pbgSet(date, tz, market, n, payload);
       return res.status(200).json(payload);
     }
 
