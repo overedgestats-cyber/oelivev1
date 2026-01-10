@@ -63,21 +63,32 @@
     .teams .team { font-weight:900; letter-spacing:.02em; font-size:1.03rem; color:#0f172a; line-height:1.25; }
     .teams .sep { opacity:.55; padding:0 .15rem; }
 
+    /* ✅ FIX: align-items START so right-side badges don't float in the middle */
     .fixture-row{
-      display:grid; grid-template-columns: 1fr auto 26px; align-items:center; gap:.75rem;
-      padding:.7rem .9rem; margin:.35rem 0; background:#fff; border:1px solid #e6e8ee;
-      border-radius:14px; box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
+      display:grid;
+      grid-template-columns: 1fr auto 26px;
+      align-items:start;
+      gap:.85rem;
+      padding:.85rem 1rem;
+      margin:.45rem 0;
+      background:#fff;
+      border:1px solid #e6e8ee;
+      border-radius:16px;
+      box-shadow: 0 1px 2px rgba(12,18,32,.06), 0 10px 22px rgba(12,18,32,.06);
     }
-    .fixture-meta{ text-align:right; min-width:280px }
+
+    .fixture-meta{ text-align:right; min-width:300px; align-self:start; }
     .fixture-pick { display:flex; justify-content:flex-end; }
 
     .badge-pick{
-      display:inline-flex; align-items:center; gap:.4rem; padding:.22rem .6rem; border-radius:999px;
+      display:inline-flex; align-items:center; gap:.4rem; padding:.26rem .65rem; border-radius:999px;
       font-weight:800; letter-spacing:.02em; background:#eff6ff; border:1px solid #cfe4ff; color:#1d4ed8;
+      max-width:100%;
     }
     .badge-chip{
-      display:inline-flex; align-items:center; gap:.35rem; padding:.18rem .5rem; border-radius:999px; font-weight:800;
+      display:inline-flex; align-items:center; gap:.35rem; padding:.20rem .55rem; border-radius:999px; font-weight:800;
       border:1px solid transparent;
+      white-space:nowrap;
     }
     .badge-model{ background:#eef6ff; border-color:#cfe2ff; color:#0b57d0; }
     .badge-conf{ background:#e8f8ee; border-color:#cbead8; color:#166534; }
@@ -97,10 +108,73 @@
     }
     .tooltip:hover::after, .tooltip:focus::after{ opacity:1; }
 
-    .reason{ grid-column:1 / -1; margin-top:.35rem; font-size:.92rem; color:#5b6b82; white-space:pre-wrap; }
-    .xg-line { margin-top:.15rem; font-size:.85rem; color:#64748b; }
+    /* ✅ Cleaner xG line */
+    .xg-line { margin-top:.25rem; font-size:.86rem; color:#64748b; }
+
+    /* ✅ New stats layout */
+    .stats-wrap{
+      margin-top:.6rem;
+      padding:.65rem .75rem;
+      border:1px solid #eef2f7;
+      background:#fbfcff;
+      border-radius:14px;
+    }
+    .stats-title{
+      font-weight:800;
+      font-size:.9rem;
+      color:#0f172a;
+      margin-bottom:.45rem;
+    }
+    .stats-grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:.6rem;
+    }
+    .team-box{
+      background:#ffffff;
+      border:1px solid #eef2f7;
+      border-radius:12px;
+      padding:.55rem .65rem;
+    }
+    .team-box__name{
+      font-weight:900;
+      font-size:.92rem;
+      color:#0f172a;
+      margin-bottom:.35rem;
+    }
+    .stat-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      gap:.5rem;
+      padding:.18rem 0;
+      border-top:1px dashed rgba(15,23,42,.10);
+      font-size:.9rem;
+      color:#334155;
+    }
+    .stat-row:first-of-type{ border-top:none; }
+    .stat-row b{ color:#0f172a; font-weight:900; }
+
+    .matchup-row{
+      margin-top:.55rem;
+      font-size:.9rem;
+      color:#475569;
+      font-weight:700;
+      display:flex;
+      gap:.75rem;
+      flex-wrap:wrap;
+    }
+
+    /* ✅ Mobile: stack nicely */
+    @media (max-width: 860px){
+      .fixture-row{ grid-template-columns: 1fr; }
+      .fixture-meta{ text-align:left; min-width:0; }
+      .fixture-pick{ justify-content:flex-start; }
+      .stats-grid{ grid-template-columns: 1fr; }
+    }
   </style>
 </head>
+
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="/pixel.js" defer></script>
 <script src="/social.js" defer></script>
@@ -143,7 +217,7 @@
     <section id="proContent" class="section" style="display:none">
       <h1>Pro Board</h1>
       <p class="muted">
-        Hero Bet of the Day and full team stats (5/10/15). Filters for Over/Under Goals, BTTS and 1X2 across top leagues.
+        Hero Bet of the Day and full team stats (5/10/15). Filters for Under/Over Goals, BTTS and 1X2 across top leagues.
       </p>
 
       <section class="section" style="padding-top:.5rem">
@@ -298,7 +372,6 @@
       if (!h || !h.heroBet) return `<p>Coming soon (no qualifying value pick yet).</p>`;
       const p = h.heroBet;
 
-      // --- derive fair odds, edge & simple stake guide from model prob + odds ---
       const modelProb = (typeof p.modelProbPct === 'number' && p.modelProbPct > 0 && p.modelProbPct < 100)
         ? (p.modelProbPct / 100)
         : null;
@@ -423,28 +496,41 @@
             const xgA = fx.xg?.away ?? fx.xgAway;
 
             const xgLine = hasXg
-              ? `<div class="xg-line">xG: ${fmtNum1(xgH)} – ${fmtNum1(xgA)}</div>`
+              ? `<div class="xg-line">Expected goals (xG): ${fmtNum1(xgH)} – ${fmtNum1(xgA)}</div>`
               : "";
 
             let statsHtml = "";
             if (s) {
+              const sample = s.sampleSize || 'N';
+              const homeName = fx.home?.name || '';
+              const awayName = fx.away?.name || '';
               statsHtml = `
-                <div class="reason">
-                  <div style="font-weight:600; margin-bottom:.15rem;">Last ${s.sampleSize || 'N'} matches</div>
-                  <div class="muted-sm">
-                    <strong>${fx.home?.name || ''}</strong>
-                    · GF ${fmtNum1(s.home.avgGoalsFor)} / GA ${fmtNum1(s.home.avgGoalsAgainst)}
-                    · CS ${fmtPct(s.home.cleanSheetRate)} · FTS ${fmtPct(s.home.failToScoreRate)}
-                    · PPG ${fmtNum1(s.home.ppg)}
+                <div class="stats-wrap">
+                  <div class="stats-title">Last ${sample} matches</div>
+
+                  <div class="stats-grid">
+                    <div class="team-box">
+                      <div class="team-box__name">${homeName}</div>
+                      <div class="stat-row"><span>Goals for (avg)</span><b>${fmtNum1(s.home.avgGoalsFor)}</b></div>
+                      <div class="stat-row"><span>Goals against (avg)</span><b>${fmtNum1(s.home.avgGoalsAgainst)}</b></div>
+                      <div class="stat-row"><span>Clean sheets</span><b>${fmtPct(s.home.cleanSheetRate)}</b></div>
+                      <div class="stat-row"><span>Failed to score</span><b>${fmtPct(s.home.failToScoreRate)}</b></div>
+                      <div class="stat-row"><span>Points per game</span><b>${fmtNum1(s.home.ppg)}</b></div>
+                    </div>
+
+                    <div class="team-box">
+                      <div class="team-box__name">${awayName}</div>
+                      <div class="stat-row"><span>Goals for (avg)</span><b>${fmtNum1(s.away.avgGoalsFor)}</b></div>
+                      <div class="stat-row"><span>Goals against (avg)</span><b>${fmtNum1(s.away.avgGoalsAgainst)}</b></div>
+                      <div class="stat-row"><span>Clean sheets</span><b>${fmtPct(s.away.cleanSheetRate)}</b></div>
+                      <div class="stat-row"><span>Failed to score</span><b>${fmtPct(s.away.failToScoreRate)}</b></div>
+                      <div class="stat-row"><span>Points per game</span><b>${fmtNum1(s.away.ppg)}</b></div>
+                    </div>
                   </div>
-                  <div class="muted-sm">
-                    <strong>${fx.away?.name || ''}</strong>
-                    · GF ${fmtNum1(s.away.avgGoalsFor)} / GA ${fmtNum1(s.away.avgGoalsAgainst)}
-                    · CS ${fmtPct(s.away.cleanSheetRate)} · FTS ${fmtPct(s.away.failToScoreRate)}
-                    · PPG ${fmtNum1(s.away.ppg)}
-                  </div>
-                  <div class="muted-sm">
-                    Matchup: O2.5 ~ ${fmtPct(s.matchup.over25Likelihood)} · BTTS ~ ${fmtPct(s.matchup.bttsLikelihood)}
+
+                  <div class="matchup-row">
+                    <span>Over 2.5 likelihood: <b>${fmtPct(s.matchup.over25Likelihood)}</b></span>
+                    <span>BTTS likelihood: <b>${fmtPct(s.matchup.bttsLikelihood)}</b></span>
                   </div>
                 </div>
               `;
@@ -465,10 +551,10 @@
             meta.className = 'fixture-meta';
             meta.innerHTML = `
               <div class="muted-sm">${fx.time || ""}</div>
-              <div class="fixture-pick" style="margin-top:.35rem">
+              <div class="fixture-pick" style="margin-top:.4rem">
                 <span class="badge-pick">${pickLabel}</span>
               </div>
-              <div style="margin-top:.35rem; display:flex; gap:.35rem; justify-content:flex-end; flex-wrap:wrap">
+              <div style="margin-top:.45rem; display:flex; gap:.35rem; justify-content:flex-end; flex-wrap:wrap">
                 <span class="badge-chip badge-model">
                   Model ${typeof model==='number' ? `${model}%` : '—'}
                   <span class="tooltip" tabindex="0" data-tip="Model probability: how often our algorithm expects this selection to hit based on recent form and team stats.">ⓘ</span>
