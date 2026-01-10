@@ -1,3 +1,4 @@
+// ===================== rpc.js — PART 1/3 =====================
 // /api/rpc.js  (single file)
 // One endpoint, multiple actions via ?action=...
 
@@ -218,7 +219,7 @@ const EURO_COUNTRIES = [
   "Faroe Islands","Andorra","San Marino","Gibraltar"
 ];
 const CUP_TOKENS = ["cup","pokal","beker","taça","taca","kup","kupa","cupa","coppa","copa","karik","knvb","dfb","scottish cup"];
-const DENY_TIER_TOKENS = ["oberliga","regionalliga","3. liga","iii liga","liga 3","third division","liga 4","fourth","fifth","amateur","county","ykkönen","2. divisjon avd","reserve","reserves"," ii"," b team"," b-team"," b-team"," b-team"];
+const DENY_TIER_TOKENS = ["oberliga","regionalliga","3. liga","iii liga","liga 3","third division","liga 4","fourth","fifth","amateur","county","ykkönen","2. divisjon avd","reserve","reserves"," ii"," b team"," b-team"," b-team"," b-team"," b-team"];
 const TIER1_PATTERNS = [/premier/i, /super\s?lig(?![ae])/i, /super\s?league(?!\s?2)/i, /bundesliga(?!.*2)/i, /la\s?liga(?!\s?2)/i, /serie\s?a/i, /ligue\s?1/i, /eredivisie/i, /ekstraklasa/i, /allsvenskan/i, /eliteserien/i, /superliga(?!\s?2)/i];
 const TIER2_PATTERNS = [/championship/i, /2\.\s?bundesliga/i, /bundesliga\s?2/i, /la\s?liga\s?2/i, /segunda/i, /segund/i, /serie\s?b/i, /ligue\s?2/i, /eerste\s?divisie/i, /liga\s?portugal\s?2/i, /challenger\s?pro\s?league/i, /challenge\s?league/i, /1\.\s?lig/i, /2\.\s?liga/i, /superettan/i, /obos/i, /i\s?liga(?!\s?2)/i, /prva\s?liga/i, /super\s?league\s?2/i];
 function isEuroCountry(c = "") { return EURO_COUNTRIES.includes(c); }
@@ -382,7 +383,7 @@ function reasonCornersRich(fx, H, A, pick, confPct) {
   return `${top}${BR}${overview}${BR}${verdict}`;
 }
 
-/* ---- NEW: separate model probability vs adjusted confidence ---- */
+/* ---- separate model probability vs adjusted confidence ---- */
 function computeOUModelProb(H, A) {
   const overP  = H.over25Rate * 0.5 + A.over25Rate * 0.5;
   const underP = H.under25Rate * 0.5 + A.under25Rate * 0.5;
@@ -439,7 +440,7 @@ async function teamLastN(teamId, n = 12) {
   let wins = 0, draws = 0, losses = 0, cs = 0, fts = 0;
   let homeG = 0, awayG = 0, o25Home = 0, o25Away = 0;
 
-  // NEW: split home / away detail
+  // split home / away detail
   let homeGF = 0, homeGA = 0, awayGF = 0, awayGA = 0;
   let homeCS = 0, homeFTS = 0, awayCS = 0, awayFTS = 0;
   let homePoints = 0, awayPoints = 0;
@@ -508,7 +509,6 @@ async function teamLastN(teamId, n = 12) {
   const ppgAway            = awayG  ? awayPoints / awayG : 0;
 
   return {
-    // existing aggregates
     games: gp,
     avgFor,
     avgAg,
@@ -526,7 +526,6 @@ async function teamLastN(teamId, n = 12) {
     o25HomeRate: homeG ? o25Home / homeG : 0,
     o25AwayRate: awayG ? o25Away / awayG : 0,
 
-    // new splits & totals
     homeGames: homeG,
     awayGames: awayG,
 
@@ -600,6 +599,7 @@ async function getOddsMap(fixtureId) {
     return out;
   } catch { return null; }
 }
+
 /* ------------------------ Free Picks (OU 2.5) ------------------------ */
 async function scoreFixtureForOU25(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
@@ -678,7 +678,7 @@ async function scoreHeroCandidates(fx) {
   const candidates = [];
   const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
-  // ---------- OU 2.5 ----------
+  // OU 2.5
   const mOU = computeOUModelProb(H, A);
 
   if (mOU.pick === "Over 2.5" && odds?.over25 && odds.over25 >= 2.0 && withinBand(mOU.overP)) {
@@ -721,7 +721,7 @@ async function scoreHeroCandidates(fx) {
     });
   }
 
-  // ---------- BTTS ----------
+  // BTTS
   const mBT = computeBTTSModelProb(H, A);
 
   if (mBT.pick === "BTTS: Yes" && odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(mBT.bttsP)) {
@@ -792,13 +792,14 @@ async function pickHeroBet({ date, tz, market = "auto" }) {
   candidates.sort((a, b) => b.valueScore - a.valueScore);
   return { heroBet: candidates[0] };
 }
+// ===================== rpc.js — PART 2/3 =====================
 
 /* --------------------------- Pro Board data --------------------------- */
 const PRO_ALLOWED = {
   England: [/^Premier League$/i, /^Championship$/i, /^FA Cup$/i],
   Germany: [/^Bundesliga$/i, /^2\.?\s*Bundesliga$/i, /^DFB[ -]?Pokal$/i],
   Spain: [/^La ?Liga$/i, /^(Segunda( División)?|La ?Liga 2)$/i, /^Copa del Rey$/i],
-  Italy: [/^Serie ?A$/i, [/^Serie ?B$/i][0], /^Coppa Italia$/i],
+  Italy: [/^Serie ?A$/i, /^Serie ?B$/i, /^Coppa Italia$/i],
   France: [/^Ligue ?1$/i, /^Ligue ?2$/i, /^Coupe de France$/i],
 };
 const PRO_GLOBALS = [
@@ -898,10 +899,11 @@ async function buildProBoard({ date, tz }) {
 
 /* --------------- Pro Board grouped by country (flags + xG + stats) ---------------- */
 /**
- * ✅ UPDATED:
+ * UPDATED:
  * - supports n=5|10|15 window
- * - always returns ALL 3 picks in fx.recos
- * - keeps fx.recommendation for current selected market (compat)
+ * - returns fx.recommendations (what pro.html expects)
+ * - keeps fx.recos for backward compatibility
+ * - stats include ppg alias + pointsPerGame
  */
 async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
   let fixtures = await apiGet("/fixtures", { date, timezone: tz });
@@ -934,7 +936,8 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
       const aId = fx?.teams?.away?.id;
 
       let rec = null;
-      let recos = null;   // ✅ NEW: all 3 picks
+      let recos = null;          // backward compat
+      let recommendations = null; // pro.html expects this
       let stats = null;
       let xgHome = null;
       let xgAway = null;
@@ -943,7 +946,7 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
         const N = [5,10,15].includes(Number(n)) ? Number(n) : 15;
         const [H, A] = await Promise.all([teamLastN(hId, N), teamLastN(aId, N)]);
 
-        // xG proxy (per game) – from attacking output
+        // xG proxy (per game)
         xgHome = Number((H.avgFor || 0).toFixed(2));
         xgAway = Number((A.avgFor || 0).toFixed(2));
         const xgTotal = Number((xgHome + xgAway).toFixed(2));
@@ -953,25 +956,31 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
         const mBT = computeBTTSModelProb(H, A);
         const ox  = onex2Lean(H, A);
 
-        recos = {
-          ou_goals: { market: "OU Goals", pick: mOU.pick },
-          btts:     { market: "BTTS",     pick: mBT.pick },
-          one_x_two:{ market: "1X2",      pick: ox.pick },
+        recommendations = {
+          ou_goals:  { market: "ou_goals",  pick: mOU.pick },
+          btts:      { market: "btts",      pick: mBT.pick },
+          one_x_two: { market: "one_x_two", pick: ox.pick },
         };
 
-        // Selected recommendation (compat with old UI)
-        rec = recos[market] || recos.ou_goals;
+        // keep alias
+        recos = recommendations;
 
-        // Compact stats pack for UI
+        // selected market pick
+        rec = recommendations[market] || recommendations.ou_goals;
+
         stats = {
-          sampleSize: Math.max(H.games || 0, A.games || 0) || null,
+          sampleSize: N,
           home: {
             xg: xgHome,
             avgGoalsFor: H.avgForHome ?? H.avgFor ?? 0,
             avgGoalsAgainst: H.avgAgHome ?? H.avgAg ?? 0,
             cleanSheetRate: H.cleanSheetRateHome ?? H.cleanSheetRate ?? 0,
             failToScoreRate: H.failToScoreRateHome ?? H.failToScoreRate ?? 0,
-            pointsPerGame: H.ppgHome ?? H.ppg ?? 0, // ✅ nicer name for UI
+
+            // aliases
+            ppg: H.ppgHome ?? H.ppg ?? 0,
+            pointsPerGame: H.ppgHome ?? H.ppg ?? 0,
+
             goalsFor: H.goalsForHome ?? 0,
             goalsAgainst: H.goalsAgainstHome ?? 0,
             over25Rate: H.o25HomeRate ?? 0,
@@ -983,7 +992,11 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
             avgGoalsAgainst: A.avgAgAway ?? A.avgAg ?? 0,
             cleanSheetRate: A.cleanSheetRateAway ?? A.cleanSheetRate ?? 0,
             failToScoreRate: A.failToScoreRateAway ?? A.failToScoreRate ?? 0,
-            pointsPerGame: A.ppgAway ?? A.ppg ?? 0, // ✅ nicer name for UI
+
+            // aliases
+            ppg: A.ppgAway ?? A.ppg ?? 0,
+            pointsPerGame: A.ppgAway ?? A.ppg ?? 0,
+
             goalsFor: A.goalsForAway ?? 0,
             goalsAgainst: A.goalsAgainstAway ?? 0,
             over25Rate: A.o25AwayRate ?? 0,
@@ -1018,8 +1031,13 @@ async function buildProBoardGrouped({ date, tz, market = "ou_goals", n = 15 }) {
         xgHome,
         xgAway,
         stats,
-        recos,               // ✅ NEW: all 3 picks for the UI
-        recommendation: rec, // (selected market pick for old UI)
+
+        // ✅ new + compat
+        recommendations,
+        recos,
+
+        // selected market pick
+        recommendation: rec,
       });
     } catch {
       // ignore individual fixture errors
@@ -1093,8 +1111,6 @@ function putCachedPBG(key, payload){ PROBOARDG_CACHE.set(key, { payload, exp: Da
 
 function ppCacheKey(date, tz, market){ return `pp|${date}|${tz}|${market}`; }
 function pbCacheKey(date, tz){ return `pb|${date}|${tz}`; }
-
-// ✅ UPDATED: include n in cache key
 function pbgCacheKey(date, tz, market, n){ return `pbg|${date}|${tz}|${market}|n${n}`; }
 
 function ppRedisKey(date, tz, market){ return `propick:${date}:${tz}:${market}`; }
@@ -1114,7 +1130,6 @@ async function pbSet(date, tz, payload){
   try { await kvSet(pbRedisKey(date, tz), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
 
-// ✅ UPDATED: include n in redis key
 function pbgRedisKey(date, tz, market, n){ return `proboardg:${date}:${tz}:${market}:n${n}`; }
 async function pbgGet(date, tz, market, n){
   try {
@@ -1126,6 +1141,7 @@ async function pbgGet(date, tz, market, n){
 async function pbgSet(date, tz, market, n, payload){
   try { await kvSet(pbgRedisKey(date, tz, market, n), JSON.stringify(payload), 22 * 60 * 60); } catch {}
 }
+
 /* ------------------------------ Handler ------------------------------ */
 export default async function handler(req, res) {
   try {
@@ -1198,7 +1214,6 @@ export default async function handler(req, res) {
       const tz = req.query.tz || "Europe/Sofia";
       const date = req.query.date || ymd();
 
-      // Only OU Goals, BTTS, 1X2 now
       const markets = ["ou_goals", "btts", "one_x_two"];
       let stored = 0;
 
@@ -1454,7 +1469,6 @@ export default async function handler(req, res) {
       const date = req.query.date || ymd();
       const market = (req.query.market || "ou_goals").toString().toLowerCase(); // ou_goals | btts | one_x_two
 
-      // ✅ NEW: 5/10/15 window
       const nRaw = Number(req.query.n || 15);
       const n = [5,10,15].includes(nRaw) ? nRaw : 15;
 
@@ -1550,6 +1564,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server error" });
   }
 }
+// ===================== rpc.js — PART 3/3 =====================
 
 /* ================= Stripe Verify + Pro override merge ================= */
 async function verifyStripeByEmail(email) {
