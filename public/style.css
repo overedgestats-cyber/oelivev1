@@ -397,10 +397,10 @@ select.market:focus{ outline:none; border-color: rgba(59,130,246,.45); box-shado
 .center, .text-center { text-align: center; }
 
 /* ===========================
-   Free Picks card + helpers
+   Free Picks — Pro.html look
    =========================== */
 
-/* Generic pill (e.g., Confidence) */
+/* Generic pill (e.g., Confidence / tags from reasoning) */
 .pill{
   display:inline-block;
   padding:.22rem .55rem;
@@ -411,20 +411,21 @@ select.market:focus{ outline:none; border-color: rgba(59,130,246,.45); box-shado
   border:1px solid var(--border);
 }
 
-/* Free Picks card container */
+/* Free Picks card container (same class you already use: .pick-card) */
 .pick-card{
   position: relative;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: var(--shadow-soft);
-  padding: 1rem;
-  margin: .6rem 0;
-  transition: box-shadow .2s ease, transform .12s ease;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px;
+  box-shadow: 0 12px 34px rgba(2,6,23,.38);
+  padding: 16px 16px 14px;
+  margin: 14px 0;
+  transition: box-shadow .2s ease, transform .12s ease, border-color .2s ease;
 }
 .pick-card:hover{
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 44px rgba(2,6,23,.52);
   transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.14);
 }
 
 /* Colored left edge based on market */
@@ -433,10 +434,125 @@ select.market:focus{ outline:none; border-color: rgba(59,130,246,.45); box-shado
   content:"";
   position:absolute;
   left:-1px; top:-1px; bottom:-1px;
-  width:4px; border-radius:12px 0 0 12px;
+  width:5px;
+  border-radius:18px 0 0 18px;
 }
-.pick-card.over::before  { background: var(--accent-600); } /* Over = green */
-.pick-card.under::before { background: var(--danger); }    /* Under = red */
+.pick-card.over::before  { background: linear-gradient(180deg, var(--accent) 0%, var(--accent-600) 100%); }
+.pick-card.under::before { background: linear-gradient(180deg, #ff6b6b 0%, var(--danger) 100%); }
+
+/* League header line */
+.pick-card .league-line{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:900;
+  font-size: 1.05rem;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+/* Optional: if you include a flag in the league line */
+.pick-card .league-line img,
+.pick-card img.flag,
+.pick-card img.league-flag{
+  width:24px;
+  height:18px;
+  border-radius:4px;
+  object-fit:cover;
+  flex: 0 0 auto;
+  box-shadow: 0 6px 16px rgba(0,0,0,.25);
+}
+
+/* Match time row (if you use these classes) */
+.pick-card .match-time,
+.pick-card .time-line{
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* Teams row (Pro-like) */
+.pick-card .teams{
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+  flex-wrap:wrap;
+  margin: 6px 0 10px;
+}
+.pick-card .teams img.logo{
+  width:22px;
+  height:22px;
+  object-fit:contain;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,.35));
+}
+.pick-card .teams .team{
+  font-weight: 900;
+  letter-spacing:.02em;
+  font-size: 1.06rem;
+  color: var(--text);
+  line-height:1.2;
+}
+.pick-card .teams .sep{
+  opacity:.6;
+  padding:0 .2rem;
+  color: var(--muted);
+}
+
+/* Badges row */
+.pick-card .badges,
+.pick-card .badgesRow,
+.pick-card .chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin: 10px 0 8px;
+}
+
+/* Badge polish inside pick card */
+.pick-card .badge{
+  display:inline-flex;
+  align-items:center;
+  gap:.4rem;
+  padding:.26rem .65rem;
+  border-radius:999px;
+  font-weight:900;
+  font-size:.82rem;
+  letter-spacing:.02em;
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+}
+
+/* Reasoning area — Pro-like separator */
+.pick-card .reasoning{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  color: #b9c4d9;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* If you use <details> for reasoning */
+.pick-card details{
+  margin-top: 10px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+}
+.pick-card details > summary{
+  padding: 10px 12px;
+  font-weight: 900;
+  color: #e7eefc;
+}
+.pick-card details[open]{
+  box-shadow: 0 10px 26px rgba(2,6,23,.35);
+}
+.pick-card details .reasoning{
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding: 10px 12px 12px;
+  margin: 0;
+}
 
 /* --- Footer trust badges + Cookie link --- */
 .site-footer .trust{
@@ -474,6 +590,7 @@ select.market:focus{ outline:none; border-color: rgba(59,130,246,.45); box-shado
 .btn-social.fb:hover{ filter:brightness(1.05); }
 .btn-social.ig{ background:var(--card); color:#e6edf7; }
 .btn-social.ig:hover{ box-shadow:0 8px 22px rgba(0,0,0,.45); }
+
 /* =========================
    Tables (Results / Pro)
    ========================= */
@@ -628,6 +745,7 @@ select.market:focus{ outline:none; border-color: rgba(59,130,246,.45); box-shado
   background:#0b152a;
   color:#e6edf7;
 }
+
 /* === Dark theme visibility fixes for Pro Board accordions (override) === */
 
 /* Make accordion container transparent so the header “pill” stands out */

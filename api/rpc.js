@@ -571,12 +571,18 @@ async function scoreFixtureForOU25(fx) {
   const time   = clockFromISO(fx?.fixture?.date);
   const odds   = await getOddsMap(fx?.fixture?.id);
 
-  return {
+    return {
     fixtureId: fx?.fixture?.id,
     league: fx?.league?.name || "",
     country: fx?.league?.country || "",
     leagueRound: fx?.league?.round || "",
     matchTime: time,
+
+    // ✅ add these (for Pro-style UI)
+    leagueFlag: getLeagueFlag(fx?.league) || null,
+    homeLogo: fx?.teams?.home?.logo || null,
+    awayLogo: fx?.teams?.away?.logo || null,
+
     home: fx?.teams?.home?.name,
     away: fx?.teams?.away?.name,
     market: m.pick,
@@ -585,6 +591,7 @@ async function scoreFixtureForOU25(fx) {
     odds: odds ? odds[m.pick === "Over 2.5" ? "over25" : "under25"] : null,
     reasoning: reasonOURich(fx, H, A, m.pick, confPct, modelProbPct),
   };
+
 }
 
 const FREEPICKS_CACHE = new Map();

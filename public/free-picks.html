@@ -1,22 +1,23 @@
 <!doctype html>
 <html lang="en">
   <!-- Meta Pixel Code -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1135930111808538');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
-/></noscript>
-<!-- End Meta Pixel Code -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '1135930111808538');
+  fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+  src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->
+
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -41,6 +42,7 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
 
   <!-- Calculator styles (scoped) -->
   <style>
+    /* IMPORTANT: your global CSS uses --border, not --line */
     #roi-calc .calc-grid{
       display:grid;gap:10px;
       grid-template-columns:repeat(4,minmax(160px,1fr));
@@ -49,24 +51,35 @@ src="https://www.facebook.com/tr?id=1135930111808538&ev=PageView&noscript=1"
     @media (max-width:920px){ #roi-calc .calc-grid{grid-template-columns:1fr 1fr} }
     @media (max-width:560px){ #roi-calc .calc-grid{grid-template-columns:1fr} }
 
-    #roi-calc label{font-weight:700;opacity:.9}
+    #roi-calc label{font-weight:800;opacity:.92}
     #roi-calc input[type="number"]{
-      width:100%;padding:.5rem .6rem;border:1px solid var(--line);
-      border-radius:10px;background:rgba(255,255,255,.02);color:var(--text)
+      width:100%;
+      padding:.5rem .6rem;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background: var(--surface-3);
+      color: var(--text);
     }
     #roi-calc .calc-row{
       display:flex;justify-content:space-between;gap:10px;align-items:center;
-      border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:.35rem 0;
-      background:rgba(255,255,255,.02)
+      border:1px solid var(--border);
+      border-radius:12px;padding:10px 12px;margin:.35rem 0;
+      background: rgba(255,255,255,.03);
     }
     #roi-calc .pill{
-      display:inline-block;border:1px solid var(--line);
-      border-radius:999px;padding:.2rem .55rem;font-weight:800;margin-left:6px
+      display:inline-block;
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:.2rem .55rem;
+      font-weight:900;
+      margin-left:6px;
+      background: rgba(255,255,255,.05);
     }
-    #roi-calc .muted-sm{opacity:.75;font-size:.92rem}
+    #roi-calc .muted-sm{opacity:.82;font-size:.92rem}
     #roi-calc .totals{display:flex;gap:8px;flex-wrap:wrap;margin-top:.6rem}
   </style>
 </head>
+
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -102,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <main>
   <section class="section">
-    <h1 style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
+    <h1 style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
       Today’s Free Picks
       <button id="exportFree" class="btn small" type="button">Copy Bet Slip</button>
     </h1>
@@ -165,24 +178,49 @@ document.addEventListener('DOMContentLoaded', () => {
     catch { return "Europe/Sofia"; }
   }
 
+  // Pro-like card layout (teams row + chips)
   function pickCard(p){
     const league = [p.country, p.league].filter(Boolean).join(" — ");
     const pickClass = (p.market || "").toLowerCase().startsWith("over") ? "over" : "under";
-    const odds = (p.odds && !isNaN(Number(p.odds))) ? `<span class="badge odds">Odds ${Number(p.odds).toFixed(2)}</span>` : "";
-    const trend = p.trend ? `<div class="muted-sm" style="margin-top:.25rem"><strong>Trend:</strong> ${p.trend}</div>` : "";
+
+    const oddsNum = Number(p.odds);
+    const oddsChip = Number.isFinite(oddsNum)
+      ? `<span class="badge-chip badge-model">Odds ${oddsNum.toFixed(2)}</span>`
+      : "";
+
+    const confNum = Number(p.confidencePct);
+    const confChip = Number.isFinite(confNum)
+      ? `<span class="badge-chip badge-conf">Confidence ${confNum}%</span>`
+      : "";
+
+    const marketText = (p.market || "").trim() || "Pick";
+
+    const trend = p.trend
+      ? `<div class="muted-sm" style="margin-top:.35rem"><strong>Trend:</strong> ${p.trend}</div>`
+      : "";
 
     return `
       <div class="pick-card ${pickClass}">
-        <div class="league-line">${league}</div>
-        <div class="muted-sm" style="margin:.15rem 0 .35rem">
-          ${p.matchTime} — <strong>${p.home}</strong> vs <strong>${p.away}</strong>
+        <div class="league-line">${league || "Today"}</div>
+
+        <div class="muted-sm" style="margin:.25rem 0 .5rem">
+          ${p.matchTime ? `${p.matchTime} — ` : ""}<span class="muted-sm">Kickoff</span>
         </div>
+
+        <div class="teams" style="margin:.05rem 0 .55rem">
+          <span class="team">${p.home || "Home"}</span>
+          <span class="sep">vs</span>
+          <span class="team">${p.away || "Away"}</span>
+        </div>
+
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-          <strong>${p.market}</strong>
-          <span class="pill conf">Confidence ${p.confidencePct}%</span>
-          ${odds}
+          <span class="badge-pick">${marketText}</span>
+          ${confChip}
+          ${oddsChip}
         </div>
-        <div class="muted-sm reasoning" style="margin-top:.5rem">${p.reasoning || ""}</div>
+
+        <!-- IMPORTANT: p.reasoning is HTML from rpc.js (rich pills etc) -->
+        <div class="reasoning" style="margin-top:.6rem">${p.reasoning || ""}</div>
         ${trend}
       </div>
     `;
@@ -234,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="calc-row">
           <div>
             <strong>${name}</strong>
-            <div class="muted-sm">${p.market || ''}${p.selection ? (' — ' + p.selection) : ''} @ ${fmt2(odds)}</div>
+            <div class="muted-sm">${p.market || ''} @ ${fmt2(odds)}</div>
           </div>
           <div>
             <span class="pill">Return: ${fmt2(ret)}</span>
@@ -243,13 +281,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`;
       }
 
-      // Singles section
       let html = '';
       html += `<h3 class="muted-sm" style="margin:.15rem 0">Singles</h3>`;
       html += row(p1, o1, s1, 'Single #1');
       html += row(p2, o2, s2, 'Single #2');
 
-      // Parlay section
       html += `<h3 class="muted-sm" style="margin:.6rem 0 .15rem">Parlay</h3>`;
       if (o1 != null && o2 != null) {
         const parOdds = o1 * o2;
@@ -271,7 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       body.innerHTML = html;
 
-      // Totals (sum of all entered stakes; returns from available odds)
       const totStake = s1 + s2 + sp;
 
       let totReturn = 0, totProfit = 0;
@@ -291,7 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
          <span class="pill">ROI: ${roi.toFixed(1)}%</span>`;
     }
 
-    // expose + bind inputs
     window.__refreshCalc = updateCalc;
     ['stake1','stake2','stakeParlay'].forEach(id=>{
       const el = document.getElementById(id);
@@ -307,7 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
       updateCalc();
     });
   })();
-  /* ===== /calculator ===== */
 
   async function loadPicks(){
     const tgt = document.getElementById('list');
@@ -324,9 +357,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('roi-calc').style.display = 'none';
         return;
       }
+
       tgt.innerHTML = picks.map(pickCard).join("");
 
-      // recalc calculator now that picks are in
       if (typeof window.__refreshCalc === 'function') window.__refreshCalc();
     }catch{
       document.getElementById('list').innerHTML = "<p>Could not load free picks.</p>";
