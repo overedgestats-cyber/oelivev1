@@ -660,6 +660,14 @@ async function pickFreePicks({ date, tz, minConf = 75 }) {
 }
 
 /* ------------------------- Hero Bet (value) -------------------------- */
+
+// Hero tuning knobs (safe defaults)
+const HERO_ODDS_MIN = Number(process.env.HERO_ODDS_MIN || 2.0);
+const HERO_ODDS_MAX = Number(process.env.HERO_ODDS_MAX || 3.0);
+const HERO_PROB_LO  = Number(process.env.HERO_PROB_LO  || 0.62);
+const HERO_PROB_HI  = Number(process.env.HERO_PROB_HI  || 0.78);
+const HERO_MIN_EDGE = Number(process.env.HERO_MIN_EDGE || 0.05); // 5pp edge vs implied
+
 function onex2Lean(home, away) {
   const ha = 0.20;
   const score = (home.avgFor - home.avgAg + ha) - (away.avgFor - away.avgAg);
@@ -668,104 +676,231 @@ function onex2Lean(home, away) {
   return { pick: "Draw", conf: 0.50 };
 }
 
-// OU & BTTS only
+function heroMeta(prob, odds) {
+  const o = Number(odds);
+  const p = clamp01(Number(prob));
+  if (!Number.isFinite(o) || o <= 1) return null;
+
+  const implied = 1 / o;
+  const edge = p - implied;            // + means value vs book
+  const ev = p * o - 1;                // expected profit per 1u stake
+  const fairOdds = p > 0 ? (1 / p) : null;
+
+  return {
+    impliedProb: implied,
+    edge,
+    ev,
+    fairOdds,
+  };
+}
+
+function inBand(p) {
+  return p >= HERO_PROB_LO && p <= HERO_PROB_HI;
+}
+
+function oddsOk(o) {
+  return Number.isFinite(o) && o >= HERO_ODDS_MIN && o <= HERO_ODDS_MAX;
+}
+
+// OU + BTTS + 1X2
 async function scoreHeroCandidates(fx) {
   const homeId = fx?.teams?.home?.id, awayId = fx?.teams?.away?.id;
   if (!homeId || !awayId) return [];
+
   const [H, A] = await Promise.all([teamLastN(homeId), teamLastN(awayId)]);
   const odds = await getOddsMap(fx?.fixture?.id);
   const time = clockFromISO(fx?.fixture?.date);
-  const candidates = [];
-  const withinBand = (p, lo = 0.58, hi = 0.80) => p >= lo && p <= hi;
 
-  // OU 2.5
+  const base = {
+    fixtureId: fx?.fixture?.id,
+    league: fx?.league?.name || "",
+    country: fx?.league?.country || "",
+    matchTime: time,
+    home: fx?.teams?.home?.name || "",
+    away: fx?.teams?.away?.name || "",
+  };
+
+  const candidates = [];
+
+  /* -------- OU 2.5 -------- */
   const mOU = computeOUModelProb(H, A);
 
-  if (mOU.pick === "Over 2.5" && odds?.over25 && odds.over25 >= 2.0 && withinBand(mOU.overP)) {
-    const sideProb = mOU.overP;
-    const confPct = pct(calibratedConfidence(sideProb, H, A));
-    candidates.push({
-      fixtureId: fx?.fixture?.id,
-      league: fx?.league?.name || "",
-      country: fx?.league?.country || "",
-      matchTime: time,
-      home: fx?.teams?.home?.name || "",
-      away: fx?.teams?.away?.name || "",
-      selection: "Over 2.5",
-      market: "Over 2.5",
-      confidencePct: confPct,
-      modelProbPct: pct(sideProb),
-      odds: Number(odds.over25),
-      valueScore: Number((sideProb * odds.over25).toFixed(4)),
-      reasoning: reasonOURich(fx, H, A, "Over 2.5", confPct, pct(sideProb)),
-    });
+  // Over
+  if (oddsOk(odds?.over25) && inBand(mOU.overP)) {
+    const meta = heroMeta(mOU.overP, odds.over25);
+    if (meta && meta.edge >= HERO_MIN_EDGE) {
+      const confPct = pct(calibratedConfidence(mOU.overP, H, A));
+      candidates.push({
+        ...base,
+        selection: "Over 2.5",
+        market: "Over 2.5",
+        confidencePct: confPct,
+        modelProbPct: pct(mOU.overP),
+        odds: Number(odds.over25),
+
+        // value metrics
+        impliedProbPct: pct(meta.impliedProb),
+        edgePct: Math.round(meta.edge * 1000) / 10,     // e.g. 6.4 (% points)
+        fairOdds: meta.fairOdds ? Number(meta.fairOdds.toFixed(2)) : null,
+        ev: Number(meta.ev.toFixed(4)),
+
+        valueScore: Number(meta.ev.toFixed(4)), // sort key
+        reasoning: reasonOURich(fx, H, A, "Over 2.5", confPct, pct(mOU.overP)),
+      });
+    }
   }
 
-  if (mOU.pick === "Under 2.5" && odds?.under25 && odds.under25 >= 2.0 && withinBand(mOU.underP)) {
-    const sideProb = mOU.underP;
-    const confPct = pct(calibratedConfidence(sideProb, H, A));
-    candidates.push({
-      fixtureId: fx?.fixture?.id,
-      league: fx?.league?.name || "",
-      country: fx?.league?.country || "",
-      matchTime: time,
-      home: fx?.teams?.home?.name || "",
-      away: fx?.teams?.away?.name || "",
-      selection: "Under 2.5",
-      market: "Under 2.5",
-      confidencePct: confPct,
-      modelProbPct: pct(sideProb),
-      odds: Number(odds.under25),
-      valueScore: Number((sideProb * odds.under25).toFixed(4)),
-      reasoning: reasonOURich(fx, H, A, "Under 2.5", confPct, pct(sideProb)),
-    });
+  // Under
+  if (oddsOk(odds?.under25) && inBand(mOU.underP)) {
+    const meta = heroMeta(mOU.underP, odds.under25);
+    if (meta && meta.edge >= HERO_MIN_EDGE) {
+      const confPct = pct(calibratedConfidence(mOU.underP, H, A));
+      candidates.push({
+        ...base,
+        selection: "Under 2.5",
+        market: "Under 2.5",
+        confidencePct: confPct,
+        modelProbPct: pct(mOU.underP),
+        odds: Number(odds.under25),
+
+        impliedProbPct: pct(meta.impliedProb),
+        edgePct: Math.round(meta.edge * 1000) / 10,
+        fairOdds: meta.fairOdds ? Number(meta.fairOdds.toFixed(2)) : null,
+        ev: Number(meta.ev.toFixed(4)),
+
+        valueScore: Number(meta.ev.toFixed(4)),
+        reasoning: reasonOURich(fx, H, A, "Under 2.5", confPct, pct(mOU.underP)),
+      });
+    }
   }
 
-  // BTTS
+  /* -------- BTTS -------- */
   const mBT = computeBTTSModelProb(H, A);
 
-  if (mBT.pick === "BTTS: Yes" && odds?.bttsYes && odds.bttsYes >= 2.0 && withinBand(mBT.bttsP)) {
-    const sideProb = mBT.bttsP;
-    const confPct = pct(calibratedConfidence(sideProb, H, A));
-    candidates.push({
-      fixtureId: fx?.fixture?.id,
-      league: fx?.league?.name || "",
-      country: fx?.league?.country || "",
-      matchTime: time,
-      home: fx?.teams?.home?.name || "",
-      away: fx?.teams?.away?.name || "",
-      selection: "BTTS: Yes",
-      market: "BTTS",
-      confidencePct: confPct,
-      modelProbPct: pct(sideProb),
-      odds: Number(odds.bttsYes),
-      valueScore: Number((sideProb * odds.bttsYes).toFixed(4)),
-      reasoning: reasonBTTSRich(fx, H, A, "BTTS: Yes", confPct),
-    });
+  // Yes
+  if (oddsOk(odds?.bttsYes) && inBand(mBT.bttsP)) {
+    const meta = heroMeta(mBT.bttsP, odds.bttsYes);
+    if (meta && meta.edge >= HERO_MIN_EDGE) {
+      const confPct = pct(calibratedConfidence(mBT.bttsP, H, A));
+      candidates.push({
+        ...base,
+        selection: "BTTS: Yes",
+        market: "BTTS",
+        confidencePct: confPct,
+        modelProbPct: pct(mBT.bttsP),
+        odds: Number(odds.bttsYes),
+
+        impliedProbPct: pct(meta.impliedProb),
+        edgePct: Math.round(meta.edge * 1000) / 10,
+        fairOdds: meta.fairOdds ? Number(meta.fairOdds.toFixed(2)) : null,
+        ev: Number(meta.ev.toFixed(4)),
+
+        valueScore: Number(meta.ev.toFixed(4)),
+        reasoning: reasonBTTSRich(fx, H, A, "BTTS: Yes", confPct),
+      });
+    }
   }
 
-  if (mBT.pick === "BTTS: No" && odds?.bttsNo && odds.bttsNo >= 2.0 && withinBand(1 - mBT.bttsP)) {
-    const sideProb = 1 - mBT.bttsP;
-    const confPct = pct(calibratedConfidence(sideProb, H, A));
-    candidates.push({
-      fixtureId: fx?.fixture?.id,
-      league: fx?.league?.name || "",
-      country: fx?.league?.country || "",
-      matchTime: time,
-      home: fx?.teams?.home?.name || "",
-      away: fx?.teams?.away?.name || "",
-      selection: "BTTS: No",
-      market: "BTTS",
-      confidencePct: confPct,
-      modelProbPct: pct(sideProb),
-      odds: Number(odds.bttsNo),
-      valueScore: Number((sideProb * odds.bttsNo).toFixed(4)),
-      reasoning: reasonBTTSRich(fx, H, A, "BTTS: No", confPct),
-    });
+  // No (prob = 1 - bttsP)
+  const pNo = 1 - mBT.bttsP;
+  if (oddsOk(odds?.bttsNo) && inBand(pNo)) {
+    const meta = heroMeta(pNo, odds.bttsNo);
+    if (meta && meta.edge >= HERO_MIN_EDGE) {
+      const confPct = pct(calibratedConfidence(pNo, H, A));
+      candidates.push({
+        ...base,
+        selection: "BTTS: No",
+        market: "BTTS",
+        confidencePct: confPct,
+        modelProbPct: pct(pNo),
+        odds: Number(odds.bttsNo),
+
+        impliedProbPct: pct(meta.impliedProb),
+        edgePct: Math.round(meta.edge * 1000) / 10,
+        fairOdds: meta.fairOdds ? Number(meta.fairOdds.toFixed(2)) : null,
+        ev: Number(meta.ev.toFixed(4)),
+
+        valueScore: Number(meta.ev.toFixed(4)),
+        reasoning: reasonBTTSRich(fx, H, A, "BTTS: No", confPct),
+      });
+    }
+  }
+
+  /* -------- 1X2 -------- */
+  const ox = onex2Lean(H, A);
+  // Treat ox.conf as model probability (simple but consistent)
+  const p1x2 = clampRange(ox.conf, 0.51, 0.90);
+
+  const oddsKey =
+    ox.pick === "Home" ? "homeWin" :
+    ox.pick === "Away" ? "awayWin" :
+    "draw";
+
+  const o1x2 = odds?.[oddsKey];
+
+  if (oddsOk(o1x2) && inBand(p1x2)) {
+    const meta = heroMeta(p1x2, o1x2);
+    if (meta && meta.edge >= HERO_MIN_EDGE) {
+      const confPct = pct(calibratedConfidence(p1x2, H, A));
+      candidates.push({
+        ...base,
+        selection: ox.pick,
+        market: "1X2",
+        confidencePct: confPct,
+        modelProbPct: pct(p1x2),
+        odds: Number(o1x2),
+
+        impliedProbPct: pct(meta.impliedProb),
+        edgePct: Math.round(meta.edge * 1000) / 10,
+        fairOdds: meta.fairOdds ? Number(meta.fairOdds.toFixed(2)) : null,
+        ev: Number(meta.ev.toFixed(4)),
+
+        valueScore: Number(meta.ev.toFixed(4)),
+        reasoning: reason1X2Rich(fx, H, A, ox.pick, confPct),
+      });
+    }
   }
 
   return candidates;
 }
+
+async function pickHeroBet({ date, tz, market = "auto" }) {
+  const m0 = (market || "auto").toString().toLowerCase();
+  const m  = (m0 === "ou_goals" || m0 === "btts" || m0 === "one_x_two" || m0 === "auto") ? m0 : "auto";
+
+  let fixtures = await apiGet("/fixtures", { date, timezone: tz });
+  fixtures = fixtures.filter(fx => !isYouthFixture(fx));
+  fixtures = fixtures.filter(fx => allowedForProBoard(fx.league));
+
+  let candidates = [];
+  for (const fx of fixtures.slice(0, 110)) {
+    try {
+      const c = await scoreHeroCandidates(fx);
+      const filtered = (m === "auto")
+        ? c
+        : c.filter(x =>
+            (m === "ou_goals"  && (x.market === "Over 2.5" || x.market === "Under 2.5")) ||
+            (m === "btts"      && x.market === "BTTS") ||
+            (m === "one_x_two" && x.market === "1X2")
+          );
+      candidates = candidates.concat(filtered);
+    } catch {}
+  }
+
+  if (!candidates.length) {
+    return { heroBet: null, note: "No qualifying value pick found yet." };
+  }
+
+  // Sort by EV (valueScore), then by edge, then by confidence
+  candidates.sort((a, b) =>
+    (b.valueScore - a.valueScore) ||
+    ((b.edgePct || 0) - (a.edgePct || 0)) ||
+    ((b.confidencePct || 0) - (a.confidencePct || 0))
+  );
+
+  return { heroBet: candidates[0] };
+}
+
 
 async function pickHeroBet({ date, tz, market = "auto" }) {
   const m0 = (market || "auto").toString().toLowerCase();
