@@ -10,6 +10,26 @@
     // =======================
     // DECEMBER 2025
     // =======================
+    // 2026-01-18
+{ date:"2026-01-18", home:"Den Bosch", away:"MVV", market:"Over 2.5", odds:1.40, status:"win" },
+{ date:"2026-01-18", home:"Almere City FC", away:"De Graafschap", market:"Over 2.5", odds:1.30, status:"loss" },
+
+// 2026-01-19
+{ date:"2026-01-19", home:"Istanbulspor", away:"Keçiörengücü", market:"Over 2.5", odds:1.67, status:"win" },
+{ date:"2026-01-19", home:"FK Liepaja", away:"Paide", market:"Over 2.5", odds:1.60, status:"win" },
+
+// 2026-01-20
+{ date:"2026-01-20", home:"Wrexham", away:"Leicester", market:"Over 2.5", odds:1.90, status:"loss" },
+{ date:"2026-01-20", home:"De Treffers", away:"NEC Nijmegen", market:"Over 2.5", odds:1.35, status:"win" },
+
+// 2026-01-23
+{ date:"2026-01-23", home:"Flint Mountain", away:"Llandudno", market:"Over 2.5", odds:1.30, status:"void" },
+{ date:"2026-01-23", home:"Rhyl", away:"Buckley Town", market:"Over 2.5", odds:1.43, status:"win" },
+
+// 2026-01-24
+{ date:"2026-01-24", home:"Denbigh Town", away:"Newtown AFC", market:"Over 2.5", odds:1.48, status:"loss" },
+{ date:"2026-01-24", home:"Lecce", away:"Lazio", market:"Under 2.5", odds:1.44, status:"win" },
+
 // 2026-01-11
 { date:"2026-01-11", home:"Melilla", away:"Yeclano", market:"Under 2.5", odds:1.40, status:"win" },
 { date:"2026-01-11", home:"Newcastle Utd W", away:"Birmingham City W", market:"Over 2.5", odds:1.80, status:"void" },
