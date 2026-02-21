@@ -10,6 +10,106 @@
     // =======================
     // DECEMBER 2025
     // =======================
+
+    // 2026-01-25
+{ date:"2026-01-25", home:"Sudtirol", away:"Padova", market:"Under 2.5", odds:1.56, status:"lose" },
+{ date:"2026-01-25", home:"Teuta Durres", away:"Vora", market:"Under 2.5", odds:1.53, status:"win" },
+
+// 2026-01-27
+{ date:"2026-01-27", home:"Kettering Town", away:"AFC Sudbury", market:"Over 2.5", odds:1.50, status:"void" },
+{ date:"2026-01-27", home:"KRC Gent 2", away:"RWDM", market:"Over 2.5", odds:1.67, status:"lose" },
+
+// 2026-01-28
+{ date:"2026-01-28", home:"PSV Eindhoven", away:"Bayern Munchen", market:"Over 2.5", odds:1.30, status:"win" },
+{ date:"2026-01-28", home:"Paksi SE 2", away:"Kolsckei", market:"Over 2.5", odds:1.44, status:"win" },
+
+// 2026-01-29
+{ date:"2026-01-29", home:"FC Midtjylland", away:"Dinamo Zagreb", market:"Over 2.5", odds:1.67, status:"lose" },
+{ date:"2026-01-29", home:"Miedz Legnica", away:"Bihor Oradea", market:"Over 2.5", odds:1.45, status:"win" },
+
+// 2026-01-30
+{ date:"2026-01-30", home:"Flint Mountain", away:"Denbigh Town", market:"Over 2.5", odds:1.36, status:"lose" },
+{ date:"2026-01-30", home:"Sandnes Ulf", away:"Viking", market:"Over 2.5", odds:1.40, status:"lose" },
+
+// 2026-01-31
+{ date:"2026-01-31", home:"Armagh City", away:"Dundela", market:"Over 2.5", odds:1.40, status:"win" },
+{ date:"2026-01-31", home:"Helmond Sport", away:"De Graafschap", market:"Over 2.5", odds:1.50, status:"lose" },
+
+// 2026-02-01
+{ date:"2026-02-01", home:"PSV Eindhoven", away:"Feyenoord", market:"Over 2.5", odds:1.44, status:"win" },
+{ date:"2026-02-01", home:"Teuta Durres", away:"Vllaznia Shkoder", market:"Under 2.5", odds:1.57, status:"win" },
+
+// 2026-02-02
+{ date:"2026-02-02", home:"MVV", away:"Almere City", market:"Over 2.5", odds:1.36, status:"lose" },
+{ date:"2026-02-02", home:"Jong Utrecht", away:"VVV Venlo", market:"Over 2.5", odds:1.44, status:"win" },
+
+// 2026-02-03
+{ date:"2026-02-03", home:"Liptovsky Mikulas", away:"Fomat Martin", market:"Over 2.5", odds:1.30, status:"win" },
+{ date:"2026-02-03", home:"AIK Stockholm", away:"FC Liepaja", market:"Over 2.5", odds:1.30, status:"win" },
+
+// 2026-02-04
+{ date:"2026-02-04", home:"Rimavska Sobota", away:"Lokomotiva Zvolen", market:"Over 2.5", odds:1.35, status:"win" },
+{ date:"2026-02-04", home:"Charleroi", away:"Union St Giloise", market:"Under 2.5", odds:1.65, status:"win" },
+
+// 2026-02-05
+{ date:"2026-02-05", home:"Sirius", away:"Sarpsborg", market:"Over 2.5", odds:1.40, status:"win" },
+{ date:"2026-02-05", home:"Home United", away:"Svay Rieng", market:"Over 2.5", odds:1.44, status:"void" },
+
+// 2026-02-06
+{ date:"2026-02-06", home:"Vllaznia Shkoder", away:"Vora", market:"Under 2.5", odds:1.50, status:"win" },
+{ date:"2026-02-06", home:"Vidar", away:"Sandnes Ulf", market:"Over 2.5", odds:1.40, status:"lose" },
+
+// 2026-02-08
+{ date:"2026-02-08", home:"Cadiz", away:"Almeria", market:"Over 2.5", odds:1.85, status:"win" },
+{ date:"2026-02-08", home:"Penrhyncoch", away:"Gresford Athletic", market:"Over 2.5", odds:1.50, status:"void" },
+
+// 2026-02-09
+{ date:"2026-02-09", home:"Al Ahli Dubai", away:"Al Hilal", market:"Over 2.5", odds:1.57, status:"lose" },
+{ date:"2026-02-09", home:"Avispa", away:"Roasso", market:"Under 2.5", odds:1.55, status:"win" },
+
+// 2026-02-10
+{ date:"2026-02-10", home:"St Anna", away:"UFC Fehring", market:"Over 2.5", odds:1.60, status:"win" },
+{ date:"2026-02-10", home:"Flint Mountain", away:"Buckley Town", market:"Over 2.5", odds:1.36, status:"win" },
+
+// 2026-02-11
+{ date:"2026-02-11", home:"Sarbogard", away:"Paksi SE 2", market:"Over 2.5", odds:1.45, status:"win" },
+{ date:"2026-02-11", home:"Eintracht Frankfurt W", away:"Nordsjaelland W", market:"Over 2.5", odds:1.40, status:"win" },
+
+// 2026-02-12
+{ date:"2026-02-12", home:"Lokomotiv Plovdiv", away:"Botev Plovdiv", market:"Under 2.5", odds:1.67, status:"win" },
+{ date:"2026-02-12", home:"Torpedo Kutaisi", away:"Lyngby", market:"Over 2.5", odds:1.55, status:"lose" },
+
+// 2026-02-13
+{ date:"2026-02-13", home:"Denbigh Town", away:"Holyhead Hotspur", market:"Over 2.5", odds:1.30, status:"void" },
+{ date:"2026-02-13", home:"Genk W", away:"Club Brugge W", market:"Over 2.5", odds:1.57, status:"win" },
+
+// 2026-02-14
+{ date:"2026-02-14", home:"Miedz Legnica", away:"Slask Wroclaw", market:"Over 2.5", odds:1.57, status:"win" },
+{ date:"2026-02-14", home:"Kaiserslautern", away:"Greuther Furth", market:"Over 2.5", odds:1.50, status:"lose" },
+
+// 2026-02-15
+{ date:"2026-02-15", home:"Sparta Rotterdam", away:"NEC Nijmegen", market:"Over 2.5", odds:1.53, status:"lose" },
+{ date:"2026-02-15", home:"Vllaznia Shkoder", away:"AE Elbasani", market:"Under 2.5", odds:1.53, status:"lose" },
+
+// 2026-02-16
+{ date:"2026-02-16", home:"Birmingham City W", away:"Crystal Palace W", market:"Over 2.5", odds:1.80, status:"win" },
+{ date:"2026-02-16", home:"Jong Ajax", away:"Cambuur", market:"Over 2.5", odds:1.40, status:"win" },
+
+// 2026-02-17
+{ date:"2026-02-17", home:"Stjarnan", away:"Aegir", market:"Over 2.5", odds:1.20, status:"win" },
+{ date:"2026-02-17", home:"Lillestrom", away:"Haugesund", market:"Over 2.5", odds:1.33, status:"win" },
+
+// 2026-02-18
+{ date:"2026-02-18", home:"Basel 2", away:"Luzern 2", market:"Over 2.5", odds:1.36, status:"win" },
+{ date:"2026-02-18", home:"Pobeda Balandovo", away:"Gorno Lisice", market:"Over 2.5", odds:1.30, status:"void" },
+
+// 2026-02-19
+{ date:"2026-02-19", home:"Juventus W", away:"Wolfsburg W", market:"Over 2.5", odds:1.62, status:"lose" },
+{ date:"2026-02-19", home:"Gamba Osaka", away:"Pohang Steelers", market:"Under 2.5", odds:1.80, status:"lose" },
+
+// 2026-02-20
+{ date:"2026-02-20", home:"Gresford Athletic", away:"Flint Mountain", market:"Over 2.5", odds:1.62, status:"win" },
+{ date:"2026-02-20", home:"Orenburg", away:"Rubin", market:"Under 2.5", odds:1.50, status:"win" },
     // 2026-01-18
 { date:"2026-01-18", home:"Den Bosch", away:"MVV", market:"Over 2.5", odds:1.40, status:"win" },
 { date:"2026-01-18", home:"Almere City FC", away:"De Graafschap", market:"Over 2.5", odds:1.30, status:"loss" },
