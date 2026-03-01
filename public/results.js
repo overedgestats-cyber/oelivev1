@@ -10,7 +10,33 @@
     // =======================
     // DECEMBER 2025
     // =======================
+// 2026-02-21
+{ date:"2026-02-21", home:"Ajax", away:"NEC Nijmegen", market:"Over 2.5", odds:1.44, status:"lose" },
+{ date:"2026-02-21", home:"PSV Eindhoven", away:"Heerenveen", market:"Over 2.5", odds:1.30, status:"win" },
 
+// 2026-02-22
+{ date:"2026-02-22", home:"Bulle", away:"Grand Saconnex", market:"Over 2.5", odds:1.50, status:"win" },
+{ date:"2026-02-22", home:"Hannover 96", away:"Dynamo Dresden", market:"Over 2.5", odds:1.60, status:"lose" },
+
+// 2026-02-23
+{ date:"2026-02-23", home:"Gefle W", away:"Hacken", market:"Over 2.5", odds:1.33, status:"win" },
+{ date:"2026-02-23", home:"Jong AZ", away:"Den Bosch", market:"Over 2.5", odds:1.44, status:"win" },
+
+// 2026-02-24
+{ date:"2026-02-24", home:"Flint Mountain", away:"Llandudno", market:"Over 2.5", odds:1.44, status:"lose" },
+{ date:"2026-02-24", home:"Willem II", away:"ADO Den Haag", market:"Over 2.5", odds:1.57, status:"lose" },
+
+// 2026-02-25
+{ date:"2026-02-25", home:"KooTeePee", away:"MP", market:"Over 2.5", odds:1.25, status:"lose" },
+{ date:"2026-02-25", home:"Haugesund", away:"Ham-Kam", market:"Over 2.5", odds:1.40, status:"lose" },
+
+// 2026-02-26
+{ date:"2026-02-26", home:"Vllaznia Shkoder", away:"Tirana", market:"Under 2.5", odds:1.90, status:"lose" },
+{ date:"2026-02-26", home:"Keflavik", away:"Aegir", market:"Over 2.5", odds:1.20, status:"win" },
+
+// 2026-02-27
+{ date:"2026-02-27", home:"Institute", away:"Armagh City", market:"Over 2.5", odds:1.22, status:"win" },
+{ date:"2026-02-27", home:"Lokomotiva Zvolen", away:"Puchov", market:"Over 2.5", odds:1.62, status:"win" },
     // 2026-01-25
 { date:"2026-01-25", home:"Sudtirol", away:"Padova", market:"Under 2.5", odds:1.56, status:"lose" },
 { date:"2026-01-25", home:"Teuta Durres", away:"Vora", market:"Under 2.5", odds:1.53, status:"win" },
